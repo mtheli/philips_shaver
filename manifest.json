@@ -1,0 +1,10 @@
+{
+  "domain": "philips_shaver",
+  "name": "Philips Shaver",
+  "version": "10.1.0",
+  "documentation": "https://github.com/mtheli/philips_shaver",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@mtheli"],
+  "config_flow": true
+}
