@@ -4,7 +4,12 @@
   "version": "0.1.2",
   "documentation": "https://github.com/mtheli/philips_shaver",
   "requirements": [],
-  "dependencies": [],
+  "dependencies": ["bluetooth"],
   "codeowners": ["@mtheli"],
-  "config_flow": true
+  "config_flow": true,
+  "bluetooth": [
+    {
+      "service_uuid": "8d560100-3cb9-4387-a7e8-b79d826a7025"
+    }
+  ]
 }
