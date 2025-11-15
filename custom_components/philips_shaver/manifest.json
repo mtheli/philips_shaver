@@ -1,15 +1,16 @@
 {
   "domain": "philips_shaver",
-  "name": "Philips Shaver",
-  "version": "0.1.2",
+  "name": "Philips Shaver (i9000/XP9201)",
+  "version": "0.1.1",
   "documentation": "https://github.com/mtheli/philips_shaver",
-  "requirements": [],
-  "dependencies": ["bluetooth"],
+  "requirements": ["bleak>=0.21.0", "bleak-retry-connector"],
+  "dependencies": [],
   "codeowners": ["@mtheli"],
   "config_flow": true,
   "bluetooth": [
-    {
-      "service_uuid": "8d560100-3cb9-4387-a7e8-b79d826a7025"
-    }
+    { "service_uuid": "8d560100-3cb9-4387-a7e8-b79d826a7025" },
+    { "service_uuid": "8d560200-3cb9-4387-a7e8-b79d826a7025" },
+    { "service_uuid": "8d560300-3cb9-4387-a7e8-b79d826a7025" },
+    { "service_uuid": "8d560600-3cb9-4387-a7e8-b79d826a7025" }
   ]
 }
