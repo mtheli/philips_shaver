@@ -1,3 +1,9 @@
 __pycache__/__init__.cpython-313.pyc
 __pycache__/config_flow.cpython-313.pyc
 __pycache__/const.cpython-313.pyc
+custom_components/philips_shaver/__pycache__/__init__.cpython-313.pyc
+custom_components/philips_shaver/__pycache__/bluetooth.cpython-313.pyc
+custom_components/philips_shaver/__pycache__/config_flow.cpython-313.pyc
+custom_components/philips_shaver/__pycache__/const.cpython-313.pyc
+custom_components/philips_shaver/__pycache__/entity.cpython-313.pyc
+custom_components/philips_shaver/__pycache__/sensor.cpython-313.pyc
