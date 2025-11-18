@@ -37,7 +37,7 @@ async def async_setup_entry(
         PhilipsHeadRemainingSensor(hass, entry),
         PhilipsDaysSinceLastUsedSensor(hass, entry),
         PhilipsShavingTimeSensor(hass, entry),
-        PhilipsDeviceStateSelect(hass, entry),
+        PhilipsDeviceStateSensor(hass, entry),
         PhilipsTravelLockBinarySensor(hass, entry),
         PhilipsInUseBinarySensor(hass, entry),
         PhilipsLastSeenSensor(hass, entry),
@@ -54,7 +54,6 @@ class PhilipsBatterySensor(PhilipsShaverEntity, SensorEntity):
     _attr_native_unit_of_measurement = "%"
     _attr_device_class = SensorDeviceClass.BATTERY
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:battery"
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         super().__init__(hass, entry)
@@ -63,6 +62,42 @@ class PhilipsBatterySensor(PhilipsShaverEntity, SensorEntity):
     @property
     def native_value(self) -> int | None:
         return self.hass.data[DOMAIN][self.entry.entry_id]["data"].get("battery")
+
+    @property
+    def icon(self) -> str | None:
+        """Dynamisches Battery-Icon basierend auf Ladestatus und Akkustand."""
+        battery_level = self.native_value or 0
+        state = self.hass.data[DOMAIN][self.entry.entry_id]["data"].get("device_state")
+
+        # if the battery level is unkown
+        if battery_level is None:
+            if state == "charging":
+                return "mdi:battery-charging-unknown"
+            return "mdi:battery-unknown"
+
+        # shaving in progress
+        if state == "shaving":
+            return "mdi:battery-alert-bluetooth"  
+
+        # determine basic icon name
+        if state == "charging":
+            base = "mdi:battery-charging"
+            outline = "-outline" if battery_level <= 10 else ""
+        else:
+            base = "mdi:battery"
+            outline = "-outline" if battery_level <= 10 else ""
+
+        # battery fully charged
+        if battery_level >= 100:
+            return base  # mdi:battery bzw. mdi:battery-charging
+
+        # battery >= 20 <= 90
+        level = min(
+            90, ((battery_level - 1) // 10) * 10 + 10 if battery_level > 10 else 10
+        )
+        suffix = f"-{level}" if battery_level > 10 or outline else ""
+
+        return f"{base}{suffix}{outline}"
 
     @hass_callback
     def _update_callback(self):
@@ -96,10 +131,10 @@ class PhilipsFirmwareSensor(PhilipsShaverEntity, SensorEntity):
 class PhilipsHeadRemainingSensor(PhilipsShaverEntity, SensorEntity):
     _attr_name = "Shaver Head Remaining"
     _attr_native_unit_of_measurement = "%"
-    _attr_device_class = SensorDeviceClass.POWER_FACTOR
+    _attr_device_class = SensorDeviceClass.BATTERY
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_icon = "mdi:saw-blade"
+    _attr_icon = "mdi:razor-double-edge"
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         super().__init__(hass, entry)
@@ -138,7 +173,7 @@ class PhilipsDaysSinceLastUsedSensor(PhilipsShaverEntity, SensorEntity):
 
 
 class PhilipsShavingTimeSensor(PhilipsShaverEntity, SensorEntity):
-    _attr_name = "Last Shaving Time"
+    _attr_name = "Last Session Duration"
     _attr_native_unit_of_measurement = UnitOfTime.SECONDS
     _attr_device_class = SensorDeviceClass.DURATION
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -161,10 +196,10 @@ class PhilipsShavingTimeSensor(PhilipsShaverEntity, SensorEntity):
 # =============================================================================
 # Select & Binary Sensoren
 # =============================================================================
-class PhilipsDeviceStateSelect(PhilipsShaverEntity, SelectEntity):
+class PhilipsDeviceStateSensor(PhilipsShaverEntity, SensorEntity):
     _attr_name = "State"
-    _attr_icon = "mdi:state-machine"
-    _attr_options = ["off", "shaving", "charging"]
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["off", "shaving", "charging", "unknown"]
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -172,8 +207,19 @@ class PhilipsDeviceStateSelect(PhilipsShaverEntity, SelectEntity):
         self._attr_unique_id = f"{self._address}_device_state"
 
     @property
-    def current_option(self) -> str | None:
+    def native_value(self) -> str | None:
         return self.hass.data[DOMAIN][self.entry.entry_id]["data"].get("device_state")
+
+    @property
+    def icon(self) -> str:
+        state = self.native_value or "unknown"
+
+        return {
+            "off": "mdi:power-standby",  # power off
+            "shaving": "mdi:face-man-shimmer",  # shaving in progress
+            "charging": "mdi:battery-charging-100",  # charging
+            "unknown": "mdi:help-circle-outline",  # unknown
+        }.get(state, "mdi:help-circle-outline")
 
     @hass_callback
     def _update_callback(self):
