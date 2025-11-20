@@ -25,6 +25,8 @@ from .const import (
     CHAR_DEVICE_STATE,
     CHAR_TRAVEL_LOCK,
     POLL_INTERVAL,
+    POLL_READ_CHARS,
+    LIVE_READ_CHARS,
 )
 from . import bluetooth as shaver_bluetooth
 
@@ -168,15 +170,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 results = await shaver_bluetooth.connect_and_read(
                     hass,
                     address,
-                    [
-                        CHAR_BATTERY_LEVEL,
-                        CHAR_FIRMWARE_REVISION,
-                        CHAR_HEAD_REMAINING,
-                        CHAR_DAYS_SINCE_LAST_USED,
-                        CHAR_MODEL_NUMBER,
-                        CHAR_SERIAL_NUMBER,
-                        CHAR_SHAVING_TIME,
-                    ],
+                    POLL_READ_CHARS,
                     connect_timeout=3.0,
                 )
                 _process_values(hass, entry, results)
@@ -222,17 +216,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     backoff = 5
 
                     results = {}
-                    for uuid in (
-                        CHAR_BATTERY_LEVEL,
-                        CHAR_FIRMWARE_REVISION,
-                        CHAR_HEAD_REMAINING,
-                        CHAR_DAYS_SINCE_LAST_USED,
-                        CHAR_MODEL_NUMBER,
-                        CHAR_SERIAL_NUMBER,
-                        CHAR_SHAVING_TIME,
-                        CHAR_DEVICE_STATE,
-                        CHAR_TRAVEL_LOCK,
-                    ):
+                    for uuid in LIVE_READ_CHARS:
                         try:
                             value = await client.read_gatt_char(uuid)
                             if value:
@@ -245,6 +229,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
                     await client.start_notify(CHAR_DEVICE_STATE, _state_callback)
                     await client.start_notify(CHAR_TRAVEL_LOCK, _lock_callback)
+                    await client.start_notify(CHAR_BATTERY_LEVEL, _battery_callback)
                     _LOGGER.info("Live monitoring active – notifications enabled")
 
                     store["live_client"] = client
@@ -304,6 +289,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.data[DOMAIN][entry.entry_id]["last_seen"] = datetime.now()
             async_dispatcher_send(hass, f"{DOMAIN}_update_{entry.entry_id}")
 
+    @callback
+    def _battery_callback(sender, data):
+        if not data or len(data) < 1:
+            return
+
+        # Das erste Byte ist der Prozentwert (0-100)
+        new_level = data[0]
+        current_level = hass.data[DOMAIN][entry.entry_id]["data"]["battery"]
+
+        # Update nur senden, wenn sich der Wert wirklich geändert hat
+        if new_level != current_level:
+            _LOGGER.debug("Live: Battery Level → %s%%", new_level)
+            hass.data[DOMAIN][entry.entry_id]["data"]["battery"] = new_level
+            hass.data[DOMAIN][entry.entry_id]["last_seen"] = datetime.now()
+            async_dispatcher_send(hass, f"{DOMAIN}_update_{entry.entry_id}")
+
     # === Live-Task starten ===
     task = hass.loop.create_task(live_monitor_loop())
     hass.data[DOMAIN][entry.entry_id]["live_task"] = task
@@ -347,6 +348,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             await client.stop_notify(CHAR_DEVICE_STATE)
             await client.stop_notify(CHAR_TRAVEL_LOCK)
+            await client.stop_notify(CHAR_BATTERY_LEVEL)
             await client.disconnect()
             _LOGGER.info("Live connection cleanly disconnected")
         except Exception as e:
