@@ -39,9 +39,12 @@ async def async_setup_entry(
         PhilipsShavingTimeSensor(hass, entry),
         PhilipsDeviceStateSensor(hass, entry),
         PhilipsTravelLockBinarySensor(hass, entry),
-        PhilipsInUseBinarySensor(hass, entry),
+        PhilipsDeviceActivitySensor(hass, entry),
         PhilipsLastSeenSensor(hass, entry),
         PhilipsRssiSensor(hass, entry),
+        PhilipsCleaningProgressSensor(hass, entry),
+        PhilipsMotorSpeedSensor(hass, entry),
+        PhilipsMotorCurrentSensor(hass, entry),
     ]
     async_add_entities(entities)
 
@@ -246,18 +249,46 @@ class PhilipsTravelLockBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
         self.async_write_ha_state()
 
 
-class PhilipsInUseBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
-    _attr_name = "In Use"
-    _attr_device_class = BinarySensorDeviceClass.RUNNING
-    _attr_icon = "mdi:play-circle"
+# sensor.py – ersetzt alle drei Binary-Sensoren
+class PhilipsDeviceActivitySensor(PhilipsShaverEntity, SensorEntity):
+    _attr_name = "Activity"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["off", "shaving", "charging", "cleaning"]
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:state-machine"
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         super().__init__(hass, entry)
-        self._attr_unique_id = f"{self._address}_in_use"
+        self._attr_unique_id = f"{self._address}_activity"
 
     @property
-    def is_on(self) -> bool:
-        return self.hass.data[DOMAIN][self.entry.entry_id]["data"].get("in_use", False)
+    def native_value(self) -> str:
+        data = self.hass.data[DOMAIN][self.entry.entry_id]["data"]
+
+        # 1. Reinigung hat höchste Priorität (weil selten + wichtig)
+        progress = data.get("cleaning_progress")
+        if progress is not None and 0 < progress < 100:
+            return "cleaning"
+
+        # 2. Rasieren
+        if data.get("in_use", False):
+            return "shaving"
+
+        # 3. Nur Laden
+        if data.get("device_state") == "charging":
+            return "charging"
+
+        # 4. Alles andere
+        return "off"
+
+    @property
+    def icon(self) -> str:
+        return {
+            "off":       "mdi:power-standby",
+            "shaving":   "mdi:face-man-shimmer",
+            "charging":  "mdi:battery-charging-outline",
+            "cleaning":  "mdi:shimmer"
+        }.get(self.native_value, "mdi:help-circle")
 
     @hass_callback
     def _update_callback(self):
@@ -321,6 +352,112 @@ class PhilipsRssiSensor(PhilipsShaverEntity, SensorEntity):
         """Nur verfügbar, wenn das Gerät kürzlich gesehen wurde."""
         service_info = async_last_service_info(self.hass, self._address)
         return service_info is not None
+
+    @hass_callback
+    def _update_callback(self):
+        self.async_write_ha_state()
+
+# =============================================================================
+# Cleaning Progress Sensor
+# =============================================================================
+class PhilipsCleaningProgressSensor(PhilipsShaverEntity, SensorEntity):
+    _attr_name = "Cleaning Progress"
+    _attr_native_unit_of_measurement = "%"
+    _attr_device_class = SensorDeviceClass.BATTERY  # am besten passend für Prozente
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:progress-clock"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        super().__init__(hass, entry)
+        self._attr_unique_id = f"{self._address}_cleaning_progress"
+
+    @property
+    def native_value(self) -> int | None:
+        return self.hass.data[DOMAIN][self.entry.entry_id]["data"].get("cleaning_progress")
+
+    @property
+    def icon(self) -> str:
+        progress = self.native_value or 0
+        if progress == 0:
+            return "mdi:progress-clock"
+        if progress >= 100:
+            return "mdi:check-circle-outline"
+        return "mdi:progress-wrench"
+
+    @property
+    def available(self) -> bool:
+        """Nur anzeigen, wenn Reinigung aktiv ist oder kürzlich war."""
+        progress = self.hass.data[DOMAIN][self.entry.entry_id]["data"].get("cleaning_progress")
+        return progress is not None and progress > 0
+
+    @hass_callback
+    def _update_callback(self):
+        self.async_write_ha_state()
+
+# =============================================================================
+# Motor Speed (RPM)
+# =============================================================================
+class PhilipsMotorSpeedSensor(PhilipsShaverEntity, SensorEntity):
+    _attr_name = "Motor Speed"
+    _attr_native_unit_of_measurement = "RPM"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:speedometer"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        super().__init__(hass, entry)
+        self._attr_unique_id = f"{self._address}_motor_rpm"
+
+    @property
+    def native_value(self) -> int | None:
+        return self.hass.data[DOMAIN][self.entry.entry_id]["data"].get("motor_rpm")
+
+    @property
+    def available(self) -> bool:
+        rpm = self.native_value
+        return rpm is not None and rpm > 2000
+
+    @property
+    def icon(self) -> str:
+        """Dynamisches Icon je nach Betrieb."""
+        rpm = self.native_value
+        if rpm is None or rpm == 0:
+            return "mdi:speedometer-slow"
+        if rpm < 3000:
+            return "mdi:speedometer-slow"
+        if rpm < 6000:
+            return "mdi:speedometer-medium"
+        return "mdi:speedometer"  # Vollgas ~6300 RPM
+
+    @hass_callback
+    def _update_callback(self):
+        self.async_write_ha_state()
+
+
+# =============================================================================
+# Motor Current
+# =============================================================================
+class PhilipsMotorCurrentSensor(PhilipsShaverEntity, SensorEntity):
+    _attr_name = "Motor Current"
+    _attr_native_unit_of_measurement = "mA"
+    _attr_device_class = SensorDeviceClass.CURRENT
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:current-dc"
+
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+        super().__init__(hass, entry)
+        self._attr_unique_id = f"{self._address}_motor_current"
+
+    @property
+    def native_value(self) -> int | None:
+        return self.hass.data[DOMAIN][self.entry.entry_id]["data"].get("motor_current_ma")
+
+    @property
+    def available(self) -> bool:
+        ma = self.native_value
+        return ma is not None and ma > 100
 
     @hass_callback
     def _update_callback(self):

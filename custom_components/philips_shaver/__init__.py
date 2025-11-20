@@ -24,6 +24,9 @@ from .const import (
     CHAR_SHAVING_TIME,
     CHAR_DEVICE_STATE,
     CHAR_TRAVEL_LOCK,
+    CHAR_CLEANING_PROGRESS,
+    CHAR_MOTOR_RPM,
+    CHAR_MOTOR_CURRENT,
     POLL_INTERVAL,
     POLL_READ_CHARS,
     LIVE_READ_CHARS,
@@ -85,6 +88,27 @@ def _process_values(hass: HomeAssistant, entry: ConfigEntry, results: dict):
         and results[CHAR_TRAVEL_LOCK][0] == 1
     )
 
+    cleaning_progress = (
+        results.get(CHAR_CLEANING_PROGRESS)[0]
+        if results.get(CHAR_CLEANING_PROGRESS) and len(results[CHAR_CLEANING_PROGRESS]) >= 1
+        else None
+    )
+
+    motor_current_raw = results.get(CHAR_MOTOR_CURRENT)
+    motor_current_ma = (
+        int.from_bytes(motor_current_raw, "little")
+        if motor_current_raw and len(motor_current_raw) >= 2
+        else None
+    )
+
+    motor_rpm_raw = results.get(CHAR_MOTOR_RPM)
+    motor_rpm = (
+        int.from_bytes(motor_rpm_raw, "little")
+        if motor_rpm_raw and len(motor_rpm_raw) >= 2
+        else None
+    )
+
+
     data_store.update(
         {
             "battery": battery,
@@ -97,6 +121,9 @@ def _process_values(hass: HomeAssistant, entry: ConfigEntry, results: dict):
             "device_state": state,
             "in_use": state == "shaving",
             "travel_lock": is_locked,
+            "cleaning_progress": cleaning_progress,
+            "motor_rpm": motor_rpm,
+            "motor_current_ma": motor_current_ma,
         }
     )
 
@@ -128,6 +155,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "model_number": None,
             "serial_number": None,
             "shaving_time": None,
+            "cleaning_progress": None,
+            "motor_rpm": None,
+            "motor_current_ma": None,
         },
         "live_client": None,
         "live_task": None,
@@ -171,7 +201,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     hass,
                     address,
                     POLL_READ_CHARS,
-                    connect_timeout=3.0,
+                    connect_timeout=15.0,
                 )
                 _process_values(hass, entry, results)
             except Exception as e:
@@ -230,6 +260,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     await client.start_notify(CHAR_DEVICE_STATE, _state_callback)
                     await client.start_notify(CHAR_TRAVEL_LOCK, _lock_callback)
                     await client.start_notify(CHAR_BATTERY_LEVEL, _battery_callback)
+                    await client.start_notify(CHAR_CLEANING_PROGRESS, _cleaning_progress_callback)
+                    await client.start_notify(CHAR_MOTOR_RPM, _motor_rpm_callback)
+                    await client.start_notify(CHAR_MOTOR_CURRENT, _motor_current_callback)
                     _LOGGER.info("Live monitoring active – notifications enabled")
 
                     store["live_client"] = client
@@ -305,6 +338,47 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.data[DOMAIN][entry.entry_id]["last_seen"] = datetime.now()
             async_dispatcher_send(hass, f"{DOMAIN}_update_{entry.entry_id}")
 
+    @callback
+    def _cleaning_progress_callback(sender, data):
+        if not data or len(data) < 1:
+            return
+
+        progress = data[0]  # 0–100
+        current = hass.data[DOMAIN][entry.entry_id]["data"].get("cleaning_progress")
+
+        if progress != current:
+            _LOGGER.info("Live: Cleaning Progress → %s%%", progress)
+            hass.data[DOMAIN][entry.entry_id]["data"]["cleaning_progress"] = progress
+            hass.data[DOMAIN][entry.entry_id]["last_seen"] = datetime.now()
+            async_dispatcher_send(hass, f"{DOMAIN}_update_{entry.entry_id}")
+
+    @callback
+    def _motor_rpm_callback(sender, data):
+        if not data or len(data) < 2:
+            return
+
+        rpm = int.from_bytes(data, "little")
+        current = hass.data[DOMAIN][entry.entry_id]["data"].get("motor_rpm")
+        if rpm != current:
+            _LOGGER.info("Live: Motor RPM → %s", rpm)
+            hass.data[DOMAIN][entry.entry_id]["data"]["motor_rpm"] = rpm
+            hass.data[DOMAIN][entry.entry_id]["last_seen"] = datetime.now()
+            async_dispatcher_send(hass, f"{DOMAIN}_update_{entry.entry_id}")
+
+    @callback
+    def _motor_current_callback(sender, data):
+        if not data or len(data) < 2:
+            return
+        ma = int.from_bytes(data, "little")
+
+        current = hass.data[DOMAIN][entry.entry_id]["data"].get("motor_current_ma")
+        if ma != current:
+            _LOGGER.debug("Live: Motor Current → %s mA", ma)
+            hass.data[DOMAIN][entry.entry_id]["data"]["motor_current_ma"] = ma
+            hass.data[DOMAIN][entry.entry_id]["last_seen"] = datetime.now()
+            async_dispatcher_send(hass, f"{DOMAIN}_update_{entry.entry_id}")
+
+
     # === Live-Task starten ===
     task = hass.loop.create_task(live_monitor_loop())
     hass.data[DOMAIN][entry.entry_id]["live_task"] = task
@@ -349,6 +423,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await client.stop_notify(CHAR_DEVICE_STATE)
             await client.stop_notify(CHAR_TRAVEL_LOCK)
             await client.stop_notify(CHAR_BATTERY_LEVEL)
+            await client.stop_notify(CHAR_CLEANING_PROGRESS)
+            await client.stop_notify(CHAR_MOTOR_RPM)
+            await client.stop_notify(CHAR_MOTOR_CURRENT)
             await client.disconnect()
             _LOGGER.info("Live connection cleanly disconnected")
         except Exception as e:
