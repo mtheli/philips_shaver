@@ -6,10 +6,10 @@ This is a custom component for Home Assistant to integrate **Philips Bluetooth-e
 
 ![Screenshot of the device inHA](./images/screenshot.png)
 
-The integration connects to your shaver via **Bluetooth Low Energy (BLE)** to provide status and usage data. It employs a dual-connection approach:
+The integration connects to your shaver via **Bluetooth Low Energy (BLE)** to provide status, usage, and advanced telemetry data. It employs a dual-connection approach:
 
-1.  **Live Connection:** A persistent connection is maintained while the device is in range, offering instant updates for the device state (Shaving/Charging) and travel lock status.
-2.  **Poll Fallback:** A periodic poll (every 60 seconds) runs as a fallback to retrieve other device data.
+1.  **Live Connection:** A persistent connection is maintained while the device is in range and active, offering instant updates for shaving status, motor metrics, and cleaning progress.
+2.  **Poll Fallback:** A periodic poll (every 60 seconds) runs as a fallback to retrieve data when the device is in standby.
 
 ---
 
@@ -17,17 +17,33 @@ The integration connects to your shaver via **Bluetooth Low Energy (BLE)** to pr
 
 This integration creates a new device for your shaver and provides the following entities:
 
-| Entity | Type | Unit | Description |
-| :--- | :--- | :--- | :--- |
-| **Battery Level** | Sensor | `%` | The current battery charge level. |
-| **Head Remaining** | Sensor | `%` | The remaining life of the shaver head. |
-| **Last Shaving Time** | Sensor | `s` | Duration of the last shave. |
-| **Days Since Last Used** | Sensor | `d` | Days elapsed since the last use. |
-| **State** | Select | - | Current operating status (`Off`, `Shaving`, `Charging`). |
-| **Travel Lock** | Binary Sensor | - | Indicates if the travel lock is active. |
-| **In Use** | Binary Sensor | - | Indicates if the device is actively shaving. |
-| **RSSI** | Sensor | `dBm` | Bluetooth signal strength. (Diagnostic) |
-| **Firmware** | Sensor | - | Firmware version. (Diagnostic) |
+### Main Controls & Status
+| Entity | Type | Description |
+| :--- | :--- | :--- |
+| **Activity** | Sensor | Current detailed status (`Off`, `Shaving`, `Charging`, `Cleaning`). |
+| **Battery Level** | Sensor | The current battery charge level (`%`). |
+| **Travel Lock** | Binary Sensor | Indicates if the travel lock is active. |
+
+### Usage Statistics
+| Entity | Type | Description |
+| :--- | :--- | :--- |
+| **Last Session Duration** | Sensor | Duration of the last shaving session in seconds. |
+| **Days Since Last Used** | Sensor | Days elapsed since the last use. |
+| **Head Remaining** | Sensor | The remaining life of the shaver head (`%`). |
+
+### Live Telemetry (Advanced)
+| Entity | Type | Description |
+| :--- | :--- | :--- |
+| **Motor Speed** | Sensor | Current motor speed in RPM (e.g., ~6300 RPM). |
+| **Motor Current** | Sensor | Current motor power consumption in mA. |
+| **Cleaning Progress** | Sensor | Progress of the cleaning cycle in `%` (if applicable). |
+
+### Diagnostics
+| Entity | Type | Description |
+| :--- | :--- | :--- |
+| **Last Seen** | Sensor | Time in minutes since the device was last reachable. |
+| **RSSI** | Sensor | Bluetooth signal strength (`dBm`). |
+| **Firmware** | Sensor | Installed firmware version. |
 
 ---
 
@@ -120,6 +136,6 @@ Once the OS-level pairing is complete, proceed to add the integration via the Ho
 
 ## Troubleshooting & Caveats
 
-* **Availability:** The integration relies on a local Bluetooth connection. If the shaver is taken out of range, it will become `Unavailable`. It should automatically reconnect once it is back in range (e.g., placed on the charger).
+* **Availability:** The integration relies on a local Bluetooth connection. If the shaver is taken out of range, it will become `Unavailable` (or update the "Last Seen" sensor). It should automatically reconnect once it is back in range.
 * **Stability:** Connection stability is highly dependent on Bluetooth signal strength. Consider using an **ESPHome Bluetooth Proxy** closer to the shaver for improved reliability.
 * **Not Discovered:** Ensure the shaver is **active** (powered on or charging) during the configuration process, as a completely off device may not advertise its presence.
