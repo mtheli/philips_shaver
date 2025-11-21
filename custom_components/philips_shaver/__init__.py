@@ -90,7 +90,8 @@ def _process_values(hass: HomeAssistant, entry: ConfigEntry, results: dict):
 
     cleaning_progress = (
         results.get(CHAR_CLEANING_PROGRESS)[0]
-        if results.get(CHAR_CLEANING_PROGRESS) and len(results[CHAR_CLEANING_PROGRESS]) >= 1
+        if results.get(CHAR_CLEANING_PROGRESS)
+        and len(results[CHAR_CLEANING_PROGRESS]) >= 1
         else None
     )
 
@@ -107,7 +108,6 @@ def _process_values(hass: HomeAssistant, entry: ConfigEntry, results: dict):
         if motor_rpm_raw and len(motor_rpm_raw) >= 2
         else None
     )
-
 
     data_store.update(
         {
@@ -133,7 +133,7 @@ def _process_values(hass: HomeAssistant, entry: ConfigEntry, results: dict):
         if device and device.sw_version != firmware:
             device_registry.async_update_device(device.id, sw_version=firmware)
 
-    hass.data[DOMAIN][entry.entry_id]["last_seen"] = datetime.now()
+    # hass.data[DOMAIN][entry.entry_id]["last_seen"] = datetime.now()
     async_dispatcher_send(hass, f"{DOMAIN}_update_{entry.entry_id}")
 
 
@@ -233,12 +233,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         backoff = min(backoff * 2, max_backoff)
                         continue
 
+                    # Disconnected-Callback
+                    def _on_disconnect(client):
+                        _LOGGER.info("Live connection disconnected by shaver")
+                        store["live_client"] = None
+
                     _LOGGER.info("Connecting to %s for live monitoring...", address)
                     client = await shaver_bluetooth.establish_connection(
                         shaver_bluetooth.BleakClient,
                         service_info.device,
                         "philips_shaver",
-                        timeout=10.0,
+                        disconnected_callback=_on_disconnect,
+                        timeout=25.0,
+                        cached_services=False,  # ← Das löst dein Problem!
                     )
                     if not client or not client.is_connected:
                         raise Exception("Connection failed")
@@ -260,15 +267,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     await client.start_notify(CHAR_DEVICE_STATE, _state_callback)
                     await client.start_notify(CHAR_TRAVEL_LOCK, _lock_callback)
                     await client.start_notify(CHAR_BATTERY_LEVEL, _battery_callback)
-                    await client.start_notify(CHAR_CLEANING_PROGRESS, _cleaning_progress_callback)
+                    await client.start_notify(
+                        CHAR_CLEANING_PROGRESS, _cleaning_progress_callback
+                    )
                     await client.start_notify(CHAR_MOTOR_RPM, _motor_rpm_callback)
-                    await client.start_notify(CHAR_MOTOR_CURRENT, _motor_current_callback)
+                    await client.start_notify(
+                        CHAR_MOTOR_CURRENT, _motor_current_callback
+                    )
                     _LOGGER.info("Live monitoring active – notifications enabled")
 
                     store["live_client"] = client
 
+                    # Keep-Alive: alle 8–10 Sekunden Battery lesen → verhindert Timeout
+                    keepalive = 0
                     while client.is_connected:
                         await asyncio.sleep(1)
+                        keepalive += 1
+                        if keepalive % 9 == 0:
+                            try:
+                                await client.read_gatt_char(CHAR_BATTERY_LEVEL)
+                            except:
+                                break
 
                     _LOGGER.warning(
                         "Live connection lost – retrying in %ds...", backoff
@@ -377,7 +396,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.data[DOMAIN][entry.entry_id]["data"]["motor_current_ma"] = ma
             hass.data[DOMAIN][entry.entry_id]["last_seen"] = datetime.now()
             async_dispatcher_send(hass, f"{DOMAIN}_update_{entry.entry_id}")
-
 
     # === Live-Task starten ===
     task = hass.loop.create_task(live_monitor_loop())
