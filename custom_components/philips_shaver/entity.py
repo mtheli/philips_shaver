@@ -38,6 +38,10 @@ class PhilipsShaverEntity(Entity):
             f"{DOMAIN}_update_{entry.entry_id}",
             self._update_callback,
         )
+        
+    @property
+    def available(self) -> bool:
+        return True
 
     def _set_device_info(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Erstellt das DeviceInfo-Objekt für die Entität."""
@@ -76,7 +80,6 @@ class PhilipsShaverEntity(Entity):
         )
 
     # --- Update-Handling ---
-
     @hass_callback
     def _update_callback(self):
         """Muss in den Kindklassen implementiert werden."""

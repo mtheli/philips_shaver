@@ -6,12 +6,17 @@ import asyncio
 from datetime import datetime, timedelta
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant, callback, CoreState
 from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
-from homeassistant.components.bluetooth import async_last_service_info
 from homeassistant.helpers import device_registry as dr
+from homeassistant.components.bluetooth import (
+    async_last_service_info,
+    async_register_callback,
+    BluetoothCallbackMatcher,
+    BluetoothScanningMode, 
+)
 
 from .const import (
     DOMAIN,
@@ -141,6 +146,46 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Philips Shaver from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     address = entry.data["address"]
+
+    """
+    025-11-22 16:21:01.403 WARNING (MainThread) [custom_components.philips_shaver] 
+    ADVERTISEMENT von EC:EC:66:27:F0:ED | Name: Philips XP9201 | RSSI: -76 dBm | Manufacturer Data: none | Service Data: none | 
+    Service UUIDs: [
+        '0000180f-0000-1000-8000-00805f9b34fb', 
+        '0000180a-0000-1000-8000-00805f9b34fb', 
+        '8d560100-3cb9-4387-a7e8-b79d826a7025'
+    ]
+    """
+    @callback
+    def _advertisement_debug_callback(service_info, change):
+        """Wird bei JEDEM Advertisement des Rasierers aufgerufen."""
+        adv = service_info.advertisement
+        _LOGGER.warning(
+            "ADVERTISEMENT von %s | Name: %s | RSSI: %s dBm | "
+            "Manufacturer Data: %s | Service Data: %s | Service UUIDs: %s",
+            service_info.address,
+            service_info.name or "unbekannt",
+            service_info.rssi,
+            (
+                {k: v.hex() for k, v in adv.manufacturer_data.items()}
+                if adv.manufacturer_data
+                else "none"
+            ),
+            (
+                {str(uuid): data.hex() for uuid, data in adv.service_data.items()}
+                if adv.service_data
+                else "none"
+            ),
+            adv.service_uuids or "none",
+        )
+
+    unsub_adv_debug = async_register_callback(
+        hass,
+        _advertisement_debug_callback,
+        BluetoothCallbackMatcher(address=address),
+        BluetoothScanningMode.ACTIVE,
+    )
+    entry.async_on_unload(unsub_adv_debug)
 
     hass.data[DOMAIN][entry.entry_id] = {
         "address": address,
@@ -409,9 +454,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         else:
             _LOGGER.debug("HA started – device not seen yet → poll via interval")
 
-    entry.async_on_unload(
-        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _schedule_first_poll)
-    )
+    if hass.state == CoreState.running:
+        # HA already startet. Continue with the first poll directly
+        _schedule_first_poll(None)
+    else:
+        # HA is still starting. We need to wait to finish startup for our first poll
+        entry.async_on_unload(
+            hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _schedule_first_poll)
+        )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _LOGGER.info("Philips Shaver integration loaded – address: %s", address)

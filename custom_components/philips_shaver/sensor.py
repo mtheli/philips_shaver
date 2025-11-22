@@ -415,8 +415,7 @@ class PhilipsMotorSpeedSensor(PhilipsShaverEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        rpm = self.native_value
-        return rpm is not None and rpm > 2000
+        return self.native_value is not None
 
     @property
     def icon(self) -> str:
@@ -456,8 +455,7 @@ class PhilipsMotorCurrentSensor(PhilipsShaverEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        ma = self.native_value
-        return ma is not None and ma > 100
+        return self.native_value is not None 
 
     @hass_callback
     def _update_callback(self):
