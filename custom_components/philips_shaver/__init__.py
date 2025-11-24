@@ -1,105 +1,144 @@
 # custom_components/philips_shaver/__init__.py
 from __future__ import annotations
 
-import logging
 import asyncio
 from datetime import datetime, timedelta
+import logging
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback, CoreState
-from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
-from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.event import async_track_time_interval
-from homeassistant.helpers import device_registry as dr
 from homeassistant.components.bluetooth import (
+    BluetoothCallbackMatcher,
+    BluetoothScanningMode,
     async_last_service_info,
     async_register_callback,
-    BluetoothCallbackMatcher,
-    BluetoothScanningMode, 
 )
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, Platform
+from homeassistant.core import CoreState, HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.event import async_track_time_interval
 
+from . import bluetooth as shaver_bluetooth
 from .const import (
-    DOMAIN,
+    CHAR_AMOUNT_OF_CHARGES,
     CHAR_BATTERY_LEVEL,
+    CHAR_CLEANING_CYCLES,
+    CHAR_CLEANING_PROGRESS,
+    CHAR_DAYS_SINCE_LAST_USED,
+    CHAR_DEVICE_STATE,
     CHAR_FIRMWARE_REVISION,
     CHAR_HEAD_REMAINING,
-    CHAR_DAYS_SINCE_LAST_USED,
+    CHAR_LIGHTRING_COLOR_BRIGHTNESS,
+    CHAR_LIGHTRING_COLOR_HIGH,
+    CHAR_LIGHTRING_COLOR_LOW,
+    CHAR_LIGHTRING_COLOR_MOTION,
+    CHAR_LIGHTRING_COLOR_OK,
     CHAR_MODEL_NUMBER,
+    CHAR_MOTOR_CURRENT,
+    CHAR_MOTOR_RPM,
     CHAR_SERIAL_NUMBER,
     CHAR_SHAVING_TIME,
-    CHAR_DEVICE_STATE,
     CHAR_TRAVEL_LOCK,
-    CHAR_CLEANING_PROGRESS,
-    CHAR_MOTOR_RPM,
-    CHAR_MOTOR_CURRENT,
+    DOMAIN,
+    LIVE_READ_CHARS,
     POLL_INTERVAL,
     POLL_READ_CHARS,
-    LIVE_READ_CHARS,
 )
-from . import bluetooth as shaver_bluetooth
+from .utils import parse_color
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["sensor"]
+PLATFORMS = [Platform.SENSOR, Platform.LIGHT]
 
 
 def _process_values(hass: HomeAssistant, entry: ConfigEntry, results: dict):
-    """Zentrale Verarbeitung aller GATT-Werte – genutzt von Poll & Live."""
+    """Central processing of all GATT values - used by Poll & Live.
+
+    Implements:
+    1. Early exit if all values are None (total failure).
+    2. Selective update: Only non-None values are written to the data store.
+    3. Updates last_seen only upon successful data reception.
+    """
+
+    # Validity check. If all values are empty, return
+    if not any(value is not None for value in results.values()):
+        return
+
+    # getting datastore for update
     data_store = hass.data[DOMAIN][entry.entry_id]["data"]
     address = entry.data["address"]
 
-    battery = (
-        results.get(CHAR_BATTERY_LEVEL)[0] if results.get(CHAR_BATTERY_LEVEL) else None
-    )
+    # ---------------------------
+    # Parsing data
+    # ---------------------------
+
+    # Reading battery
+    battery_raw = results.get(CHAR_BATTERY_LEVEL)
+    battery = battery_raw[0] if battery_raw else None
+
+    # Reading firmware
+    firmware_bytes = results.get(CHAR_FIRMWARE_REVISION)
     firmware = (
-        results.get(CHAR_FIRMWARE_REVISION).decode("utf-8", "ignore").strip()
-        if results.get(CHAR_FIRMWARE_REVISION)
-        else None
+        firmware_bytes.decode("utf-8", "ignore").strip() if firmware_bytes else None
     )
-    head_remaining = (
-        results.get(CHAR_HEAD_REMAINING)[0]
-        if results.get(CHAR_HEAD_REMAINING)
-        else None
-    )
+
+    # Reading head remaining
+    head_remaining_raw = results.get(CHAR_HEAD_REMAINING)
+    head_remaining = head_remaining_raw[0] if head_remaining_raw else None
+
+    # reading days since last use
+    days_since_last_used_bytes = results.get(CHAR_DAYS_SINCE_LAST_USED)
     days_since_last_used = (
-        int.from_bytes(results.get(CHAR_DAYS_SINCE_LAST_USED), "little")
-        if results.get(CHAR_DAYS_SINCE_LAST_USED)
-        else None
-    )
-    model_number = (
-        results.get(CHAR_MODEL_NUMBER).decode("utf-8", "ignore").strip()
-        if results.get(CHAR_MODEL_NUMBER)
-        else None
-    )
-    serial_number = (
-        results.get(CHAR_SERIAL_NUMBER).decode("utf-8", "ignore").strip()
-        if results.get(CHAR_SERIAL_NUMBER)
-        else None
-    )
-    shaving_time = (
-        int.from_bytes(results.get(CHAR_SHAVING_TIME), "little")
-        if results.get(CHAR_SHAVING_TIME)
+        int.from_bytes(days_since_last_used_bytes, "little")
+        if days_since_last_used_bytes
         else None
     )
 
-    state = "unknown"
-    if results.get(CHAR_DEVICE_STATE) and len(results[CHAR_DEVICE_STATE]) >= 1:
-        state_byte = results[CHAR_DEVICE_STATE][0]
+    # reading model
+    model_bytes = results.get(CHAR_MODEL_NUMBER)
+    model_number = (
+        model_bytes.decode("utf-8", "ignore").strip() if model_bytes else None
+    )
+
+    # reading serial number
+    serial_bytes = results.get(CHAR_SERIAL_NUMBER)
+    serial_number = (
+        serial_bytes.decode("utf-8", "ignore").strip() if serial_bytes else None
+    )
+
+    # reading shaving time
+    shaving_time_bytes = results.get(CHAR_SHAVING_TIME)
+    shaving_time = (
+        int.from_bytes(shaving_time_bytes, "little") if shaving_time_bytes else None
+    )
+
+    # State Parsing (Initialized to None)
+    state = None
+    state_val = results.get(CHAR_DEVICE_STATE)
+    if state_val and len(state_val) >= 1:
+        state_byte = state_val[0]
+        # Map known states. If the byte is unknown, map to the string "unknown".
         state = {1: "off", 2: "shaving", 3: "charging"}.get(state_byte, "unknown")
 
-    is_locked = (
-        results.get(CHAR_TRAVEL_LOCK)
-        and len(results[CHAR_TRAVEL_LOCK]) >= 1
-        and results[CHAR_TRAVEL_LOCK][0] == 1
-    )
+    # is_locked Parsing (Initialized to None)
+    is_locked = None
+    lock_val = results.get(CHAR_TRAVEL_LOCK)
+    if lock_val and len(lock_val) >= 1:
+        is_locked = lock_val[0] == 1  # True/False
 
-    cleaning_progress = (
-        results.get(CHAR_CLEANING_PROGRESS)[0]
-        if results.get(CHAR_CLEANING_PROGRESS)
-        and len(results[CHAR_CLEANING_PROGRESS]) >= 1
+    # reading cleaning progress status
+    cleaning_progress_raw = results.get(CHAR_CLEANING_PROGRESS)
+    cleaning_progress = cleaning_progress_raw[0] if cleaning_progress_raw else None
+
+    # reading cleaning cycles
+    cleaning_cycles_raw = results.get(CHAR_CLEANING_CYCLES)
+    cleaning_cycles = (
+        int.from_bytes(cleaning_cycles_raw, "little")
+        if cleaning_cycles_raw and len(cleaning_cycles_raw) >= 2
         else None
     )
 
+    # reading motor current
     motor_current_raw = results.get(CHAR_MOTOR_CURRENT)
     motor_current_ma = (
         int.from_bytes(motor_current_raw, "little")
@@ -107,6 +146,7 @@ def _process_values(hass: HomeAssistant, entry: ConfigEntry, results: dict):
         else None
     )
 
+    # reading motor rpm
     motor_rpm_raw = results.get(CHAR_MOTOR_RPM)
     motor_rpm = (
         int.from_bytes(motor_rpm_raw, "little")
@@ -114,32 +154,76 @@ def _process_values(hass: HomeAssistant, entry: ConfigEntry, results: dict):
         else None
     )
 
-    data_store.update(
-        {
-            "battery": battery,
-            "firmware": firmware,
-            "head_remaining": head_remaining,
-            "days_since_last_used": days_since_last_used,
-            "model_number": model_number,
-            "serial_number": serial_number,
-            "shaving_time": shaving_time,
-            "device_state": state,
-            "in_use": state == "shaving",
-            "travel_lock": is_locked,
-            "cleaning_progress": cleaning_progress,
-            "motor_rpm": motor_rpm,
-            "motor_current_ma": motor_current_ma,
-        }
+    # reading color values
+    color_low = results.get(CHAR_LIGHTRING_COLOR_LOW)
+    if color_low:
+        data_store["color_low"] = parse_color(color_low)
+    color_ok = results.get(CHAR_LIGHTRING_COLOR_OK)
+    if color_ok:
+        data_store["color_ok"] = parse_color(color_ok)
+    color_high = results.get(CHAR_LIGHTRING_COLOR_HIGH)
+    if color_high:
+        data_store["color_high"] = parse_color(color_high)
+    color_motion = results.get(CHAR_LIGHTRING_COLOR_MOTION)
+    if color_motion:
+        data_store["color_motion"] = parse_color(color_motion)
+
+    # reading amount fo charging cycles
+    charges_raw = results.get(CHAR_AMOUNT_OF_CHARGES)
+    amount_of_charges = (
+        int.from_bytes(charges_raw, "little")
+        if charges_raw and len(charges_raw) >= 2
+        else None
     )
+    if amount_of_charges is not None:
+        data_store["amount_of_charges"] = amount_of_charges
 
-    if firmware:
-        device_registry = dr.async_get(hass)
-        device = device_registry.async_get_device(identifiers={(DOMAIN, address)})
-        if device and device.sw_version != firmware:
-            device_registry.async_update_device(device.id, sw_version=firmware)
+    # --- 3. SELECTIVE UPDATE (Filters out None values) ---
 
-    # hass.data[DOMAIN][entry.entry_id]["last_seen"] = datetime.now()
-    async_dispatcher_send(hass, f"{DOMAIN}_update_{entry.entry_id}")
+    # Compile all parsed values
+    parsed_data = {
+        "firmware": firmware,
+        "head_remaining": head_remaining,
+        "days_since_last_used": days_since_last_used,
+        "model_number": model_number,
+        "serial_number": serial_number,
+        "shaving_time": shaving_time,
+        "device_state": state,
+        "travel_lock": is_locked,
+        # cleaning properties
+        "cleaning_progress": cleaning_progress,
+        "cleaning_cycles": cleaning_cycles,
+        # motor properties
+        "motor_rpm": motor_rpm,
+        "motor_current_ma": motor_current_ma,
+        # charging properties
+        "battery": battery,
+        "amount_of_charges": amount_of_charges,
+    }
+
+    # Filter: Only non-None values are moved to the update dictionary
+    update_data = {k: v for k, v in parsed_data.items() if v is not None}
+
+    # The update_data dictionary now only contains keys with valid data.
+    if update_data:
+        # 4. STORE UPDATE: Only keys with valid values are updated, preserving old ones.
+        data_store.update(update_data)
+
+        # 5. METADATA UPDATE: Only execute upon successful data update
+
+        # FIX: Update last_seen timestamp
+        hass.data[DOMAIN][entry.entry_id]["last_seen"] = datetime.now()
+
+        if firmware:
+            from homeassistant.helpers import device_registry as dr
+
+            device_registry = dr.async_get(hass)
+            device = device_registry.async_get_device(identifiers={(DOMAIN, address)})
+            if device and device.sw_version != firmware:
+                device_registry.async_update_device(device.id, sw_version=firmware)
+
+        # Notify UI/Entities
+        async_dispatcher_send(hass, f"{DOMAIN}_update_{entry.entry_id}")
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -148,14 +232,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     address = entry.data["address"]
 
     """
-    025-11-22 16:21:01.403 WARNING (MainThread) [custom_components.philips_shaver] 
-    ADVERTISEMENT von EC:EC:66:27:F0:ED | Name: Philips XP9201 | RSSI: -76 dBm | Manufacturer Data: none | Service Data: none | 
+    025-11-22 16:21:01.403 WARNING (MainThread) [custom_components.philips_shaver]
+    ADVERTISEMENT von EC:EC:66:27:F0:ED | Name: Philips XP9201 | RSSI: -76 dBm | Manufacturer Data: none | Service Data: none |
     Service UUIDs: [
-        '0000180f-0000-1000-8000-00805f9b34fb', 
-        '0000180a-0000-1000-8000-00805f9b34fb', 
+        '0000180f-0000-1000-8000-00805f9b34fb',
+        '0000180a-0000-1000-8000-00805f9b34fb',
         '8d560100-3cb9-4387-a7e8-b79d826a7025'
     ]
     """
+
     @callback
     def _advertisement_debug_callback(service_info, change):
         """Wird bei JEDEM Advertisement des Rasierers aufgerufen."""
@@ -191,9 +276,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "address": address,
         "data": {
             "device_state": "unknown",
-            "in_use": False,
             "travel_lock": False,
             "battery": None,
+            "amount_of_charges": None,
             "firmware": None,
             "head_remaining": None,
             "days_since_last_used": None,
@@ -201,6 +286,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "serial_number": None,
             "shaving_time": None,
             "cleaning_progress": None,
+            "cleaning_cycles": None,
             "motor_rpm": None,
             "motor_current_ma": None,
         },
@@ -289,8 +375,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         service_info.device,
                         "philips_shaver",
                         disconnected_callback=_on_disconnect,
-                        timeout=25.0,
-                        cached_services=False,  # ← Das löst dein Problem!
+                        timeout=10.0,
                     )
                     if not client or not client.is_connected:
                         raise Exception("Connection failed")
@@ -367,7 +452,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if new_state != current:
             _LOGGER.info("Live: State → %s", new_state)
             hass.data[DOMAIN][entry.entry_id]["data"].update(
-                {"device_state": new_state, "in_use": new_state == "shaving"}
+                {"device_state": new_state}
             )
             hass.data[DOMAIN][entry.entry_id]["last_seen"] = datetime.now()
             async_dispatcher_send(hass, f"{DOMAIN}_update_{entry.entry_id}")
@@ -460,7 +545,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     else:
         # HA is still starting. We need to wait to finish startup for our first poll
         entry.async_on_unload(
-            hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _schedule_first_poll)
+            hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED, _schedule_first_poll
+            )
         )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
