@@ -1,0 +1,25 @@
+{
+  "config": {
+    "flow_title": "Philips Shaver ({name})",
+    "step": {
+      "user": {
+        "title": "Add Philips Shaver Manually",
+        "description": "Enter the Bluetooth MAC address of the shaver."
+      },
+      "bluetooth_confirm": {
+        "title": "Confirm Discovered Device",
+        "description": "Do you want to add the discovered Philips Shaver \"{name}\" to Home Assistant?"
+      },
+      "bluetooth_unpaired": {
+        "title": "Device Not Paired (Pairing Required)",
+        "description": "The device \"{name}\" was discovered, but it appears it has **not been paired** on the host operating system (Host OS).\n\n**Important:** This integration requires OS-level Bluetooth pairing *before* configuring it in Home Assistant (see **README, Step 1**).\n\nClick **Submit** to continue configuring *after* you have completed the pairing, or **Abort** to do it later."
+      }
+    },
+    "error": {
+      "abort_if_unique_id_configured": "This device is already configured."
+    },
+    "abort": {
+      "no_devices_found": "No supported Philips Shaver devices were found within range."
+    }
+  }
+}

@@ -158,12 +158,15 @@ def _process_values(hass: HomeAssistant, entry: ConfigEntry, results: dict):
     color_low = results.get(CHAR_LIGHTRING_COLOR_LOW)
     if color_low:
         data_store["color_low"] = parse_color(color_low)
+
     color_ok = results.get(CHAR_LIGHTRING_COLOR_OK)
     if color_ok:
         data_store["color_ok"] = parse_color(color_ok)
+
     color_high = results.get(CHAR_LIGHTRING_COLOR_HIGH)
     if color_high:
         data_store["color_high"] = parse_color(color_high)
+        
     color_motion = results.get(CHAR_LIGHTRING_COLOR_MOTION)
     if color_motion:
         data_store["color_motion"] = parse_color(color_motion)
