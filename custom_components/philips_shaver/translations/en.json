@@ -3,23 +3,107 @@
     "flow_title": "Philips Shaver ({name})",
     "step": {
       "user": {
-        "title": "Add Philips Shaver Manually",
+        "title": "Add Philips Shaver manually",
         "description": "Enter the Bluetooth MAC address of the shaver."
       },
       "bluetooth_confirm": {
-        "title": "Confirm Discovered Device",
-        "description": "Do you want to add the discovered Philips Shaver \"{name}\" to Home Assistant?"
+        "title": "Confirm detected device",
+        "description": "Do you want to add the detected Philips Shaver \"{name}\" to Home Assistant?"
       },
       "bluetooth_unpaired": {
-        "title": "Device Not Paired (Pairing Required)",
-        "description": "The device \"{name}\" was discovered, but it appears it has **not been paired** on the host operating system (Host OS).\n\n**Important:** This integration requires OS-level Bluetooth pairing *before* configuring it in Home Assistant (see **README, Step 1**).\n\nClick **Submit** to continue configuring *after* you have completed the pairing, or **Abort** to do it later."
+        "title": "Device not paired",
+        "description": "The device \"{name}\" was detected, but it does not appear to be **paired** at the operating system (host OS) level.\n\n**Important:** This integration requires pairing **before** configuration in Home Assistant (see **README, Step 1**).\n\nClick **Submit** to continue after pairing is completed, or **Cancel** to do it later."
       }
     },
     "error": {
       "abort_if_unique_id_configured": "This device is already configured."
     },
     "abort": {
-      "no_devices_found": "No supported Philips Shaver devices were found within range."
+      "no_devices_found": "No supported Philips Shaver devices were found in range."
+    }
+  },
+  "entity": {
+    "light": {
+      "color_low": {
+        "name": "Color: Low",
+        "description": "RGB color used for low shaver status."
+      },
+      "color_ok": {
+        "name": "Color: OK",
+        "description": "RGB color used for normal shaver status."
+      },
+      "color_high": {
+        "name": "Color: High",
+        "description": "RGB color used for high shaver status."
+      },
+      "color_motion": {
+        "name": "Color: Motion",
+        "description": "RGB color used for the motion lighting effect."
+      }
+    },
+    "sensor": {
+      "battery": {
+        "name": "Battery"
+      },
+      "amount_of_charges": {
+        "name": "Charge Cycles"
+      },
+      "firmware": {
+        "name": "Firmware"
+      },
+      "head_remaining": {
+        "name": "Shaver Head Remaining"
+      },
+      "days_last_used": {
+        "name": "Days Since Last Use"
+      },
+      "shaving_time": {
+        "name": "Last Session Duration"
+      },
+      "device_state": {
+        "name": "State",
+        "state": {
+          "off": "Off",
+          "shaving": "Shaving",
+          "charging": "Charging",
+          "unknown": "Unknown"
+        }
+      },
+      "activity": {
+        "name": "Activity",
+        "state": {
+          "off": "Off",
+          "shaving": "Shaving",
+          "charging": "Charging",
+          "cleaning": "Cleaning",
+          "locked": "Locked"
+        }
+      },
+      "last_seen": {
+        "name": "Last Seen"
+      },
+      "rssi": {
+        "name": "Signal Strength"
+      },
+      "cleaning_progress": {
+        "name": "Cleaning Progress"
+      },
+      "cleaning_cycles": {
+        "name": "Cleaning Cycles"
+      },
+      "motor_rpm": {
+        "name": "Motor Speed"
+      },
+      "motor_current": {
+        "name": "Motor Current"
+      },
+      "travel_lock": {
+        "name": "Travel Lock",
+        "state": {
+          "on": "Locked",
+          "off": "Unlocked"
+        }
+      }
     }
   }
 }

@@ -15,7 +15,6 @@ from homeassistant.core import HomeAssistant, callback as hass_callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.const import UnitOfTime
-from homeassistant.components.select import SelectEntity
 from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorDeviceClass,
@@ -55,7 +54,7 @@ async def async_setup_entry(
 # Batterie
 # =============================================================================
 class PhilipsBatterySensor(PhilipsShaverEntity, SensorEntity):
-    _attr_name = "Battery"
+    _attr_translation_key = "battery"
     _attr_native_unit_of_measurement = "%"
     _attr_device_class = SensorDeviceClass.BATTERY
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -71,7 +70,7 @@ class PhilipsBatterySensor(PhilipsShaverEntity, SensorEntity):
 
     @property
     def icon(self) -> str | None:
-        """Dynamisches Battery-Icon basierend auf Ladestatus und Akkustand."""
+        """Dynamic battery-icon based on state"""
         battery_level = self.native_value or 0
         state = self.hass.data[DOMAIN][self.entry.entry_id]["data"].get("device_state")
 
@@ -95,7 +94,7 @@ class PhilipsBatterySensor(PhilipsShaverEntity, SensorEntity):
 
         # battery fully charged
         if battery_level >= 100:
-            return base  # mdi:battery bzw. mdi:battery-charging
+            return base
 
         # battery >= 20 <= 90
         level = min(
@@ -111,10 +110,10 @@ class PhilipsBatterySensor(PhilipsShaverEntity, SensorEntity):
 
 
 # =============================================================================
-#  Amount of Charges
+# Amount of Charges
 # =============================================================================
 class PhilipsAmountOfChargesSensor(PhilipsShaverEntity, SensorEntity):
-    _attr_name = "Amount of Charges"
+    _attr_translation_key = "amount_of_charges"
     _attr_native_unit_of_measurement = "charges"
     _attr_icon = "mdi:counter"
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
@@ -140,10 +139,10 @@ class PhilipsAmountOfChargesSensor(PhilipsShaverEntity, SensorEntity):
 
 
 # =============================================================================
-# Firmware (Diagnostic)
+# Firmware
 # =============================================================================
 class PhilipsFirmwareSensor(PhilipsShaverEntity, SensorEntity):
-    _attr_name = "Firmware"
+    _attr_translation_key = "firmware"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:chip"
 
@@ -164,7 +163,7 @@ class PhilipsFirmwareSensor(PhilipsShaverEntity, SensorEntity):
 # Restliche Sensoren
 # =============================================================================
 class PhilipsHeadRemainingSensor(PhilipsShaverEntity, SensorEntity):
-    _attr_name = "Shaver Head Remaining"
+    _attr_translation_key = "head_remaining"
     _attr_native_unit_of_measurement = "%"
     _attr_device_class = SensorDeviceClass.BATTERY
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -185,7 +184,7 @@ class PhilipsHeadRemainingSensor(PhilipsShaverEntity, SensorEntity):
 
 
 class PhilipsDaysSinceLastUsedSensor(PhilipsShaverEntity, SensorEntity):
-    _attr_name = "Days Since Last Used"
+    _attr_translation_key = "days_last_used"
     _attr_native_unit_of_measurement = UnitOfTime.DAYS
     _attr_device_class = SensorDeviceClass.DURATION
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -208,7 +207,7 @@ class PhilipsDaysSinceLastUsedSensor(PhilipsShaverEntity, SensorEntity):
 
 
 class PhilipsShavingTimeSensor(PhilipsShaverEntity, SensorEntity):
-    _attr_name = "Last Session Duration"
+    _attr_translation_key = "shaving_time"
     _attr_native_unit_of_measurement = UnitOfTime.SECONDS
     _attr_device_class = SensorDeviceClass.DURATION
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -232,7 +231,7 @@ class PhilipsShavingTimeSensor(PhilipsShaverEntity, SensorEntity):
 # Select & Binary Sensoren
 # =============================================================================
 class PhilipsDeviceStateSensor(PhilipsShaverEntity, SensorEntity):
-    _attr_name = "State"
+    _attr_translation_key = "device_state"
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = ["off", "shaving", "charging", "unknown"]
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -250,10 +249,10 @@ class PhilipsDeviceStateSensor(PhilipsShaverEntity, SensorEntity):
         state = self.native_value or "unknown"
 
         return {
-            "off": "mdi:power-standby",  # power off
-            "shaving": "mdi:face-man-shimmer",  # shaving in progress
-            "charging": "mdi:battery-charging-100",  # charging
-            "unknown": "mdi:help-circle-outline",  # unknown
+            "off": "mdi:power-standby",
+            "shaving": "mdi:face-man-shimmer",
+            "charging": "mdi:battery-charging-100",
+            "unknown": "mdi:help-circle-outline",
         }.get(state, "mdi:help-circle-outline")
 
     @hass_callback
@@ -262,7 +261,7 @@ class PhilipsDeviceStateSensor(PhilipsShaverEntity, SensorEntity):
 
 
 class PhilipsTravelLockBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
-    _attr_name = "Travel Lock"
+    _attr_translation_key = "travel_lock"
     _attr_device_class = BinarySensorDeviceClass.LOCK
     _attr_icon = "mdi:lock"
 
@@ -281,9 +280,8 @@ class PhilipsTravelLockBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
         self.async_write_ha_state()
 
 
-# sensor.py – ersetzt alle drei Binary-Sensoren
 class PhilipsDeviceActivitySensor(PhilipsShaverEntity, SensorEntity):
-    _attr_name = "Activity"
+    _attr_translation_key = "activity"
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = ["off", "shaving", "charging", "cleaning", "locked"]
     _attr_icon = "mdi:state-machine"
@@ -309,11 +307,11 @@ class PhilipsDeviceActivitySensor(PhilipsShaverEntity, SensorEntity):
         if data.get("device_state") == "shaving":
             return "shaving"
 
-        # 3. Nur Laden
+        # 3. check for charging
         if data.get("device_state") == "charging":
             return "charging"
 
-        # 4. Alles andere
+        # 4. Everything else
         return "off"
 
     @property
@@ -332,10 +330,10 @@ class PhilipsDeviceActivitySensor(PhilipsShaverEntity, SensorEntity):
 
 
 # =============================================================================
-# NEU: Last Seen Sensor (wie gewünscht)
+# Last Seen
 # =============================================================================
 class PhilipsLastSeenSensor(PhilipsShaverEntity, SensorEntity):
-    _attr_name = "Last Seen"
+    _attr_translation_key = "last_seen"
     _attr_native_unit_of_measurement = UnitOfTime.MINUTES
     _attr_device_class = SensorDeviceClass.DURATION
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -363,10 +361,10 @@ class PhilipsLastSeenSensor(PhilipsShaverEntity, SensorEntity):
 
 
 # =============================================================================
-# NEU: RSSI Sensor (Signalstärke des Bluetooth-Signals)
+# RSSI Sensor
 # =============================================================================
 class PhilipsRssiSensor(PhilipsShaverEntity, SensorEntity):
-    _attr_name = "RSSI"
+    _attr_translation_key = "rssi"
     _attr_native_unit_of_measurement = "dBm"
     _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -379,13 +377,11 @@ class PhilipsRssiSensor(PhilipsShaverEntity, SensorEntity):
 
     @property
     def native_value(self) -> int | None:
-        """Aktueller RSSI-Wert aus der letzten Bluetooth-Advertisement."""
         service_info = async_last_service_info(self.hass, self._address)
         return service_info.rssi if service_info else None
 
     @property
     def available(self) -> bool:
-        """Nur verfügbar, wenn das Gerät kürzlich gesehen wurde."""
         service_info = async_last_service_info(self.hass, self._address)
         return service_info is not None
 
@@ -395,12 +391,12 @@ class PhilipsRssiSensor(PhilipsShaverEntity, SensorEntity):
 
 
 # =============================================================================
-# Cleaning Properties
+# Cleaning Progress
 # =============================================================================
 class PhilipsCleaningProgressSensor(PhilipsShaverEntity, SensorEntity):
-    _attr_name = "Cleaning Progress"
+    _attr_translation_key = "cleaning_progress"
     _attr_native_unit_of_measurement = "%"
-    _attr_device_class = SensorDeviceClass.BATTERY  # am besten passend für Prozente
+    _attr_device_class = SensorDeviceClass.BATTERY
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:progress-clock"
@@ -426,7 +422,6 @@ class PhilipsCleaningProgressSensor(PhilipsShaverEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        """Nur anzeigen, wenn Reinigung aktiv ist oder kürzlich war."""
         progress = self.hass.data[DOMAIN][self.entry.entry_id]["data"].get(
             "cleaning_progress"
         )
@@ -438,8 +433,7 @@ class PhilipsCleaningProgressSensor(PhilipsShaverEntity, SensorEntity):
 
 
 class PhilipsCleaningCyclesSensor(PhilipsShaverEntity, SensorEntity):
-    _attr_name = "Cleaning Cycles"
-    _attr_native_unit_of_measurement = None
+    _attr_translation_key = "cleaning_cycles"
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:counter"
@@ -464,10 +458,10 @@ class PhilipsCleaningCyclesSensor(PhilipsShaverEntity, SensorEntity):
 
 
 # =============================================================================
-# Motor Speed (RPM)
+# Motor Speed
 # =============================================================================
 class PhilipsMotorSpeedSensor(PhilipsShaverEntity, SensorEntity):
-    _attr_name = "Motor Speed"
+    _attr_translation_key = "motor_rpm"
     _attr_native_unit_of_measurement = "RPM"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -487,7 +481,6 @@ class PhilipsMotorSpeedSensor(PhilipsShaverEntity, SensorEntity):
 
     @property
     def icon(self) -> str:
-        """Dynamisches Icon je nach Betrieb."""
         rpm = self.native_value
         if rpm is None or rpm == 0:
             return "mdi:speedometer-slow"
@@ -495,7 +488,7 @@ class PhilipsMotorSpeedSensor(PhilipsShaverEntity, SensorEntity):
             return "mdi:speedometer-slow"
         if rpm < 6000:
             return "mdi:speedometer-medium"
-        return "mdi:speedometer"  # Vollgas ~6300 RPM
+        return "mdi:speedometer"
 
     @hass_callback
     def _update_callback(self):
@@ -506,7 +499,7 @@ class PhilipsMotorSpeedSensor(PhilipsShaverEntity, SensorEntity):
 # Motor Current
 # =============================================================================
 class PhilipsMotorCurrentSensor(PhilipsShaverEntity, SensorEntity):
-    _attr_name = "Motor Current"
+    _attr_translation_key = "motor_current"
     _attr_native_unit_of_measurement = "mA"
     _attr_device_class = SensorDeviceClass.CURRENT
     _attr_state_class = SensorStateClass.MEASUREMENT

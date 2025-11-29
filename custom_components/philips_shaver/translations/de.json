@@ -21,5 +21,89 @@
     "abort": {
       "no_devices_found": "Es wurden keine unterstützten Philips Shaver Geräte in Reichweite gefunden."
     }
+  },
+  "entity": {
+    "light": {
+      "color_low": {
+        "name": "Farbe: Niedrig",
+        "description": "RGB-Farbe für niedrigen Rasiererstatus."
+      },
+      "color_ok": {
+        "name": "Farbe: OK",
+        "description": "RGB-Farbe für normalen Rasiererstatus."
+      },
+      "color_high": {
+        "name": "Farbe: Hoch",
+        "description": "RGB-Farbe für hohen Rasiererstatus."
+      },
+      "color_motion": {
+        "name": "Farbe: Bewegung",
+        "description": "RGB-Farbe für den Bewegungslichteffekt."
+      }
+    },
+    "sensor": {
+      "battery": {
+        "name": "Batterie"
+      },
+      "amount_of_charges": {
+        "name": "Ladezyklen"
+      },
+      "firmware": {
+        "name": "Firmware"
+      },
+      "head_remaining": {
+        "name": "Scherkopf verbleibend"
+      },
+      "days_last_used": {
+        "name": "Tage seit letzter Nutzung"
+      },
+      "shaving_time": {
+        "name": "Dauer der letzten Rasur"
+      },
+      "device_state": {
+        "name": "Status",
+        "state": {
+          "off": "Aus",
+          "shaving": "Rasieren",
+          "charging": "Laden",
+          "unknown": "Unbekannt"
+        }
+      },
+      "activity": {
+        "name": "Aktivität",
+        "state": {
+          "off": "Aus",
+          "shaving": "Rasieren",
+          "charging": "Laden",
+          "cleaning": "Reinigen",
+          "locked": "Gesperrt"
+        }
+      },
+      "last_seen": {
+        "name": "Zuletzt gesehen"
+      },
+      "rssi": {
+        "name": "Signalstärke"
+      },
+      "cleaning_progress": {
+        "name": "Reinigungsfortschritt"
+      },
+      "cleaning_cycles": {
+        "name": "Reinigungszyklen"
+      },
+      "motor_rpm": {
+        "name": "Motordrehzahl"
+      },
+      "motor_current": {
+        "name": "Motorstrom"
+      },
+      "travel_lock": {
+        "name": "Reisesperre",
+        "state": {
+          "on": "Gesperrt",
+          "off": "Entsperrt"
+        }
+      }
+    }
   }
 }

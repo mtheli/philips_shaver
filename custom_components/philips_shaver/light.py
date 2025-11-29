@@ -36,25 +36,25 @@ async def async_setup_entry(
             hass,
             entry,
             CHAR_LIGHTRING_COLOR_LOW,
-            "Color Low",
+            "color_low",
         ),
         PhilipsColorConfigLight(
             hass,
             entry,
             CHAR_LIGHTRING_COLOR_OK,
-            "Color OK",
+            "color_ok",
         ),
         PhilipsColorConfigLight(
             hass,
             entry,
             CHAR_LIGHTRING_COLOR_HIGH,
-            "Color High",
+            "color_high",
         ),
         PhilipsColorConfigLight(
             hass,
             entry,
             CHAR_LIGHTRING_COLOR_MOTION,
-            "Color Motion",
+            "color_motion",
         ),
     ]
 
@@ -81,12 +81,12 @@ class PhilipsColorConfigLight(PhilipsShaverEntity, LightEntity):
         hass: HomeAssistant,
         entry: ConfigEntry,
         uuid: str,
-        name: str,
+        translation_key: str,
     ) -> None:
         super().__init__(hass, entry)
 
         self._uuid = uuid
-        self._attr_name = name
+        self._attr_translation_key = translation_key
 
         # Unique ID keeps HA happy
         self._attr_unique_id = f"{self._address}_{uuid}"
@@ -111,6 +111,15 @@ class PhilipsColorConfigLight(PhilipsShaverEntity, LightEntity):
 
     @hass_callback
     def _update_callback(self):
+        hass = self.hass
+        
+        if hass is None or DOMAIN not in hass.data:
+            return
+
+        entry_data = hass.data[DOMAIN].get(self.entry.entry_id)
+        if entry_data is None or entry_data.get("data") is None:
+            return
+
         store = self.hass.data[DOMAIN][self.entry.entry_id]["data"]
 
         if self._uuid == CHAR_LIGHTRING_COLOR_LOW:
