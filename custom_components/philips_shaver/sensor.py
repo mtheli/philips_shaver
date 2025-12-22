@@ -20,6 +20,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
 )
 from homeassistant.components.bluetooth import async_last_service_info
+from .coordinator import PhilipsShaverCoordinator
 
 from .const import DOMAIN
 from .entity import PhilipsShaverEntity
@@ -30,22 +31,23 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
+    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
     entities: list[PhilipsShaverEntity] = [
-        PhilipsBatterySensor(hass, entry),
-        PhilipsAmountOfChargesSensor(hass, entry),
-        PhilipsFirmwareSensor(hass, entry),
-        PhilipsHeadRemainingSensor(hass, entry),
-        PhilipsDaysSinceLastUsedSensor(hass, entry),
-        PhilipsShavingTimeSensor(hass, entry),
-        PhilipsDeviceStateSensor(hass, entry),
-        PhilipsTravelLockBinarySensor(hass, entry),
-        PhilipsDeviceActivitySensor(hass, entry),
-        PhilipsLastSeenSensor(hass, entry),
-        PhilipsRssiSensor(hass, entry),
-        PhilipsCleaningProgressSensor(hass, entry),
-        PhilipsCleaningCyclesSensor(hass, entry),
-        PhilipsMotorSpeedSensor(hass, entry),
-        PhilipsMotorCurrentSensor(hass, entry),
+        PhilipsBatterySensor(coordinator, entry),
+        PhilipsAmountOfChargesSensor(coordinator, entry),
+        PhilipsFirmwareSensor(coordinator, entry),
+        PhilipsHeadRemainingSensor(coordinator, entry),
+        PhilipsDaysSinceLastUsedSensor(coordinator, entry),
+        PhilipsShavingTimeSensor(coordinator, entry),
+        PhilipsDeviceStateSensor(coordinator, entry),
+        PhilipsTravelLockBinarySensor(coordinator, entry),
+        PhilipsDeviceActivitySensor(coordinator, entry),
+        PhilipsLastSeenSensor(coordinator, entry),
+        PhilipsRssiSensor(coordinator, entry),
+        PhilipsCleaningProgressSensor(coordinator, entry),
+        PhilipsCleaningCyclesSensor(coordinator, entry),
+        PhilipsMotorSpeedSensor(coordinator, entry),
+        PhilipsMotorCurrentSensor(coordinator, entry),
     ]
     async_add_entities(entities)
 
@@ -60,19 +62,21 @@ class PhilipsBatterySensor(PhilipsShaverEntity, SensorEntity):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:battery-unknown"
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        super().__init__(hass, entry)
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._address}_battery"
 
     @property
     def native_value(self) -> int | None:
-        return self.hass.data[DOMAIN][self.entry.entry_id]["data"].get("battery")
+        return self.coordinator.data.get("battery")
 
     @property
     def icon(self) -> str | None:
         """Dynamic battery-icon based on state"""
         battery_level = self.native_value or 0
-        state = self.hass.data[DOMAIN][self.entry.entry_id]["data"].get("device_state")
+        state = self.coordinator.data.get("device_state")
 
         # if the battery level is unkown
         if battery_level is None:
@@ -119,15 +123,15 @@ class PhilipsAmountOfChargesSensor(PhilipsShaverEntity, SensorEntity):
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        super().__init__(hass, entry)
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._address}_amount_of_charges"
 
     @property
     def native_value(self) -> int | None:
-        return self.hass.data[DOMAIN][self.entry.entry_id]["data"].get(
-            "amount_of_charges"
-        )
+        return self.coordinator.data.get("amount_of_charges")
 
     @property
     def available(self) -> bool:
@@ -146,13 +150,15 @@ class PhilipsFirmwareSensor(PhilipsShaverEntity, SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:chip"
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        super().__init__(hass, entry)
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._address}_firmware"
 
     @property
     def native_value(self) -> str | None:
-        return self.hass.data[DOMAIN][self.entry.entry_id]["data"].get("firmware")
+        return self.coordinator.data.get("firmware")
 
     @hass_callback
     def _update_callback(self):
@@ -170,13 +176,15 @@ class PhilipsHeadRemainingSensor(PhilipsShaverEntity, SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:razor-double-edge"
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        super().__init__(hass, entry)
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._address}_head_remaining"
 
     @property
     def native_value(self) -> int | None:
-        return self.hass.data[DOMAIN][self.entry.entry_id]["data"].get("head_remaining")
+        return self.coordinator.data.get("head_remaining")
 
     @hass_callback
     def _update_callback(self):
@@ -191,15 +199,15 @@ class PhilipsDaysSinceLastUsedSensor(PhilipsShaverEntity, SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:calendar-clock"
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        super().__init__(hass, entry)
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._address}_days_last_used"
 
     @property
     def native_value(self) -> int | None:
-        return self.hass.data[DOMAIN][self.entry.entry_id]["data"].get(
-            "days_since_last_used"
-        )
+        return self.coordinator.data.get("days_since_last_used")
 
     @hass_callback
     def _update_callback(self):
@@ -214,13 +222,15 @@ class PhilipsShavingTimeSensor(PhilipsShaverEntity, SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:clock-fast"
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        super().__init__(hass, entry)
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._address}_shaving_time"
 
     @property
     def native_value(self) -> int | None:
-        return self.hass.data[DOMAIN][self.entry.entry_id]["data"].get("shaving_time")
+        return self.coordinator.data.get("shaving_time")
 
     @hass_callback
     def _update_callback(self):
@@ -236,13 +246,15 @@ class PhilipsDeviceStateSensor(PhilipsShaverEntity, SensorEntity):
     _attr_options = ["off", "shaving", "charging", "unknown"]
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        super().__init__(hass, entry)
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._address}_device_state"
 
     @property
     def native_value(self) -> str | None:
-        return self.hass.data[DOMAIN][self.entry.entry_id]["data"].get("device_state")
+        return self.coordinator.data.get("device_state")
 
     @property
     def icon(self) -> str:
@@ -265,15 +277,15 @@ class PhilipsTravelLockBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
     _attr_device_class = BinarySensorDeviceClass.LOCK
     _attr_icon = "mdi:lock"
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        super().__init__(hass, entry)
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._address}_travel_lock"
 
     @property
     def is_on(self) -> bool:
-        return self.hass.data[DOMAIN][self.entry.entry_id]["data"].get(
-            "travel_lock", False
-        )
+        return self.coordinator.data.get("travel_lock", False)
 
     @hass_callback
     def _update_callback(self):
@@ -286,13 +298,15 @@ class PhilipsDeviceActivitySensor(PhilipsShaverEntity, SensorEntity):
     _attr_options = ["off", "shaving", "charging", "cleaning", "locked"]
     _attr_icon = "mdi:state-machine"
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        super().__init__(hass, entry)
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._address}_activity"
 
     @property
     def native_value(self) -> str:
-        data = self.hass.data[DOMAIN][self.entry.entry_id]["data"]
+        data = self.coordinator.data
 
         # 1. check for travel locking
         if data.get("travel_lock", False):
@@ -340,8 +354,10 @@ class PhilipsLastSeenSensor(PhilipsShaverEntity, SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:clock-check"
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        super().__init__(hass, entry)
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._address}_last_seen"
 
     @property
@@ -371,8 +387,10 @@ class PhilipsRssiSensor(PhilipsShaverEntity, SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:bluetooth"
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        super().__init__(hass, entry)
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._address}_rssi"
 
     @property
@@ -401,15 +419,15 @@ class PhilipsCleaningProgressSensor(PhilipsShaverEntity, SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:progress-clock"
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        super().__init__(hass, entry)
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._address}_cleaning_progress"
 
     @property
     def native_value(self) -> int | None:
-        return self.hass.data[DOMAIN][self.entry.entry_id]["data"].get(
-            "cleaning_progress"
-        )
+        return self.coordinator.data.get("cleaning_progress")
 
     @property
     def icon(self) -> str:
@@ -422,9 +440,7 @@ class PhilipsCleaningProgressSensor(PhilipsShaverEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        progress = self.hass.data[DOMAIN][self.entry.entry_id]["data"].get(
-            "cleaning_progress"
-        )
+        progress = self.coordinator.data.get("cleaning_progress")
         return progress is not None and progress > 0
 
     @hass_callback
@@ -438,15 +454,15 @@ class PhilipsCleaningCyclesSensor(PhilipsShaverEntity, SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:counter"
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        super().__init__(hass, entry)
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._address}_cleaning_cycles"
 
     @property
     def native_value(self) -> int | None:
-        return self.hass.data[DOMAIN][self.entry.entry_id]["data"].get(
-            "cleaning_cycles"
-        )
+        return self.coordinator.data.get("cleaning_cycles")
 
     @property
     def available(self) -> bool:
@@ -467,13 +483,15 @@ class PhilipsMotorSpeedSensor(PhilipsShaverEntity, SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:speedometer"
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        super().__init__(hass, entry)
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._address}_motor_rpm"
 
     @property
     def native_value(self) -> int | None:
-        return self.hass.data[DOMAIN][self.entry.entry_id]["data"].get("motor_rpm")
+        return self.coordinator.data.get("motor_rpm")
 
     @property
     def available(self) -> bool:
@@ -506,15 +524,15 @@ class PhilipsMotorCurrentSensor(PhilipsShaverEntity, SensorEntity):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:current-dc"
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        super().__init__(hass, entry)
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._address}_motor_current"
 
     @property
     def native_value(self) -> int | None:
-        return self.hass.data[DOMAIN][self.entry.entry_id]["data"].get(
-            "motor_current_ma"
-        )
+        return self.coordinator.data.get("motor_current_ma")
 
     @property
     def available(self) -> bool:
