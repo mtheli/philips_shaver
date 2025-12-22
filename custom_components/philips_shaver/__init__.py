@@ -41,20 +41,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # WICHTIG: Bei Options-Änderung Integration neu laden
-    entry.async_on_unload(entry.add_update_listener(async_update_options))
-
     _LOGGER.info("Philips Shaver integration loaded – address: %s", address)
     return True
 
 
-async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Wird aufgerufen, wenn der User die Optionen ändert."""
-    await hass.config_entries.async_reload(entry.entry_id)
-
-
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    _LOGGER.info("Start unloading philips shaver integration ...")
+    _LOGGER.info("Unloading philips shaver integration started")
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if not unload_ok:

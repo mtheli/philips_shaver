@@ -60,7 +60,6 @@ class PhilipsBatterySensor(PhilipsShaverEntity, SensorEntity):
     _attr_native_unit_of_measurement = "%"
     _attr_device_class = SensorDeviceClass.BATTERY
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:battery-unknown"
 
     def __init__(
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
@@ -70,12 +69,13 @@ class PhilipsBatterySensor(PhilipsShaverEntity, SensorEntity):
 
     @property
     def native_value(self) -> int | None:
-        return self.coordinator.data.get("battery")
+        value = self.coordinator.data.get("battery")
+        return value if value is not None else None
 
     @property
     def icon(self) -> str | None:
         """Dynamic battery-icon based on state"""
-        battery_level = self.native_value or 0
+        battery_level = self.native_value
         state = self.coordinator.data.get("device_state")
 
         # if the battery level is unkown
@@ -362,14 +362,14 @@ class PhilipsLastSeenSensor(PhilipsShaverEntity, SensorEntity):
 
     @property
     def native_value(self) -> int | None:
-        last_seen = self.hass.data[DOMAIN][self.entry.entry_id].get("last_seen")
+        last_seen = self.coordinator.data.get("last_seen")
         if not last_seen:
             return None
         return int((datetime.now() - last_seen).total_seconds() // 60)
 
     @property
     def available(self) -> bool:
-        return self.hass.data[DOMAIN][self.entry.entry_id].get("last_seen") is not None
+        return self.native_value is not None
 
     @hass_callback
     def _update_callback(self):

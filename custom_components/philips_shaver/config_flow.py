@@ -4,10 +4,21 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlowWithReload,
+)
+from homeassistant.core import callback
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
-from homeassistant import config_entries
-from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+    BooleanSelector,
+    TextSelector,
+)
 
 from .const import (
     DOMAIN,
@@ -15,46 +26,64 @@ from .const import (
     DEFAULT_ENABLE_LIVE_UPDATES,
     MIN_POLL_INTERVAL,
     MAX_POLL_INTERVAL,
+    CONF_ADDRESS,
+    CONF_POLL_INTERVAL,
+    CONF_ENABLE_LIVE_UPDATES,
 )
 
 
-class PhilipsShaverOptionsFlow(config_entries.OptionsFlow):
+class PhilipsShaverOptionsFlow(OptionsFlowWithReload):
     """Options flow für Philips Shaver."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
-
-    async def async_step_init(self, user_input: dict | None = None) -> FlowResult:
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         """Manage the options."""
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            return self.async_create_entry(
+                data={
+                    CONF_POLL_INTERVAL: user_input[CONF_POLL_INTERVAL],
+                    CONF_ENABLE_LIVE_UPDATES: user_input[CONF_ENABLE_LIVE_UPDATES],
+                }
+            )
 
-        current_options = self.config_entry.options
-
-        data_schema = vol.Schema(
+        data_schema: vol.Schema = vol.Schema(
             {
-                vol.Optional(
-                    "poll_interval",
-                    default=current_options.get("poll_interval", DEFAULT_POLL_INTERVAL),
-                ): vol.All(
-                    vol.Coerce(int),
-                    vol.Range(min=MIN_POLL_INTERVAL, max=MAX_POLL_INTERVAL),
+                vol.Required(CONF_POLL_INTERVAL): NumberSelector(
+                    NumberSelectorConfig(
+                        min=MIN_POLL_INTERVAL,
+                        max=MAX_POLL_INTERVAL,
+                        step=1,
+                        unit_of_measurement="s",
+                        mode=NumberSelectorMode.BOX,
+                    )
                 ),
-                vol.Optional(
-                    "enable_live_updates",
-                    default=current_options.get(
-                        "enable_live_updates", DEFAULT_ENABLE_LIVE_UPDATES
-                    ),
-                ): bool,
+                vol.Required(CONF_ENABLE_LIVE_UPDATES): BooleanSelector(),
             }
         )
+        suggested_values = {
+            CONF_POLL_INTERVAL: self.config_entry.options.get(
+                CONF_POLL_INTERVAL,
+                DEFAULT_POLL_INTERVAL,
+            ),
+            CONF_ENABLE_LIVE_UPDATES: self.config_entry.options.get(
+                CONF_ENABLE_LIVE_UPDATES,
+                DEFAULT_ENABLE_LIVE_UPDATES,
+            ),
+        }
 
         return self.async_show_form(
             step_id="init",
-            data_schema=data_schema,
+            data_schema=self.add_suggested_values_to_schema(
+                data_schema, suggested_values
+            ),
             description_placeholders={
-                "name": self.config_entry.title,
+                "min_int": str(MIN_POLL_INTERVAL),
+                "max_int": str(MAX_POLL_INTERVAL),
+                "rec_int": str(DEFAULT_POLL_INTERVAL),
             },
+            errors=errors,
         )
 
 
@@ -62,8 +91,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     """Config flow for Philips Shaver."""
 
     VERSION = 1
-
-    _attr_flow_title = "Philips Shaver (i9000/XP9201)"
+    MINOR_VERSION = 1
 
     discovery_info: BluetoothServiceInfoBleak | None = None
 
@@ -137,10 +165,10 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             # (Dies ermöglicht es dem Benutzer, die Warnung zu ignorieren, wenn er sicher ist)
             return self.async_create_entry(
                 title=f"Philips Shaver ({self.discovery_info.name or self.discovery_info.address})",
-                data={"address": self.discovery_info.address},
+                data={CONF_ADDRESS: self.discovery_info.address},
                 options={
-                    "poll_interval": DEFAULT_POLL_INTERVAL,
-                    "enable_live_updates": DEFAULT_ENABLE_LIVE_UPDATES,
+                    CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL,
+                    CONF_ENABLE_LIVE_UPDATES: DEFAULT_ENABLE_LIVE_UPDATES,
                 },
             )
 
@@ -170,10 +198,10 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             return self.async_create_entry(
                 title=f"Philips Shaver ({self.discovery_info.name or self.discovery_info.address})",
-                data={"address": self.discovery_info.address},
+                data={CONF_ADDRESS: self.discovery_info.address},
                 options={
-                    "poll_interval": user_input["poll_interval"],
-                    "enable_live_updates": user_input["enable_live_updates"],
+                    CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL,
+                    CONF_ENABLE_LIVE_UPDATES: DEFAULT_ENABLE_LIVE_UPDATES,
                 },
             )
 
@@ -182,25 +210,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             "name": self.discovery_info.name or self.discovery_info.address
         }
 
-        data_schema = vol.Schema(
-            {
-                vol.Optional(
-                    "poll_interval",
-                    default=DEFAULT_POLL_INTERVAL,
-                ): vol.All(
-                    vol.Coerce(int),
-                    vol.Range(min=MIN_POLL_INTERVAL, max=MAX_POLL_INTERVAL),
-                ),
-                vol.Optional(
-                    "enable_live_updates",
-                    default=DEFAULT_ENABLE_LIVE_UPDATES,
-                ): bool,
-            }
-        )
-
         return self.async_show_form(
             step_id="bluetooth_confirm",
-            data_schema=data_schema,
             description_placeholders={
                 "name": self.discovery_info.name or self.discovery_info.address,
             },
@@ -227,8 +238,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 title=f"Philips Shaver ({address})",
                 data={"address": address},
                 options={
-                    "poll_interval": DEFAULT_POLL_INTERVAL,
-                    "enable_live_updates": DEFAULT_ENABLE_LIVE_UPDATES,
+                    CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL,
+                    CONF_ENABLE_LIVE_UPDATES: DEFAULT_ENABLE_LIVE_UPDATES,
                 },
             )
 
@@ -239,8 +250,10 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,  # Fehler können hier eingefügt werden, falls nötig
         )
 
-    # DIESE METHODE IST DER SCHLÜSSEL
-    def async_options_flow(self, config_entry):
-        """Get the options flow for this handler."""
-        # Gib hier die Klasse zurück, die du in Schritt 1 definiert hast
-        return PhilipsShaverOptionsFlow(config_entry)
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: ConfigEntry,
+    ) -> PhilipsShaverOptionsFlow:
+        """Create the options flow."""
+        return PhilipsShaverOptionsFlow()

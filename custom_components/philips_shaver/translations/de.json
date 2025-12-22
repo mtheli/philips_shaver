@@ -1,4 +1,19 @@
 {
+  "options": {
+    "step": {
+      "init": {
+        "title": "Philips Shaver Einstellungen",
+        "data": {
+          "poll_interval": "Abfrageinterval",
+          "enable_live_updates": "Live Update"
+        },
+        "data_description": {
+          "poll_interval": "Das empfohlene Interval beträgt {rec_int} Sekunden und maximal {max_int} Sekunden."
+        },
+        "description": "Das Abfrageintervall bestimmt den Abstand zwischen den Anfragen zur Aktualisierung der Geräteinformationen, falls das Live Update nicht aktiviert ist."
+      }
+    }
+  },
   "config": {
     "flow_title": "Philips Shaver ({name})",
     "step": {

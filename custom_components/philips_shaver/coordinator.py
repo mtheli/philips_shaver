@@ -38,6 +38,8 @@ from .const import (
     CHAR_SERIAL_NUMBER,
     CHAR_SHAVING_TIME,
     CHAR_TRAVEL_LOCK,
+    CONF_POLL_INTERVAL,
+    CONF_ENABLE_LIVE_UPDATES,
     DEFAULT_ENABLE_LIVE_UPDATES,
     DEFAULT_POLL_INTERVAL,
     POLL_READ_CHARS,
@@ -62,20 +64,27 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # read options
         options = entry.options
-        poll_interval = options.get("poll_interval", DEFAULT_POLL_INTERVAL)
+        poll_interval = options.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL)
+        self.poll_interval_seconds = poll_interval
         self.enable_live_updates = options.get(
-            "enable_live_updates", DEFAULT_ENABLE_LIVE_UPDATES
+            CONF_ENABLE_LIVE_UPDATES, DEFAULT_ENABLE_LIVE_UPDATES
         )
 
         self.live_client: BleakClient | None = None
         self._connection_lock = asyncio.Lock()
         self._live_task: asyncio.Task | None = None
 
+        _LOGGER.debug(
+            "Initializing coordinator for %s with poll interval %s seconds (live updates: %s)",
+            self.address,
+            self.poll_interval_seconds,
+            self.enable_live_updates,
+        )
         super().__init__(
             hass,
             _LOGGER,
             name=f"Philips Shaver {self.address}",
-            update_interval=timedelta(seconds=poll_interval),
+            update_interval=timedelta(seconds=self.poll_interval_seconds),
         )
 
         # Initialer leerer Datensatz
@@ -161,9 +170,16 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # 2. Wir hatten vor weniger als 2 Minuten Live-Daten → auch überspringen!
         last_seen = self.data.get("last_seen")
-        if last_seen and (datetime.now() - last_seen).total_seconds() < 120:
-            _LOGGER.debug("Recent live data (<120s) – polling skipped")
-            return self.data or {}
+        if last_seen:
+            age = (datetime.now() - last_seen).total_seconds()
+
+            if age < self.poll_interval_seconds:
+                _LOGGER.debug(
+                    "Recent data (%ss < poll interval %ss) – polling skipped",
+                    age,
+                    self.poll_interval_seconds,
+                )
+                return self.data or {}
 
         async with self._connection_lock:
             try:
