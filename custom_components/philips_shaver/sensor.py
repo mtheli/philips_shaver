@@ -14,6 +14,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback as hass_callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import EntityCategory
+from homeassistant.helpers import entity_registry as er
 from homeassistant.const import UnitOfTime
 from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
@@ -22,7 +23,7 @@ from homeassistant.components.binary_sensor import (
 from homeassistant.components.bluetooth import async_last_service_info
 from .coordinator import PhilipsShaverCoordinator
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_ENABLE_LIVE_UPDATES, DEFAULT_ENABLE_LIVE_UPDATES
 from .entity import PhilipsShaverEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,6 +33,10 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    enable_live = entry.options.get(
+        CONF_ENABLE_LIVE_UPDATES, DEFAULT_ENABLE_LIVE_UPDATES
+    )
+
     entities: list[PhilipsShaverEntity] = [
         PhilipsBatterySensor(coordinator, entry),
         PhilipsAmountOfChargesSensor(coordinator, entry),
@@ -50,6 +55,36 @@ async def async_setup_entry(
         PhilipsMotorCurrentSensor(coordinator, entry),
     ]
     async_add_entities(entities)
+
+    # Immer am Ende: Live-Sensoren je nach Option (de)aktivieren
+    await _update_live_entity_visibility(hass, coordinator.address, enable_live)
+
+
+async def _update_live_entity_visibility(
+    hass: HomeAssistant, address: str, enable_live: bool
+) -> None:
+    """Enable or disable live-only entities based on the live updates option."""
+    ent_reg = er.async_get(hass)
+
+    live_unique_ids = [
+        f"{address}_cleaning_progress",
+        f"{address}_motor_rpm",
+        f"{address}_motor_current",
+        # Optional: auch Device State, wenn du ihn als live-only siehst
+        # f"{address}_state",
+    ]
+
+    for unique_id in live_unique_ids:
+        entity_id = ent_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
+        if entity_id:
+            if enable_live:
+                # Wieder aktivieren, falls deaktiviert
+                ent_reg.async_update_entity(entity_id, disabled_by=None)
+            else:
+                # Deaktivieren
+                ent_reg.async_update_entity(
+                    entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
+                )
 
 
 # =============================================================================
