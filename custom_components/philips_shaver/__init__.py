@@ -34,7 +34,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # === NEU: Coordinator anlegen ===
     coordinator = PhilipsShaverCoordinator(hass, entry)
-    # hass.async_create_task(coordinator._async_start_advertisement_logging())
+    hass.async_create_task(coordinator._async_start_advertisement_logging())
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {"coordinator": coordinator}

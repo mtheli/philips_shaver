@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.components.bluetooth import async_last_service_info
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
@@ -67,12 +68,20 @@ class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
 
     @property
     def available(self) -> bool:
-        """Return True if entity is available."""
-        if not self.coordinator.data:
+        """Return True if the device is currently in Bluetooth range."""
+
+        # Checking if the device is currently in range
+        service_info = async_last_service_info(self.hass, self._address)
+        if service_info is None:
             return False
 
-        # Gerät ist verfügbar, wenn wir in den letzten 5 Minuten Daten hatten
-        last_seen = self.coordinator.data.get("last_seen")
-        if last_seen is None:
+        # checking if data is availaboe
+        if not self.coordinator.data or self.coordinator.data.get("last_seen") is None:
+            return True
+
+        # checking if lastseen is older than 30m
+        last_adv_time = service_info.advertisement.last_seen
+        if last_adv_time is None:
             return False
-        return (datetime.now() - last_seen).total_seconds() < 300
+
+        return (datetime.now() - last_adv_time).total_seconds() < 1800

@@ -168,10 +168,6 @@ class PhilipsAmountOfChargesSensor(PhilipsShaverEntity, SensorEntity):
     def native_value(self) -> int | None:
         return self.coordinator.data.get("amount_of_charges")
 
-    @property
-    def available(self) -> bool:
-        return self.native_value is not None
-
     @hass_callback
     def _update_callback(self):
         self.async_write_ha_state()
@@ -402,10 +398,6 @@ class PhilipsLastSeenSensor(PhilipsShaverEntity, SensorEntity):
             return None
         return int((datetime.now() - last_seen).total_seconds() // 60)
 
-    @property
-    def available(self) -> bool:
-        return self.native_value is not None
-
     @hass_callback
     def _update_callback(self):
         self.async_write_ha_state()
@@ -432,11 +424,6 @@ class PhilipsRssiSensor(PhilipsShaverEntity, SensorEntity):
     def native_value(self) -> int | None:
         service_info = async_last_service_info(self.hass, self._address)
         return service_info.rssi if service_info else None
-
-    @property
-    def available(self) -> bool:
-        service_info = async_last_service_info(self.hass, self._address)
-        return service_info is not None
 
     @hass_callback
     def _update_callback(self):
@@ -473,11 +460,6 @@ class PhilipsCleaningProgressSensor(PhilipsShaverEntity, SensorEntity):
             return "mdi:check-circle-outline"
         return "mdi:progress-wrench"
 
-    @property
-    def available(self) -> bool:
-        progress = self.coordinator.data.get("cleaning_progress")
-        return progress is not None and progress > 0
-
     @hass_callback
     def _update_callback(self):
         self.async_write_ha_state()
@@ -498,10 +480,6 @@ class PhilipsCleaningCyclesSensor(PhilipsShaverEntity, SensorEntity):
     @property
     def native_value(self) -> int | None:
         return self.coordinator.data.get("cleaning_cycles")
-
-    @property
-    def available(self) -> bool:
-        return self.native_value is not None
 
     @hass_callback
     def _update_callback(self):
@@ -527,10 +505,6 @@ class PhilipsMotorSpeedSensor(PhilipsShaverEntity, SensorEntity):
     @property
     def native_value(self) -> int | None:
         return self.coordinator.data.get("motor_rpm")
-
-    @property
-    def available(self) -> bool:
-        return self.native_value is not None
 
     @property
     def icon(self) -> str:
@@ -568,10 +542,6 @@ class PhilipsMotorCurrentSensor(PhilipsShaverEntity, SensorEntity):
     @property
     def native_value(self) -> int | None:
         return self.coordinator.data.get("motor_current_ma")
-
-    @property
-    def available(self) -> bool:
-        return self.native_value is not None
 
     @hass_callback
     def _update_callback(self):
