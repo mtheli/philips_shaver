@@ -72,16 +72,4 @@ class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
 
         # Checking if the device is currently in range
         service_info = async_last_service_info(self.hass, self._address)
-        if service_info is None:
-            return False
-
-        # checking if data is availaboe
-        if not self.coordinator.data or self.coordinator.data.get("last_seen") is None:
-            return True
-
-        # checking if lastseen is older than 30m
-        last_adv_time = service_info.advertisement.last_seen
-        if last_adv_time is None:
-            return False
-
-        return (datetime.now() - last_adv_time).total_seconds() < 1800
+        return service_info is not None
