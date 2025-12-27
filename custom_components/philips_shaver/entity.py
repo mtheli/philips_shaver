@@ -1,5 +1,7 @@
 # custom_components/philips_shaver/entity.py
 from __future__ import annotations
+
+import logging
 from datetime import datetime, timedelta
 
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -10,6 +12,8 @@ from homeassistant.helpers import device_registry as dr
 
 from .coordinator import PhilipsShaverCoordinator
 from .const import DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
@@ -62,6 +66,19 @@ class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
                     device.id,
                     model=data.get("model_number") or "i9000 / XP9201",
                     sw_version=data.get("firmware"),
+                )
+
+        # dynamically updating icon
+        if hasattr(self, "icon"):
+            try:
+                new_icon = self.icon
+                if getattr(self, "_attr_icon", None) != new_icon:
+                    self._attr_icon = new_icon
+            except Exception as err:
+                _LOGGER.debug(
+                    "Failed to update dynamic icon for %s: %s",
+                    self.entity_id or self.__class__.__name__,
+                    err,
                 )
 
         self.async_write_ha_state()

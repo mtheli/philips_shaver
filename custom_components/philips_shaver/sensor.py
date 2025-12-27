@@ -15,7 +15,8 @@ from homeassistant.core import HomeAssistant, callback as hass_callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers import entity_registry as er
-from homeassistant.const import UnitOfTime
+from homeassistant.helpers.icon import icon_for_battery_level
+from homeassistant.const import UnitOfTime, PERCENTAGE
 from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
     BinarySensorDeviceClass,
@@ -53,6 +54,7 @@ async def async_setup_entry(
         PhilipsCleaningCyclesSensor(coordinator, entry),
         PhilipsMotorSpeedSensor(coordinator, entry),
         PhilipsMotorCurrentSensor(coordinator, entry),
+        PhilipsShavingModeSensor(coordinator, entry),
     ]
     async_add_entities(entities)
 
@@ -92,8 +94,8 @@ async def _update_live_entity_visibility(
 # =============================================================================
 class PhilipsBatterySensor(PhilipsShaverEntity, SensorEntity):
     _attr_translation_key = "battery"
-    _attr_native_unit_of_measurement = "%"
-    _attr_device_class = SensorDeviceClass.BATTERY
+    _attr_native_unit_of_measurement = PERCENTAGE
+    # _attr_device_class = SensorDeviceClass.BATTERY
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(
@@ -110,38 +112,10 @@ class PhilipsBatterySensor(PhilipsShaverEntity, SensorEntity):
     @property
     def icon(self) -> str | None:
         """Dynamic battery-icon based on state"""
-        battery_level = self.native_value
         state = self.coordinator.data.get("device_state")
-
-        # if the battery level is unkown
-        if battery_level is None:
-            if state == "charging":
-                return "mdi:battery-charging-unknown"
-            return "mdi:battery-unknown"
-
-        # shaving in progress
-        if state == "shaving":
-            return "mdi:battery-alert-bluetooth"
-
-        # determine basic icon name
-        if state == "charging":
-            base = "mdi:battery-charging"
-            outline = "-outline" if battery_level <= 10 else ""
-        else:
-            base = "mdi:battery"
-            outline = "-outline" if battery_level <= 10 else ""
-
-        # battery fully charged
-        if battery_level >= 100:
-            return base
-
-        # battery >= 20 <= 90
-        level = min(
-            90, ((battery_level - 1) // 10) * 10 + 10 if battery_level > 10 else 10
+        return icon_for_battery_level(
+            battery_level=self.native_value, charging=(state == "charging")
         )
-        suffix = f"-{level}" if battery_level > 10 or outline else ""
-
-        return f"{base}{suffix}{outline}"
 
     @hass_callback
     def _update_callback(self):
@@ -201,7 +175,7 @@ class PhilipsFirmwareSensor(PhilipsShaverEntity, SensorEntity):
 # =============================================================================
 class PhilipsHeadRemainingSensor(PhilipsShaverEntity, SensorEntity):
     _attr_translation_key = "head_remaining"
-    _attr_native_unit_of_measurement = "%"
+    _attr_native_unit_of_measurement = PERCENTAGE
     _attr_device_class = SensorDeviceClass.BATTERY
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -435,7 +409,7 @@ class PhilipsRssiSensor(PhilipsShaverEntity, SensorEntity):
 # =============================================================================
 class PhilipsCleaningProgressSensor(PhilipsShaverEntity, SensorEntity):
     _attr_translation_key = "cleaning_progress"
-    _attr_native_unit_of_measurement = "%"
+    _attr_native_unit_of_measurement = PERCENTAGE
     _attr_device_class = SensorDeviceClass.BATTERY
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -546,3 +520,39 @@ class PhilipsMotorCurrentSensor(PhilipsShaverEntity, SensorEntity):
     @hass_callback
     def _update_callback(self):
         self.async_write_ha_state()
+
+
+# =============================================================================
+# Shaving Mode
+# =============================================================================
+class PhilipsShavingModeSensor(PhilipsShaverEntity, SensorEntity):
+    _attr_translation_key = "shaving_mode"
+    _attr_icon = "mdi:shaver"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._address}_shaving_mode"
+
+    @property
+    def native_value(self) -> str | None:
+        return self.coordinator.data.get("shaving_mode")
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        return {"raw_value": self.coordinator.data.get("shaving_mode_value")}
+
+    @property
+    def icon(self) -> str:
+        mode = self.native_value
+        if mode == "sensitive":
+            return "mdi:shaver"
+        elif mode == "intense":
+            return "mdi:flash"
+        elif mode == "custom":
+            return "mdi:tune"
+        elif mode == "foam":
+            return "mdi:spray"
+        return "mdi:shaver"

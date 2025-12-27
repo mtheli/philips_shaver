@@ -40,12 +40,22 @@ CHAR_LIGHTRING_COLOR_HIGH = "8d560313-3cb9-4387-a7e8-b79d826a7025"
 CHAR_LIGHTRING_COLOR_MOTION = "8d56031c-3cb9-4387-a7e8-b79d826a7025"
 CHAR_LIGHTRING_COLOR_BRIGHTNESS = "8d560331-3cb9-4387-a7e8-b79d826a7025"
 
-
 LIGHTRING_DEFAULT_COLORS = {
     CHAR_LIGHTRING_COLOR_LOW: (0xFF, 0x00, 0x00),  # (0x00, 0x8F, 0xFF),
     CHAR_LIGHTRING_COLOR_OK: (0xFF, 0x00, 0x00),  # (0xFF, 0x49, 0xFF),
     CHAR_LIGHTRING_COLOR_HIGH: (0xFF, 0x00, 0x00),  # (0xFF, 0x85, 0x00),
     CHAR_LIGHTRING_COLOR_MOTION: (0xFF, 0x00, 0x00),  # (0x37, 0xFF, 0x00),
+}
+
+# Shaving mode
+CHAR_SHAVING_MODE = "8d56032a-3cb9-4387-a7e8-b79d826a7025"
+SHAVING_MODES = {
+    0: "sensitive",
+    1: "regular",
+    2: "intense",
+    3: "custom",
+    4: "foam",
+    5: "battery_saving",
 }
 
 # characteristics to poll
@@ -67,6 +77,7 @@ POLL_READ_CHARS = [
     CHAR_LIGHTRING_COLOR_MOTION,
     CHAR_LIGHTRING_COLOR_BRIGHTNESS,
     CHAR_AMOUNT_OF_CHARGES,
+    CHAR_SHAVING_MODE,
 ]
 
 # characteristics to live read

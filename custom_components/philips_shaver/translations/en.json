@@ -118,6 +118,16 @@
           "on": "Locked",
           "off": "Unlocked"
         }
+      },
+      "shaving_mode": {
+        "name": "Shaving mode",
+        "sensitive": "Sensitive",
+        "regular": "Regular",
+        "intense": "Intense",
+        "custom": "Custom",
+        "foam": "Foam",
+        "battery_saving": "Battery saving",
+        "unknown": "Unknown"
       }
     }
   }

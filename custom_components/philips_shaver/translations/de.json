@@ -118,6 +118,16 @@
           "on": "Gesperrt",
           "off": "Entsperrt"
         }
+      },
+      "shaving_mode": {
+        "name": "Rasurmodus",
+        "sensitive": "Sensitiv",
+        "regular": "Normal",
+        "intense": "Intensiv",
+        "custom": "Benutzerdefiniert",
+        "foam": "Schaum",
+        "battery_saving": "Akku-sparend",
+        "unknown": "Unbekannt"
       }
     }
   }

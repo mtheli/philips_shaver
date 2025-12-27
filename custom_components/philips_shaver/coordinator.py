@@ -38,12 +38,14 @@ from .const import (
     CHAR_SERIAL_NUMBER,
     CHAR_SHAVING_TIME,
     CHAR_TRAVEL_LOCK,
+    CHAR_SHAVING_MODE,
     CONF_POLL_INTERVAL,
     CONF_ENABLE_LIVE_UPDATES,
     DEFAULT_ENABLE_LIVE_UPDATES,
     DEFAULT_POLL_INTERVAL,
     POLL_READ_CHARS,
     LIVE_READ_CHARS,
+    SHAVING_MODES,
 )
 from .utils import parse_color
 
@@ -103,6 +105,8 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "motor_rpm": None,
             "motor_current_ma": None,
             "amount_of_charges": None,
+            "shaving_mode": None,
+            "shaving_mode_value": None,
             "color_low": (255, 0, 0),
             "color_ok": (255, 0, 0),
             "color_high": (255, 0, 0),
@@ -261,6 +265,12 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if raw := results.get(char_uuid):
                 if color := parse_color(raw):
                     new_data[key] = color
+
+        # Shaving mode
+        if raw := results.get(CHAR_SHAVING_MODE):
+            mode_value = int.from_bytes(raw, "little")
+            new_data["shaving_mode_value"] = mode_value
+            new_data["shaving_mode"] = SHAVING_MODES.get(mode_value, "unknown")
 
         # Immer aktualisieren – wichtig für "available"
         new_data["last_seen"] = datetime.now()
