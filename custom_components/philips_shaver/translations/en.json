@@ -56,12 +56,27 @@
         "description": "RGB color used for the motion lighting effect."
       }
     },
+    "select": {
+      "shaving_mode": {
+        "name": "Rasiermodus auswählen",
+        "state": {
+          "sensitive": "Sensitive",
+          "regular": "Regular",
+          "intense": "Intense",
+          "custom": "Custom",
+          "foam": "Foam"
+        }
+      }
+    },
     "sensor": {
       "battery": {
         "name": "Battery"
       },
       "amount_of_charges": {
         "name": "Charge Cycles"
+      },
+      "amount_of_operational_turns": {
+        "name": "Number of Uses"
       },
       "firmware": {
         "name": "Firmware"
@@ -112,6 +127,9 @@
       "motor_current": {
         "name": "Motor Current"
       },
+      "motor_current_max": {
+        "name": "Motor Current"
+      },
       "travel_lock": {
         "name": "Travel Lock",
         "state": {
@@ -121,13 +139,27 @@
       },
       "shaving_mode": {
         "name": "Shaving mode",
-        "sensitive": "Sensitive",
-        "regular": "Regular",
-        "intense": "Intense",
-        "custom": "Custom",
-        "foam": "Foam",
-        "battery_saving": "Battery saving",
-        "unknown": "Unknown"
+        "state": {
+          "sensitive": "Sensitive",
+          "regular": "Regular",
+          "intense": "Intense",
+          "custom": "Custom",
+          "foam": "Foam",
+          "battery_saving": "Battery saving",
+          "unknown": "Unknown"
+        }
+      },
+      "pressure": {
+        "name": "Pressure Value"
+      },
+      "pressure_state": {
+        "name": "Pressure",
+        "state": {
+          "no_contact": "No Contact",
+          "too_low": "Too Low",
+          "optimal": "Optimal",
+          "too_high": "Too High"
+        }
       }
     }
   }

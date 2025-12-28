@@ -61,7 +61,13 @@ async def async_setup_entry(
         ),
     ]
 
-    async_add_entities(entities)
+    # checking if light ring capability is supported
+    if coordinator.capabilities.light_ring:
+        async_add_entities(entities)
+    else:
+        _LOGGER.info(
+            "Shaver does not support light ring configuration – skipping light entities"
+        )
 
 
 # ---------------------------------------------------------------------------

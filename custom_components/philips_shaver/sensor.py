@@ -41,6 +41,7 @@ async def async_setup_entry(
     entities: list[PhilipsShaverEntity] = [
         PhilipsBatterySensor(coordinator, entry),
         PhilipsAmountOfChargesSensor(coordinator, entry),
+        PhilipsShaverAmountOfOperationalTurnsSensor(coordinator, entry),
         PhilipsFirmwareSensor(coordinator, entry),
         PhilipsHeadRemainingSensor(coordinator, entry),
         PhilipsDaysSinceLastUsedSensor(coordinator, entry),
@@ -50,12 +51,31 @@ async def async_setup_entry(
         PhilipsDeviceActivitySensor(coordinator, entry),
         PhilipsLastSeenSensor(coordinator, entry),
         PhilipsRssiSensor(coordinator, entry),
-        PhilipsCleaningProgressSensor(coordinator, entry),
-        PhilipsCleaningCyclesSensor(coordinator, entry),
         PhilipsMotorSpeedSensor(coordinator, entry),
         PhilipsMotorCurrentSensor(coordinator, entry),
+        PhilipsMotorCurrentMaxSensor(coordinator, entry),
         PhilipsShavingModeSensor(coordinator, entry),
+        PhilipsTotalAgeSensor(coordinator, entry),
     ]
+
+    # check for pressure capability
+    if coordinator.capabilities.pressure:
+        entities.append(PhilipsShaverPressureSensor(coordinator, entry))
+        entities.append(PhilipsShaverPressureStateSensor(coordinator, entry))
+    else:
+        _LOGGER.info(
+            "Shaver does not support pressure feedback – skipping pressure sensors"
+        )
+
+    # check for cleaning mode capability
+    if coordinator.capabilities.cleaning_mode:
+        entities.append(PhilipsCleaningProgressSensor(coordinator, entry))
+        entities.append(PhilipsCleaningCyclesSensor(coordinator, entry))
+    else:
+        _LOGGER.info(
+            "Shaver does not support cleaning mode – skipping cleaning sensors"
+        )
+
     async_add_entities(entities)
 
     # Immer am Ende: Live-Sensoren je nach Option (de)aktivieren
@@ -72,18 +92,17 @@ async def _update_live_entity_visibility(
         f"{address}_cleaning_progress",
         f"{address}_motor_rpm",
         f"{address}_motor_current",
-        # Optional: auch Device State, wenn du ihn als live-only siehst
-        # f"{address}_state",
+        f"{address}_pressure",
     ]
 
     for unique_id in live_unique_ids:
         entity_id = ent_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
         if entity_id:
             if enable_live:
-                # Wieder aktivieren, falls deaktiviert
+                # re-enable sensor
                 ent_reg.async_update_entity(entity_id, disabled_by=None)
             else:
-                # Deaktivieren
+                # disabling sensors
                 ent_reg.async_update_entity(
                     entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
                 )
@@ -145,6 +164,28 @@ class PhilipsAmountOfChargesSensor(PhilipsShaverEntity, SensorEntity):
     @hass_callback
     def _update_callback(self):
         self.async_write_ha_state()
+
+
+# =============================================================================
+# Amount of Operational Turns
+# =============================================================================
+class PhilipsShaverAmountOfOperationalTurnsSensor(PhilipsShaverEntity, SensorEntity):
+    """Sensor für die Anzahl der Einschaltvorgänge."""
+
+    _attr_translation_key = "amount_of_operational_turns"
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:counter"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._address}_amount_of_operational_turns"
+
+    @property
+    def native_value(self) -> int | None:
+        return self.coordinator.data.get("amount_of_operational_turns")
 
 
 # =============================================================================
@@ -517,6 +558,44 @@ class PhilipsMotorCurrentSensor(PhilipsShaverEntity, SensorEntity):
     def native_value(self) -> int | None:
         return self.coordinator.data.get("motor_current_ma")
 
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        return {
+            "max_limit": self.coordinator.data.get("motor_current_max_ma"),
+            "load_percent": self._calculate_load(),
+        }
+
+    def _calculate_load(self) -> int | None:
+        current = self.native_value
+        maximum = self.coordinator.data.get("motor_current_max_ma")
+        if current is not None and maximum and maximum > 0:
+            return int((current / maximum) * 100)
+        return None
+
+    @hass_callback
+    def _update_callback(self):
+        self.async_write_ha_state()
+
+
+class PhilipsMotorCurrentMaxSensor(PhilipsShaverEntity, SensorEntity):
+    """Statische Schwelle für das Motor-Stromlimit."""
+
+    _attr_translation_key = "motor_current_max"
+    _attr_native_unit_of_measurement = "mA"
+    _attr_device_class = SensorDeviceClass.CURRENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:shield-check"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._address}_motor_current_max"
+
+    @property
+    def native_value(self) -> int | None:
+        return self.coordinator.data.get("motor_current_max_ma")
+
     @hass_callback
     def _update_callback(self):
         self.async_write_ha_state()
@@ -528,6 +607,16 @@ class PhilipsMotorCurrentSensor(PhilipsShaverEntity, SensorEntity):
 class PhilipsShavingModeSensor(PhilipsShaverEntity, SensorEntity):
     _attr_translation_key = "shaving_mode"
     _attr_icon = "mdi:shaver"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [
+        "sensitive",
+        "regular",
+        "intense",
+        "custom",
+        "foam",
+        "battery_saving",
+        "unknown",
+    ]
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
@@ -542,17 +631,147 @@ class PhilipsShavingModeSensor(PhilipsShaverEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict | None:
-        return {"raw_value": self.coordinator.data.get("shaving_mode_value")}
+        # raw value of the mode
+        mode_id = self.coordinator.data.get("shaving_mode_value")
+        attrs = {"raw_value": mode_id}
+
+        # determine the currently used mode
+        if mode_id == 3:
+            # if the mode is custom, use the values of the custom package (0330)
+            settings = self.coordinator.data.get("custom_shaving_settings")
+        else:
+            # all other modes, use the standard settings (0332)
+            settings = self.coordinator.data.get("shaving_settings")
+
+        # add settings if available
+        if settings:
+            attrs.update(settings)
+
+        return attrs
 
     @property
     def icon(self) -> str:
-        mode = self.native_value
-        if mode == "sensitive":
-            return "mdi:shaver"
-        elif mode == "intense":
-            return "mdi:flash"
-        elif mode == "custom":
-            return "mdi:tune"
-        elif mode == "foam":
-            return "mdi:spray"
-        return "mdi:shaver"
+        # raw value of the mode
+        mode_id = self.coordinator.data.get("shaving_mode_value")
+        ICONS = {
+            0: "mdi:feather",  # sensitive
+            1: "mdi:face-man",  # regular
+            2: "mdi:lightning-bolt",  # intense
+            3: "mdi:tune",  # custom
+            4: "mdi:spray",  # foam
+            5: "mdi:battery-heart-outline",  # battery_saving
+        }
+        return ICONS.get(mode_id, "mdi:face-man")
+
+
+# =============================================================================
+# Shaving Mode
+# =============================================================================
+class PhilipsShaverPressureSensor(PhilipsShaverEntity, SensorEntity):
+    """Numerischer Drucksensor für Rohwerte."""
+
+    _attr_translation_key = "pressure"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:gauge"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._address}_pressure"
+
+    @property
+    def native_value(self) -> int | None:
+        return self.coordinator.data.get("pressure")
+
+
+class PhilipsShaverPressureStateSensor(PhilipsShaverEntity, SensorEntity):
+    """Status-Sensor für das Druck-Feedback (Enum)."""
+
+    _attr_translation_key = "pressure_state"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["no_contact", "too_low", "optimal", "too_high"]
+    _attr_icon = "mdi:alert-circle-outline"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._address}_pressure_state"
+
+    @property
+    def native_value(self) -> str | None:
+        pressure = self.coordinator.data.get("pressure")
+        if pressure is None:
+            return None
+
+        # Dynamische Schwellenwerte aus dem Coordinator holen
+        mode_id = self.coordinator.data.get("shaving_mode_value")
+        settings = self.coordinator.data.get(
+            "custom_shaving_settings" if mode_id == 3 else "shaving_settings"
+        )
+
+        if not settings:
+            return "no_contact"
+
+        low = settings.get("pressure_limit_low", 1500)
+        high = settings.get("pressure_limit_high", 4000)
+        base = settings.get("pressure_base", 500)
+
+        if pressure < base:
+            return "no_contact"
+        if pressure < low:
+            return "too_low"
+        if pressure <= high:
+            return "optimal"
+        return "too_high"
+
+    @property
+    def icon(self) -> str:
+        """Dynamisches Icon basierend auf dem Status."""
+        state = self.native_value
+        if state == "optimal":
+            return "mdi:check-circle"
+        if state == "too_high":
+            return "mdi:alert-circle"
+        if state == "too_low":
+            return "mdi:arrow-down-circle"
+        return "mdi:circle-outline"
+
+
+# =============================================================================
+# Total Age Sensor
+# =============================================================================
+class PhilipsTotalAgeSensor(PhilipsShaverEntity, SensorEntity):
+    """Sensor für das Gesamtalter des Geräts (Betriebssekunden)."""
+
+    _attr_translation_key = "total_age"
+    _attr_native_unit_of_measurement = UnitOfTime.SECONDS
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:history"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._address}_total_age"
+
+    @property
+    def native_value(self) -> int | None:
+        return self.coordinator.data.get("total_age")
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        seconds = self.native_value
+        if seconds is None:
+            return None
+
+        # Calculating readable date/time
+        days = seconds // 86400
+        hours = (seconds % 86400) // 3600
+        minutes = (seconds % 3600) // 60
+
+        return {"formatted_age": f"{days}d {hours}h {minutes}m", "raw_seconds": seconds}
