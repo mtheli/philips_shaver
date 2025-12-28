@@ -56,12 +56,27 @@
         "description": "RGB-Farbe für den Bewegungslichteffekt."
       }
     },
+    "select": {
+      "shaving_mode": {
+        "name": "Rasiermodus auswählen",
+        "state": {
+          "sensitive": "Sensitiv",
+          "regular": "Normal",
+          "intense": "Intensiv",
+          "custom": "Benutzerdefiniert",
+          "foam": "Schaum"
+        }
+      }
+    },
     "sensor": {
       "battery": {
         "name": "Batterie"
       },
       "amount_of_charges": {
         "name": "Ladezyklen"
+      },
+      "amount_of_operational_turns": {
+        "name": "Anzahl Nutzungen"
       },
       "firmware": {
         "name": "Firmware"
@@ -112,6 +127,9 @@
       "motor_current": {
         "name": "Motorstrom"
       },
+      "motor_current_max": {
+        "name": "Motorstrom (max)"
+      },
       "travel_lock": {
         "name": "Reisesperre",
         "state": {
@@ -121,13 +139,27 @@
       },
       "shaving_mode": {
         "name": "Rasurmodus",
-        "sensitive": "Sensitiv",
-        "regular": "Normal",
-        "intense": "Intensiv",
-        "custom": "Benutzerdefiniert",
-        "foam": "Schaum",
-        "battery_saving": "Akku-sparend",
-        "unknown": "Unbekannt"
+        "state": {
+          "sensitive": "Sensitiv",
+          "regular": "Normal",
+          "intense": "Intensiv",
+          "custom": "Benutzerdefiniert",
+          "foam": "Schaum",
+          "battery_saving": "Akku-sparend",
+          "unknown": "Unbekannt"
+        }
+      },
+      "pressure": {
+        "name": "Druck Wert"
+      },
+      "pressure_state": {
+        "name": "Druck",
+        "state": {
+          "no_contact": "Kein Kontakt",
+          "too_low": "Zu niedrig",
+          "optimal": "Optimal",
+          "too_high": "Zu hoch"
+        }
       }
     }
   }

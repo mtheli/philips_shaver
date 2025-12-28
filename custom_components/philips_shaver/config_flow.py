@@ -3,7 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 import voluptuous as vol
+import logging
 
+from homeassistant.components.acmeda.errors import CannotConnect
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -19,9 +21,13 @@ from homeassistant.helpers.selector import (
     BooleanSelector,
     TextSelector,
 )
+from homeassistant.core import HomeAssistant
+from bleak import BleakClient
+from homeassistant.components.bluetooth import async_ble_device_from_address
 
 from .const import (
     DOMAIN,
+    CHAR_CAPABILITIES,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_ENABLE_LIVE_UPDATES,
     MIN_POLL_INTERVAL,
@@ -29,7 +35,10 @@ from .const import (
     CONF_ADDRESS,
     CONF_POLL_INTERVAL,
     CONF_ENABLE_LIVE_UPDATES,
+    CONF_CAPABILITIES,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class PhilipsShaverOptionsFlow(OptionsFlowWithReload):
@@ -94,6 +103,40 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     MINOR_VERSION = 1
 
     discovery_info: BluetoothServiceInfoBleak | None = None
+
+    async def _async_fetch_capabilities(
+        self,
+        discovery_info: BluetoothServiceInfoBleak,
+    ) -> dict[str, Any]:
+        """Connect to the BLE device and read its capabilities."""
+
+        device = discovery_info.device
+        if device is None:
+            raise CannotConnect("BLE device not available")
+
+        capabilities: dict[str, Any] = {}
+
+        try:
+            async with BleakClient(device, timeout=10) as client:
+                if not client.is_connected:
+                    raise CannotConnect("BLE connection failed")
+
+                # getting services
+                services = client.services
+                capabilities["services"] = [str(s.uuid) for s in services]
+
+                if services.get_characteristic(CHAR_CAPABILITIES):
+                    raw_cap = await client.read_gatt_char(CHAR_CAPABILITIES)
+                    if raw_cap:
+                        capabilities["capabilities"] = raw_cap
+
+                else:
+                    capabilities["capabilities"] = None
+
+        except Exception as err:
+            raise CannotConnect from err
+
+        return capabilities
 
     # --- Korrigierte Hilfsfunktion zum Prüfen des Pairing-Status ---
     def _is_device_bonded(self, discovery_info: BluetoothServiceInfoBleak) -> bool:
@@ -193,17 +236,29 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Confirm discovery."""
         assert self.discovery_info is not None
+        errors: dict[str, str] = {}
 
         # Wenn der Benutzer die Bestätigung abschickt (auf "Senden" klickt)
         if user_input is not None:
-            return self.async_create_entry(
-                title=f"Philips Shaver ({self.discovery_info.name or self.discovery_info.address})",
-                data={CONF_ADDRESS: self.discovery_info.address},
-                options={
-                    CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL,
-                    CONF_ENABLE_LIVE_UPDATES: DEFAULT_ENABLE_LIVE_UPDATES,
-                },
-            )
+            try:
+                capabilities = await self._async_fetch_capabilities(self.discovery_info)
+
+                return self.async_create_entry(
+                    title=f"Philips Shaver ({self.discovery_info.name or self.discovery_info.address})",
+                    data={
+                        CONF_ADDRESS: self.discovery_info.address,
+                        CONF_CAPABILITIES: capabilities["capabilities"],
+                    },
+                    options={
+                        CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL,
+                        CONF_ENABLE_LIVE_UPDATES: DEFAULT_ENABLE_LIVE_UPDATES,
+                    },
+                )
+            except Exception:
+                _LOGGER.error(
+                    "Setup fehlgeschlagen: Gerät nicht erreichbar oder keine Capabilities"
+                )
+                errors["base"] = "cannot_connect"  # Muss in strings.json definiert sein
 
         # Zeige das Bestätigungsformular an
         self.context["title_placeholders"] = {
@@ -215,6 +270,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             description_placeholders={
                 "name": self.discovery_info.name or self.discovery_info.address,
             },
+            errors=errors,
         )
 
     # =============================================================================

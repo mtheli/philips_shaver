@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import struct
 from datetime import timedelta, datetime
 import logging
 from typing import Any
@@ -21,6 +22,7 @@ from . import (
 )
 from .const import (
     CHAR_AMOUNT_OF_CHARGES,
+    CHAR_AMOUNT_OF_OPERATIONAL_TURNS,
     CHAR_BATTERY_LEVEL,
     CHAR_CLEANING_CYCLES,
     CHAR_CLEANING_PROGRESS,
@@ -34,11 +36,16 @@ from .const import (
     CHAR_LIGHTRING_COLOR_OK,
     CHAR_MODEL_NUMBER,
     CHAR_MOTOR_CURRENT,
+    CHAR_MOTOR_CURRENT_MAX,
     CHAR_MOTOR_RPM,
+    CHAR_PRESSURE,
     CHAR_SERIAL_NUMBER,
     CHAR_SHAVING_TIME,
+    CHAR_TOTAL_AGE,
     CHAR_TRAVEL_LOCK,
     CHAR_SHAVING_MODE,
+    CHAR_SHAVING_MODE_SETTINGS,
+    CHAR_CUSTOM_SHAVING_MODE_SETTINGS,
     CONF_POLL_INTERVAL,
     CONF_ENABLE_LIVE_UPDATES,
     DEFAULT_ENABLE_LIVE_UPDATES,
@@ -47,7 +54,12 @@ from .const import (
     LIVE_READ_CHARS,
     SHAVING_MODES,
 )
-from .utils import parse_color
+from .utils import (
+    parse_color,
+    parse_shaving_settings_to_dict,
+    parse_capabilities,
+    ShaverCapabilities,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,6 +75,10 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Initialize the coordinator."""
         self.entry = entry
         self.address = entry.data["address"]
+
+        # reading capabilities
+        raw_cap = entry.data.get("capabilities", None)
+        self.capabilities = parse_capabilities(raw_cap)
 
         # read options
         options = entry.options
@@ -100,13 +116,19 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "shaving_time": None,
             "device_state": None,
             "travel_lock": None,
-            "cleaning_progress": None,
+            "cleaning_progress": 100,
             "cleaning_cycles": None,
-            "motor_rpm": None,
-            "motor_current_ma": None,
+            "motor_rpm": 0,
+            "motor_current_ma": 0,
+            "motor_current_max_ma": None,
             "amount_of_charges": None,
+            "amount_of_operational_turns": None,
             "shaving_mode": None,
             "shaving_mode_value": None,
+            "shaving_settings": None,
+            "custom_shaving_settings": None,
+            "pressure": 0,
+            "pressure_state": None,
             "color_low": (255, 0, 0),
             "color_ok": (255, 0, 0),
             "color_high": (255, 0, 0),
@@ -247,11 +269,22 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if raw := results.get(CHAR_MOTOR_CURRENT):
             new_data["motor_current_ma"] = int.from_bytes(raw, "little")
 
+        if raw := results.get(CHAR_MOTOR_CURRENT_MAX):
+            new_data["motor_current_max_ma"] = int.from_bytes(raw, "little")
+
         if raw := results.get(CHAR_MOTOR_RPM):
-            new_data["motor_rpm"] = int.from_bytes(raw, "little")
+            # reading raw value as int
+            raw_val = int.from_bytes(raw, "little")
+
+            # calculate normalized RPM: Raw / 3.036
+            # rounding to int value
+            new_data["motor_rpm"] = int(round(raw_val / 3.036))
 
         if raw := results.get(CHAR_AMOUNT_OF_CHARGES):
             new_data["amount_of_charges"] = int.from_bytes(raw, "little")
+
+        if raw := results.get(CHAR_AMOUNT_OF_OPERATIONAL_TURNS):
+            new_data["amount_of_operational_turns"] = int.from_bytes(raw, "little")
 
         # === Farben – mit Konstanten aus const.py ===
         color_map = {
@@ -272,9 +305,26 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             new_data["shaving_mode_value"] = mode_value
             new_data["shaving_mode"] = SHAVING_MODES.get(mode_value, "unknown")
 
+        # Shaving mode settings
+        if raw := results.get(CHAR_SHAVING_MODE_SETTINGS):
+            new_data["shaving_settings"] = parse_shaving_settings_to_dict(raw)
+
+        # Custom shaving mode settings
+        if raw := results.get(CHAR_CUSTOM_SHAVING_MODE_SETTINGS):
+            new_data["custom_shaving_settings"] = parse_shaving_settings_to_dict(raw)
+
+        # Pressure
+        if raw := results.get(CHAR_PRESSURE):
+            pressure_value = int.from_bytes(raw, "little")
+            new_data["pressure"] = pressure_value
+
+        # Total Age
+        if raw := results.get(CHAR_TOTAL_AGE):
+            total_age_value = int.from_bytes(raw, "little")
+            new_data["total_age"] = total_age_value
+
         # Immer aktualisieren – wichtig für "available"
         new_data["last_seen"] = datetime.now()
-
         return new_data
 
     async def _start_live_monitoring(self) -> None:
@@ -390,19 +440,27 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return _callback
 
     def _key_to_uuid(self, key: str) -> str:
-        """Mappt data-key → GATT-UUID (für fake_results)"""
+        """Mapps data-key → GATT-UUID (for fake results dict)."""
         mapping = {
             "device_state": CHAR_DEVICE_STATE,
             "travel_lock": CHAR_TRAVEL_LOCK,
             "battery": CHAR_BATTERY_LEVEL,
+            "amount_of_charges": CHAR_AMOUNT_OF_CHARGES,
+            "amount_of_operational_turns": CHAR_AMOUNT_OF_OPERATIONAL_TURNS,
             "cleaning_progress": CHAR_CLEANING_PROGRESS,
+            "cleaning_cycles": CHAR_CLEANING_CYCLES,
             "motor_rpm": CHAR_MOTOR_RPM,
             "motor_current_ma": CHAR_MOTOR_CURRENT,
+            "pressure": CHAR_PRESSURE,
+            "head_remaining": CHAR_HEAD_REMAINING,
+            "shaving_time": CHAR_SHAVING_TIME,
+            "shaving_settings": CHAR_SHAVING_MODE_SETTINGS,
+            "total_age": CHAR_TOTAL_AGE,
         }
         return mapping.get(key, "")
 
     async def _start_all_notifications(self) -> None:
-        """Startet alle GATT-Notifications für Live-Updates."""
+        """Starts all GATT-Notifications for Live-Updates."""
         if not self.live_client or not self.live_client.is_connected:
             return
 
@@ -410,9 +468,17 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             (CHAR_DEVICE_STATE, "device_state"),
             (CHAR_TRAVEL_LOCK, "travel_lock"),
             (CHAR_BATTERY_LEVEL, "battery"),
+            (CHAR_AMOUNT_OF_CHARGES, "amount_of_charges"),
+            (CHAR_AMOUNT_OF_OPERATIONAL_TURNS, "amount_of_operational_turns"),
             (CHAR_CLEANING_PROGRESS, "cleaning_progress"),
+            (CHAR_CLEANING_CYCLES, "cleaning_cycles"),
             (CHAR_MOTOR_RPM, "motor_rpm"),
             (CHAR_MOTOR_CURRENT, "motor_current_ma"),
+            (CHAR_PRESSURE, "pressure"),
+            (CHAR_HEAD_REMAINING, "head_remaining"),
+            (CHAR_SHAVING_TIME, "shaving_time"),
+            (CHAR_SHAVING_MODE_SETTINGS, "shaving_settings"),
+            (CHAR_TOTAL_AGE, "total_age"),
         ]
 
         for char_uuid, key in notifications:
@@ -425,7 +491,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.warning("Failed to start notify %s: %s", key, e)
 
     async def _stop_all_notifications(self) -> None:
-        """Stoppt alle GATT-Notifications sauber."""
+        """Stops all GATT-Notifications."""
         if not self.live_client or not self.live_client.is_connected:
             return
 
@@ -433,9 +499,17 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             CHAR_DEVICE_STATE,
             CHAR_TRAVEL_LOCK,
             CHAR_BATTERY_LEVEL,
+            CHAR_AMOUNT_OF_CHARGES,
+            CHAR_AMOUNT_OF_OPERATIONAL_TURNS,
             CHAR_CLEANING_PROGRESS,
+            CHAR_CLEANING_CYCLES,
             CHAR_MOTOR_RPM,
             CHAR_MOTOR_CURRENT,
+            CHAR_PRESSURE,
+            CHAR_HEAD_REMAINING,
+            CHAR_SHAVING_TIME,
+            CHAR_SHAVING_MODE_SETTINGS,
+            CHAR_TOTAL_AGE,
         ]
 
         for char_uuid in char_uuids:

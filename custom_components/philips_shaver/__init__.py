@@ -25,7 +25,7 @@ from .utils import parse_color
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.SENSOR, Platform.LIGHT]
+PLATFORMS = [Platform.SENSOR, Platform.LIGHT, Platform.SELECT]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
