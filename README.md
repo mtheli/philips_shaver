@@ -6,7 +6,7 @@ This is a custom component for Home Assistant to integrate **Philips Bluetooth-e
 
 ![Screenshot of the device inHA](./images/screenshot.png)
 
-The integration connects to your shaver via **Bluetooth Low Energy (BLE)** to provide status, usage, and advanced telemetry data. It employs a dual-connection approach:
+The integration connects to your shaver via **Bluetooth Low Energy (BLE)** to provide status, usage, and advanced telemetry data. It automatically detects the capabilities of your specific model during setup to only show relevant entities and employs a dual-connection approach:
 
 1.  **Live Connection:** A persistent connection is maintained while the device is in range and active, offering instant updates for shaving status, motor metrics, and cleaning progress.
 2.  **Poll Fallback:** A periodic poll (every 60 seconds) runs as a fallback to retrieve data when the device is in standby.
@@ -15,28 +15,34 @@ The integration connects to your shaver via **Bluetooth Low Energy (BLE)** to pr
 
 ## Features
 
-This integration creates a new device for your shaver and provides the following entities:
+This integration creates a new device for your shaver and provides the following entities based on your device's hardware:
 
 ### Main Controls & Status
 | Entity | Type | Description |
 | :--- | :--- | :--- |
 | **Activity** | Sensor | Current detailed status (`Off`, `Shaving`, `Charging`, `Cleaning`). |
+| **Shaving Mode* | Select | Change the shaving intensity (e.g., `Sensitive`, `Normal`, `Intense`, `Custom`, `Foam`). |
 | **Battery Level** | Sensor | The current battery charge level (`%`). |
 | **Travel Lock** | Binary Sensor | Indicates if the travel lock is active. |
 
-### Usage Statistics
+### Pressure, Motor & Coaching (S7000/S9000)
+| Entity | Type | Description |
+| :--- | :--- | :--- |
+| **Pressure Value** | Sensor | Live pressure data from the sensor. |
+| **Pressure State** | Sensor | Categorized feedback (`Too Low`, `Optimal`, `Too High`). |
+| **Last Session Duration** | Light | Configure the LED ring colors for various pressure states. |
+| **Motor Speed** | Sensor | Current motor speed in RPM (e.g., ~2200 RPM). |
+| **Motor Current** | Sensor | Current motor power consumption in mA. |
+
+### Usage & Maintenance
 | Entity | Type | Description |
 | :--- | :--- | :--- |
 | **Last Session Duration** | Sensor | Duration of the last shaving session in seconds. |
+| **Total Operating Time** | Sensor | Lifetime usage of the shaver. |
 | **Days Since Last Used** | Sensor | Days elapsed since the last use. |
 | **Head Remaining** | Sensor | The remaining life of the shaver head (`%`). |
-
-### Live Telemetry (Advanced)
-| Entity | Type | Description |
-| :--- | :--- | :--- |
-| **Motor Speed** | Sensor | Current motor speed in RPM (e.g., ~6300 RPM). |
-| **Motor Current** | Sensor | Current motor power consumption in mA. |
 | **Cleaning Progress** | Sensor | Progress of the cleaning cycle in `%` (if applicable). |
+
 
 ### Diagnostics
 | Entity | Type | Description |
@@ -51,7 +57,8 @@ This integration creates a new device for your shaver and provides the following
 
 * A Home Assistant instance with the **Bluetooth integration** enabled and a working Bluetooth adapter.
 * A compatible Philips Shaver (e.g., i9000/XP9201).
-* The shaver must be within Bluetooth range of your Home Assistant device or a Bluetooth proxy.
+* *Exclusive Connection:* The shaver supports only one active connection at a time.
+* *GroomTribe App:* You must unpair/remove the shaver from any other devices (especially smartphones with the manufacturer's "GroomTribe" app) before Home Assistant can connect.
 
 ---
 
@@ -74,7 +81,15 @@ This integration creates a new device for your shaver and provides the following
 
 ## Configuration (Pairing)
 
-**Crucial Step:** This integration requires that the shaver be **paired at the operating system (OS) level** of your Home Assistant host before you can add the integration in Home Assistant.
+This integration requires that the shaver be **paired at the operating system (OS) level** of your Home Assistant host before you can add the integration in Home Assistant.
+
+### Step 0: Clear Existing Connections (Crucial)
+
+Before attempting to connect to Home Assistant, ensure the shaver is not connected to your phone.
+
+1. Open the Bluetooth settings on your phone.
+2. *Unpair / Forget* the Shaver.
+3. If you used the *GroomTribe* app, ensure the device is removed there as well. The shaver will refuse a new connection if it is still "bonded" to a mobile app.
 
 ### Step 1: OS-Level Pairing with `bluetoothctl`
 
@@ -136,6 +151,6 @@ Once the OS-level pairing is complete, proceed to add the integration via the Ho
 
 ## Troubleshooting & Caveats
 
-* **Availability:** The integration relies on a local Bluetooth connection. If the shaver is taken out of range, it will become `Unavailable` (or update the "Last Seen" sensor). It should automatically reconnect once it is back in range.
-* **Stability:** Connection stability is highly dependent on Bluetooth signal strength. Consider using an **ESPHome Bluetooth Proxy** closer to the shaver for improved reliability.
-* **Not Discovered:** Ensure the shaver is **active** (powered on or charging) during the configuration process, as a completely off device may not advertise its presence.
+* *Connection Conflict*: If the integration fails to set up, ensure no smartphone is currently connected to the shaver.
+* *ESPHome Bluetooth Proxy*: This integration requires a *direct active Bluetooth connection* for real-time telemetry. Therefore, it is not possible to use an ESPHome Bluetooth Proxy. The shaver must be within direct range of the Home Assistant host's Bluetooth adapter.
+* *Stability:* Bluetooth signals are weak. Ensure your Home Assistant host is placed as close to the shaver's location as possible.
