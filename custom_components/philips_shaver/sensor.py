@@ -47,7 +47,6 @@ async def async_setup_entry(
         PhilipsDaysSinceLastUsedSensor(coordinator, entry),
         PhilipsShavingTimeSensor(coordinator, entry),
         PhilipsDeviceStateSensor(coordinator, entry),
-        PhilipsTravelLockBinarySensor(coordinator, entry),
         PhilipsDeviceActivitySensor(coordinator, entry),
         PhilipsLastSeenSensor(coordinator, entry),
         PhilipsRssiSensor(coordinator, entry),
@@ -311,26 +310,6 @@ class PhilipsDeviceStateSensor(PhilipsShaverEntity, SensorEntity):
             "charging": "mdi:battery-charging-100",
             "unknown": "mdi:help-circle-outline",
         }.get(state, "mdi:help-circle-outline")
-
-    @hass_callback
-    def _update_callback(self):
-        self.async_write_ha_state()
-
-
-class PhilipsTravelLockBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
-    _attr_translation_key = "travel_lock"
-    _attr_device_class = BinarySensorDeviceClass.LOCK
-    _attr_icon = "mdi:lock"
-
-    def __init__(
-        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
-    ) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_travel_lock"
-
-    @property
-    def is_on(self) -> bool:
-        return self.coordinator.data.get("travel_lock", False)
 
     @hass_callback
     def _update_callback(self):

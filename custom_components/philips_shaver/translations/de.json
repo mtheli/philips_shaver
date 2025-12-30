@@ -164,6 +164,14 @@
           "too_high": "Zu hoch"
         }
       }
+    },
+    "binary_sensor": {
+      "charging": {
+        "name": "Ladevorgang"
+      },
+      "travel_lock": {
+        "name": "Reisesicherung"
+      }
     }
   }
 }
