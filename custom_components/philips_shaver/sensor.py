@@ -114,7 +114,7 @@ async def _update_live_entity_visibility(
 class PhilipsBatterySensor(PhilipsShaverEntity, SensorEntity):
     _attr_translation_key = "battery"
     _attr_native_unit_of_measurement = PERCENTAGE
-    # _attr_device_class = SensorDeviceClass.BATTERY
+    _attr_device_class = SensorDeviceClass.BATTERY
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(
@@ -125,16 +125,15 @@ class PhilipsBatterySensor(PhilipsShaverEntity, SensorEntity):
 
     @property
     def native_value(self) -> int | None:
+        """Return the state of the sensor."""
         value = self.coordinator.data.get("battery")
-        return value if value is not None else None
+        if value is None:
+            return None
 
-    @property
-    def icon(self) -> str | None:
-        """Dynamic battery-icon based on state"""
-        state = self.coordinator.data.get("device_state")
-        return icon_for_battery_level(
-            battery_level=self.native_value, charging=(state == "charging")
-        )
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return None
 
     @hass_callback
     def _update_callback(self):
@@ -217,7 +216,7 @@ class PhilipsFirmwareSensor(PhilipsShaverEntity, SensorEntity):
 class PhilipsHeadRemainingSensor(PhilipsShaverEntity, SensorEntity):
     _attr_translation_key = "head_remaining"
     _attr_native_unit_of_measurement = PERCENTAGE
-    _attr_device_class = SensorDeviceClass.BATTERY
+    _attr_device_class = None
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:razor-double-edge"
@@ -451,7 +450,7 @@ class PhilipsRssiSensor(PhilipsShaverEntity, SensorEntity):
 class PhilipsCleaningProgressSensor(PhilipsShaverEntity, SensorEntity):
     _attr_translation_key = "cleaning_progress"
     _attr_native_unit_of_measurement = PERCENTAGE
-    _attr_device_class = SensorDeviceClass.BATTERY
+    _attr_device_class = None
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:progress-clock"
