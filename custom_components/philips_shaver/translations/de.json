@@ -31,7 +31,10 @@
       }
     },
     "error": {
-      "abort_if_unique_id_configured": "Das Gerät ist bereits konfiguriert."
+      "abort_if_unique_id_configured": "Das Gerät ist bereits konfiguriert.",
+      "device_not_found": "Das Gerät wurde nicht gefunden. Bitte stelle sicher, dass es eingeschaltet und in Reichweite ist.",
+      "cannot_connect": "Verbindung zum Rasierer fehlgeschlagen. Bitte stelle sicher, dass er eingeschaltet und in Reichweite ist.",
+      "cannot_read_capabilities": "Verbindung zum Rasierer hergestellt, aber das Lesen der Fähigkeiten ist fehlgeschlagen."
     },
     "abort": {
       "no_devices_found": "Es wurden keine unterstützten Philips Shaver Geräte in Reichweite gefunden."

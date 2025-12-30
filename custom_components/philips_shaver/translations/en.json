@@ -34,7 +34,10 @@
       "abort_if_unique_id_configured": "This device is already configured."
     },
     "abort": {
-      "no_devices_found": "No supported Philips Shaver devices were found in range."
+      "no_devices_found": "No supported Philips Shaver devices were found in range.",
+      "device_not_found": "Device not found. Please ensure it is powered on and in range.",
+      "cannot_connect": "Failed to connect to the shaver. Please ensure it is powered on, in range, and not connected to another device.",
+      "cannot_read_capabilities": "Connection established with the shaver, but reading capabilities failed."
     }
   },
   "entity": {
