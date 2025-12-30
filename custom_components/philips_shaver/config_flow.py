@@ -5,7 +5,6 @@ from typing import Any
 import voluptuous as vol
 import logging
 
-from homeassistant.components.acmeda.errors import CannotConnect
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
@@ -13,7 +12,10 @@ from homeassistant.config_entries import (
     OptionsFlowWithReload,
 )
 from homeassistant.core import callback
-from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
+from homeassistant.components.bluetooth import (
+    BluetoothServiceInfoBleak,
+    async_ble_device_from_address,
+)
 from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
@@ -24,6 +26,7 @@ from homeassistant.helpers.selector import (
 from homeassistant.core import HomeAssistant
 from bleak import BleakClient
 from homeassistant.components.bluetooth import async_ble_device_from_address
+from .exceptions import DeviceNotFoundException, CannotConnectException
 
 from .const import (
     DOMAIN,
@@ -106,35 +109,32 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def _async_fetch_capabilities(
         self,
-        discovery_info: BluetoothServiceInfoBleak,
+        address,
     ) -> dict[str, Any]:
         """Connect to the BLE device and read its capabilities."""
-
-        device = discovery_info.device
-        if device is None:
-            raise CannotConnect("BLE device not available")
-
         capabilities: dict[str, Any] = {}
 
-        try:
-            async with BleakClient(device, timeout=10) as client:
-                if not client.is_connected:
-                    raise CannotConnect("BLE connection failed")
+        # getting BLE device
+        device = async_ble_device_from_address(self.hass, address)
+        if not device:
+            raise DeviceNotFoundException("BLE device not found")
 
-                # getting services
-                services = client.services
-                capabilities["services"] = [str(s.uuid) for s in services]
+        # connecting to the device
+        async with BleakClient(device, timeout=10) as client:
+            if not client.is_connected:
+                raise CannotConnectException("BLE connection failed")
 
-                if services.get_characteristic(CHAR_CAPABILITIES):
-                    raw_cap = await client.read_gatt_char(CHAR_CAPABILITIES)
-                    if raw_cap:
-                        capabilities["capabilities"] = raw_cap
+            # getting services
+            services = client.services
+            capabilities["services"] = [str(s.uuid) for s in services]
 
-                else:
-                    capabilities["capabilities"] = None
-
-        except Exception as err:
-            raise CannotConnect from err
+            # reading capabilities characteristic
+            if services.get_characteristic(CHAR_CAPABILITIES):
+                raw_cap = await client.read_gatt_char(CHAR_CAPABILITIES)
+                if raw_cap:
+                    capabilities["capabilities"] = raw_cap
+            else:
+                capabilities["capabilities"] = None
 
         return capabilities
 
@@ -197,6 +197,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Warn the user that the device must be paired on the host OS first."""
         assert self.discovery_info is not None
+        errors: dict[str, str] = {}
 
         # Wenn der Benutzer auf "Senden" klickt, prüfen wir erneut
         if user_input is not None:
@@ -206,14 +207,33 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
             # Immer noch nicht gekoppelt, aber Benutzer hat bestätigt: Eintrag erstellen
             # (Dies ermöglicht es dem Benutzer, die Warnung zu ignorieren, wenn er sicher ist)
-            return self.async_create_entry(
-                title=f"Philips Shaver ({self.discovery_info.name or self.discovery_info.address})",
-                data={CONF_ADDRESS: self.discovery_info.address},
-                options={
-                    CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL,
-                    CONF_ENABLE_LIVE_UPDATES: DEFAULT_ENABLE_LIVE_UPDATES,
-                },
-            )
+            try:
+                capabilities = await self._async_fetch_capabilities(
+                    self.discovery_info.address
+                )
+
+                return self.async_create_entry(
+                    title=f"Philips Shaver ({self.discovery_info.name or self.discovery_info.address})",
+                    data={
+                        CONF_ADDRESS: self.discovery_info.address,
+                        CONF_CAPABILITIES: capabilities["capabilities"],
+                    },
+                    options={
+                        CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL,
+                        CONF_ENABLE_LIVE_UPDATES: DEFAULT_ENABLE_LIVE_UPDATES,
+                    },
+                )
+            except DeviceNotFoundException:
+                _LOGGER.error("Setup failed: Device not found")
+                errors["base"] = "device_not_found"
+            except CannotConnectException:
+                _LOGGER.error("Setup failed: Cannot connect to the device")
+                errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.error(
+                    "Setup failed: Unable to connect to the device or fetch capabilities"
+                )
+                errors["base"] = "cannot_read_capabilities"
 
         # Zeige das Warnformular an
         self.context["title_placeholders"] = {
@@ -226,6 +246,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             },
             # Leeres Schema, um einen "Senden"-Button anzuzeigen
             data_schema=vol.Schema({}),
+            errors=errors,
         )
 
     # =============================================================================
@@ -238,10 +259,11 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         assert self.discovery_info is not None
         errors: dict[str, str] = {}
 
-        # Wenn der Benutzer die Bestätigung abschickt (auf "Senden" klickt)
         if user_input is not None:
             try:
-                capabilities = await self._async_fetch_capabilities(self.discovery_info)
+                capabilities = await self._async_fetch_capabilities(
+                    self.discovery_info.address
+                )
 
                 return self.async_create_entry(
                     title=f"Philips Shaver ({self.discovery_info.name or self.discovery_info.address})",
@@ -256,9 +278,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
             except Exception:
                 _LOGGER.error(
-                    "Setup fehlgeschlagen: Gerät nicht erreichbar oder keine Capabilities"
+                    "Setup failed: Unable to connect to the device or fetch capabilities"
                 )
-                errors["base"] = "cannot_connect"  # Muss in strings.json definiert sein
+                errors["base"] = "cannot_connect"
 
         # Zeige das Bestätigungsformular an
         self.context["title_placeholders"] = {
@@ -281,6 +303,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Handle a flow initialized by the user (manual MAC address entry)."""
         errors: dict[str, str] = {}
+        errors: dict[str, str] = {}
 
         if user_input is not None:
             address = user_input["address"].upper()
@@ -290,14 +313,25 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             # WICHTIG: Manuelle Eingabe überspringt den Pairing-Check und die Bestätigung
             # Da der Benutzer die Adresse manuell eingibt, wird davon ausgegangen,
             # dass er die Pairing-Anforderungen kennt (gemäß Readme).
-            return self.async_create_entry(
-                title=f"Philips Shaver ({address})",
-                data={"address": address},
-                options={
-                    CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL,
-                    CONF_ENABLE_LIVE_UPDATES: DEFAULT_ENABLE_LIVE_UPDATES,
-                },
-            )
+            try:
+                capabilities = await self._async_fetch_capabilities(address)
+
+                return self.async_create_entry(
+                    title=f"Philips Shaver ({address})",
+                    data={
+                        CONF_ADDRESS: address,
+                        CONF_CAPABILITIES: capabilities["capabilities"],
+                    },
+                    options={
+                        CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL,
+                        CONF_ENABLE_LIVE_UPDATES: DEFAULT_ENABLE_LIVE_UPDATES,
+                    },
+                )
+            except Exception:
+                _LOGGER.error(
+                    "Setup failed: Unable to connect to the device or fetch capabilities"
+                )
+                errors["base"] = "cannot_connect"
 
         data_schema = vol.Schema({vol.Required("address"): str})
         return self.async_show_form(
