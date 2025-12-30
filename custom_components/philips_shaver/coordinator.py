@@ -46,6 +46,7 @@ from .const import (
     CHAR_SHAVING_MODE,
     CHAR_SHAVING_MODE_SETTINGS,
     CHAR_CUSTOM_SHAVING_MODE_SETTINGS,
+    CONF_CAPABILITIES,
     CONF_POLL_INTERVAL,
     CONF_ENABLE_LIVE_UPDATES,
     DEFAULT_ENABLE_LIVE_UPDATES,
@@ -77,8 +78,8 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.address = entry.data["address"]
 
         # reading capabilities
-        raw_cap = entry.data.get("capabilities", None)
-        self.capabilities = parse_capabilities(raw_cap)
+        cap_int = entry.data.get(CONF_CAPABILITIES, 0)
+        self.capabilities = parse_capabilities(cap_int)
 
         # read options
         options = entry.options

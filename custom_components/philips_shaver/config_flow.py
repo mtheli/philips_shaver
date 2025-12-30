@@ -16,6 +16,10 @@ from homeassistant.components.bluetooth import (
     BluetoothServiceInfoBleak,
     async_ble_device_from_address,
 )
+from bleak import BleakClient
+from bleak.exc import BleakError
+from bleak_retry_connector import establish_connection
+
 from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
@@ -24,8 +28,6 @@ from homeassistant.helpers.selector import (
     TextSelector,
 )
 from homeassistant.core import HomeAssistant
-from bleak import BleakClient
-from homeassistant.components.bluetooth import async_ble_device_from_address
 from .exceptions import DeviceNotFoundException, CannotConnectException
 
 from .const import (
@@ -120,21 +122,30 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             raise DeviceNotFoundException("BLE device not found")
 
         # connecting to the device
-        async with BleakClient(device, timeout=10) as client:
-            if not client.is_connected:
-                raise CannotConnectException("BLE connection failed")
+        client: BleakClient | None = None
+        client = await establish_connection(
+            BleakClient, device, "philips_shaver", timeout=15
+        )
 
-            # getting services
-            services = client.services
-            capabilities["services"] = [str(s.uuid) for s in services]
+        if not client or not client.is_connected:
+            raise CannotConnectException("BLE connection failed")
+        else:
+            _LOGGER.info("Connected to %s, address=%s", device.name, address)
 
-            # reading capabilities characteristic
-            if services.get_characteristic(CHAR_CAPABILITIES):
-                raw_cap = await client.read_gatt_char(CHAR_CAPABILITIES)
-                if raw_cap:
-                    capabilities["capabilities"] = raw_cap
-            else:
-                capabilities["capabilities"] = None
+        # getting services
+        _LOGGER.info("Reading services from %s...", address)
+        services = client.services
+        capabilities["services"] = [str(s.uuid) for s in services]
+
+        # reading capabilities characteristic
+        _LOGGER.info("Reading capabilities from %s...", address)
+        if services.get_characteristic(CHAR_CAPABILITIES):
+            raw_cap = await client.read_gatt_char(CHAR_CAPABILITIES)
+            if raw_cap:
+                cap_int = int.from_bytes(raw_cap, "little")
+                capabilities["capabilities"] = cap_int
+        else:
+            capabilities["capabilities"] = None
 
         return capabilities
 
