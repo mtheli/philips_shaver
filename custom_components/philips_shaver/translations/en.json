@@ -164,6 +164,14 @@
           "too_high": "Too High"
         }
       }
+    },
+    "binary_sensor": {
+      "charging": {
+        "name": "Charging"
+      },
+      "travel_lock": {
+        "name": "Travel Lock"
+      }
     }
   }
 }
