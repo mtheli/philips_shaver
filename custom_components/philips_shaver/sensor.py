@@ -639,7 +639,7 @@ class PhilipsShavingModeSensor(PhilipsShaverEntity, SensorEntity):
             4: "mdi:spray",  # foam
             5: "mdi:battery-heart-outline",  # battery_saving
         }
-        return ICONS.get(mode_id, "mdi:face-man")
+        return ICONS.get(mode_id, "mdi:face-man")  # type: ignore
 
 
 # =============================================================================

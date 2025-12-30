@@ -1,6 +1,8 @@
 # config/custom_components/philips_shaver/utils.py
 import struct
+import time
 from dataclasses import dataclass
+from datetime import datetime
 
 
 def parse_color(value: bytes | None):
@@ -51,10 +53,9 @@ class ShaverCapabilities:
     light_ring: bool = False
 
 
-# In deiner PhilipsShaverCoordinator Klasse:
-def parse_capabilities(raw_value: bytes) -> ShaverCapabilities:
-    """Interpretiert den UINT32 Capability-Wert."""
-    val = int.from_bytes(raw_value, "little")
+def parse_capabilities(val: int) -> ShaverCapabilities:
+    """Parse the capabilities integer into a ShaverCapabilities dataclass."""
+
     return ShaverCapabilities(
         motion=bool(val & (1 << 0)),
         brush=bool(val & (1 << 1)),
@@ -64,3 +65,55 @@ def parse_capabilities(raw_value: bytes) -> ShaverCapabilities:
         cleaning_mode=bool(val & (1 << 5)),
         light_ring=bool(val & (1 << 6)),
     )
+
+
+def get_real_timestamp(history_ts, total_age):
+    """Berechnet den echten Unix-Timestamp für einen History-Eintrag."""
+    now_seconds = time.time()  # Aktuelle Zeit in Sekunden
+    # Differenz zwischen Eintrag und aktuellem Gerätealter
+    offset = history_ts - total_age
+    return now_seconds + offset
+
+
+import struct
+
+""" CHAR_HISTORY_PRESSURE_DATA """
+
+
+def parse_pressure_history(total_age, raw_data: bytes) -> list[dict]:
+    """Parses the pressure history raw data into a list of dictionaries."""
+
+    history = []
+    block_size = 15
+    # Berechne, wie viele vollständige 15-Byte Blöcke enthalten sind
+    num_blocks = len(raw_data) // block_size
+
+    for i in range(num_blocks):
+        offset = i * block_size
+        block = raw_data[offset : offset + block_size]
+
+        # Entpacken nach Schema:
+        # B = 1 Byte (UINT8)
+        # H = 2 Bytes (UINT16) -> 5 mal
+        # I = 4 Bytes (UINT32) -> 1 mal
+        # < = Little Endian
+        try:
+            verdict, d_none, d_low, d_ok, d_high, avg, ts = struct.unpack(
+                "<BHHHHHI", block
+            )
+
+            history.append(
+                {
+                    "verdict": verdict,
+                    "duration_none": d_none,
+                    "duration_low": d_low,
+                    "duration_ok": d_ok,
+                    "duration_high": d_high,
+                    "pressure_average": avg,
+                    "timestamp": ts,
+                }
+            )
+        except struct.error:
+            continue
+
+    return history
