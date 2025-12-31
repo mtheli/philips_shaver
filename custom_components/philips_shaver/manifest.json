@@ -1,7 +1,7 @@
 {
   "domain": "philips_shaver",
   "name": "Philips Shaver (i9000/XP9201)",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "documentation": "https://github.com/mtheli/philips_shaver",
   "requirements": ["bleak>=0.21.0", "bleak-retry-connector>=3.5.0"],
   "dependencies": [],
