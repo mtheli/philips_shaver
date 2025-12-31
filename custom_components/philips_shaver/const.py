@@ -1,10 +1,14 @@
 DOMAIN = "philips_shaver"
 
 PHILIPS_SERVICE_UUIDS = [
-    "8d560100-3cb9-4387-a7e8-b79d826a7025",
-    "8d560200-3cb9-4387-a7e8-b79d826a7025",
-    "8d560300-3cb9-4387-a7e8-b79d826a7025",
-    "8d560600-3cb9-4387-a7e8-b79d826a7025",
+    # Philips Spezifische Services
+    "8d560100-3cb9-4387-a7e8-b79d826a7025",  # Device Properties (Modell, Seriennummer)
+    "8d560200-3cb9-4387-a7e8-b79d826a7025",  # Unknown Service (Batterie-Rohdaten, Firmware, Alter)
+    "8d560300-3cb9-4387-a7e8-b79d826a7025",  # Control Service (Modus, Lichtring)
+    "8d560600-3cb9-4387-a7e8-b79d826a7025",  # Cleaning Service (Reinigung)
+    # Standard Bluetooth Services (werden für Standard-Charakteristiken benötigt)
+    "0000180f-0000-1000-8000-00805f9b34fb",  # Battery Service (0x180F)
+    "0000180a-0000-1000-8000-00805f9b34fb",  # Device Information Service (0x180A)
 ]
 
 # Device infos

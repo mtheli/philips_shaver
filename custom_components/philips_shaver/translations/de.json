@@ -25,18 +25,20 @@
         "title": "Erkanntes Gerät bestätigen",
         "description": "Möchten Sie den erkannten Philips Shaver \"{name}\" zu Home Assistant hinzufügen?"
       },
-      "bluetooth_unpaired": {
-        "title": "Gerät nicht gekoppelt (Pairing fehlt)",
-        "description": "Das Gerät \"{name}\" wurde erkannt, aber es scheint noch nicht auf Betriebssystemebene (Host-OS) **gekoppelt (paired)** zu sein.\n\n**Wichtig:** Diese Integration erfordert das Pairing **vor** der Konfiguration in Home Assistant (siehe **README, Schritt 1**).\n\nKlicken Sie auf **Senden**, um die Konfiguration fortzusetzen, *nachdem* das Pairing abgeschlossen ist, oder auf **Abbrechen**, um es später zu tun."
+      "show_capabilities": {
+        "title": "Hardware Capabilities detected",
+        "description": "Successfully connected to **{name}**.\n\n**Detected Capability Code:** {capability_value}\n\n**GATT Service Status:**\n{services}\n\n**Legend:**\n✅ Service found & supported\n❌ Expected service missing\n❔ Unknown service from device\n\nClick Submit to finish the setup."
       }
     },
     "error": {
       "abort_if_unique_id_configured": "Das Gerät ist bereits konfiguriert.",
+      "cannot_connect": "Verbindung zum Rasierer fehlgeschlagen. Bitte stelle sicher, dass er eingeschaltet, in Reichweite und nicht mit einem anderen Gerät (z.B. deinem Smartphone) verbunden ist.",
       "device_not_found": "Das Gerät wurde nicht gefunden. Bitte stelle sicher, dass es eingeschaltet und in Reichweite ist.",
-      "cannot_connect": "Verbindung zum Rasierer fehlgeschlagen. Bitte stelle sicher, dass er eingeschaltet und in Reichweite ist.",
-      "cannot_read_capabilities": "Verbindung zum Rasierer hergestellt, aber das Lesen der Fähigkeiten ist fehlgeschlagen."
+      "unknown": "Unerwarteter Fehler. Bitte prüfe die Systemprotokolle."
     },
     "abort": {
+      "already_configured": "Das Gerät ist bereits konfiguriert.",
+      "already_in_progress": "Konfigurations-Ablauf bereits im Gange.",
       "no_devices_found": "Es wurden keine unterstützten Philips Shaver Geräte in Reichweite gefunden."
     }
   },
