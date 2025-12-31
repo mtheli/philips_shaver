@@ -25,19 +25,21 @@
         "title": "Confirm detected device",
         "description": "Do you want to add the detected Philips Shaver \"{name}\" to Home Assistant?"
       },
-      "bluetooth_unpaired": {
-        "title": "Device not paired",
-        "description": "The device \"{name}\" was detected, but it does not appear to be **paired** at the operating system (host OS) level.\n\n**Important:** This integration requires pairing **before** configuration in Home Assistant (see **README, Step 1**).\n\nClick **Submit** to continue after pairing is completed, or **Cancel** to do it later."
+      "show_capabilities": {
+        "title": "Hardware Capabilities detected",
+        "description": "🔗 Successfully connected to **{name}**.\n\n**Detected Capability Code:** {capability_value}\n\n**GATT Service Status:**\n{services}\n\n**Legend:**\n✅ Service found & supported\n❌ Expected service missing\n❔ Unknown service from device\n\nClick Submit to finish the setup."
       }
     },
     "error": {
-      "abort_if_unique_id_configured": "This device is already configured."
+      "abort_if_unique_id_configured": "This device is already configured.",
+      "cannot_connect": "Failed to connect to the shaver. Please ensure it is powered on, in range, and not connected to another device (e.g. your phone).",
+      "device_not_found": "Device not found. Please ensure it is powered on and in range.",
+      "unknown": "Unexpected error. Please check the logs."
     },
     "abort": {
-      "no_devices_found": "No supported Philips Shaver devices were found in range.",
-      "device_not_found": "Device not found. Please ensure it is powered on and in range.",
-      "cannot_connect": "Failed to connect to the shaver. Please ensure it is powered on, in range, and not connected to another device.",
-      "cannot_read_capabilities": "Connection established with the shaver, but reading capabilities failed."
+      "already_configured": "Device is already configured.",
+      "already_in_progress": "Configuration flow is already in progress.",
+      "no_devices_found": "No supported Philips Shaver devices were found in range."
     }
   },
   "entity": {

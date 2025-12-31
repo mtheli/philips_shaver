@@ -17,21 +17,19 @@ from homeassistant.components.bluetooth import (
     async_ble_device_from_address,
 )
 from bleak import BleakClient
-from bleak.exc import BleakError
-from bleak_retry_connector import establish_connection
+from bleak_retry_connector import BleakConnectionError, establish_connection
 
 from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
     BooleanSelector,
-    TextSelector,
 )
-from homeassistant.core import HomeAssistant
 from .exceptions import DeviceNotFoundException, CannotConnectException
 
 from .const import (
     DOMAIN,
+    PHILIPS_SERVICE_UUIDS,
     CHAR_CAPABILITIES,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_ENABLE_LIVE_UPDATES,
@@ -109,6 +107,11 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
     discovery_info: BluetoothServiceInfoBleak | None = None
 
+    # Zwischenspeicher für Daten zwischen den Steps
+    fetched_data: dict[str, Any] | None = None
+    fetched_address: str | None = None
+    fetched_name: str | None = None
+
     async def _async_fetch_capabilities(
         self,
         address,
@@ -121,179 +124,85 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         if not device:
             raise DeviceNotFoundException("BLE device not found")
 
-        # connecting to the device
-        client: BleakClient | None = None
-        client = await establish_connection(
-            BleakClient, device, "philips_shaver", timeout=15
-        )
+        # connecting to the device using retry connector
+        # Note: We use standard BleakClient here for discovery,
+        # coordinator will use InitialGattCache later.
+        try:
+            client: BleakClient | None = None
+            client = await establish_connection(
+                BleakClient, device, "philips_shaver", timeout=15
+            )
 
-        if not client or not client.is_connected:
-            raise CannotConnectException("BLE connection failed")
-        else:
+            if not client.is_connected:
+                raise CannotConnectException("BLE connection failed")
             _LOGGER.info("Connected to %s, address=%s", device.name, address)
 
-        # getting services
-        _LOGGER.info("Reading services from %s...", address)
-        services = client.services
-        capabilities["services"] = [str(s.uuid) for s in services]
+            # getting services
+            _LOGGER.info("Reading services from %s...", address)
+            services = client.services
+            capabilities["services"] = [str(s.uuid) for s in services]
 
-        # reading capabilities characteristic
-        _LOGGER.info("Reading capabilities from %s...", address)
-        if services.get_characteristic(CHAR_CAPABILITIES):
-            raw_cap = await client.read_gatt_char(CHAR_CAPABILITIES)
-            if raw_cap:
-                cap_int = int.from_bytes(raw_cap, "little")
-                capabilities["capabilities"] = cap_int
-        else:
-            capabilities["capabilities"] = None
+            # reading capabilities characteristic
+            _LOGGER.info("Reading capabilities from %s...", address)
+            if services.get_characteristic(CHAR_CAPABILITIES):
+                raw_cap = await client.read_gatt_char(CHAR_CAPABILITIES)
+                if raw_cap:
+                    # WICHTIG: Als Int speichern für JSON Serialisierung
+                    cap_int = int.from_bytes(raw_cap, "little")
+                    capabilities["capabilities"] = cap_int
+            else:
+                capabilities["capabilities"] = (
+                    0  # Fallback 0 statt None für einfachere Handhabung
+                )
+
+        except (BleakConnectionError, TimeoutError) as err:
+            _LOGGER.error("Connection error during capabilities fetch: %s", err)
+            raise CannotConnectException from err
 
         return capabilities
 
-    # --- Korrigierte Hilfsfunktion zum Prüfen des Pairing-Status ---
-    def _is_device_bonded(self, discovery_info: BluetoothServiceInfoBleak) -> bool:
-        """Check if the Bluetooth device is bonded/paired on the host OS."""
-
-        # 1. Plattformdaten abrufen (enthält bei BlueZ manchmal ein Tupel)
-        platform_data = getattr(discovery_info.advertisement, "platform_data", {})
-
-        properties = {}
-
-        # 2. Prüfen, ob es das BlueZ-Tupel-Format ist: (path, properties_dict)
-        if (
-            isinstance(platform_data, tuple)
-            and len(platform_data) == 2
-            and isinstance(platform_data[1], dict)
-        ):
-            # Das Properties-Dictionary ist das zweite Element (Index 1)
-            properties = platform_data[1]
-
-        # 3. Ansonsten davon ausgehen, dass es bereits das Dictionary ist
-        elif isinstance(platform_data, dict):
-            properties = platform_data
-
-        # 4. Wenn keine der Formen zutrifft, ist der Status unbekannt (False)
-        else:
-            return False
-
-        # 5. Nun sicher auf 'Paired' und 'Bonded' zugreifen
-        # Der Benutzer-Log bestätigt: Paired: False, Bonded: False, wenn entkoppelt
-        return properties.get("Paired", False) and properties.get("Bonded", False)
-
-    # =============================================================================
-    # 1. AUTOMATISCHE ERKENNUNG (async_step_bluetooth)
-    # =============================================================================
     async def async_step_bluetooth(
         self, discovery_info: BluetoothServiceInfoBleak
     ) -> ConfigFlowResult:
         """Handle the bluetooth discovery step."""
-        # Eindeutige ID basierend auf der MAC-Adresse setzen und Duplikate abbrechen
         await self.async_set_unique_id(discovery_info.address)
         self._abort_if_unique_id_configured()
 
-        # Discovery-Informationen für die folgenden Schritte speichern
         self.discovery_info = discovery_info
 
-        # Wenn das Gerät NICHT gebunden ist, zeige die Warnung an
-        if not self._is_device_bonded(discovery_info):
-            return await self.async_step_bluetooth_unpaired()
-
-        # Wenn das Gerät gebunden ist, fordere die Bestätigung an
+        # Direkt zur Bestätigung, Unpaired-Check entfernt
         return await self.async_step_bluetooth_confirm()
 
-    # =============================================================================
-    # 2a. FEHLENDES PAIRING WARNUNG (async_step_bluetooth_unpaired)
-    # =============================================================================
-    async def async_step_bluetooth_unpaired(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
-        """Warn the user that the device must be paired on the host OS first."""
-        assert self.discovery_info is not None
-        errors: dict[str, str] = {}
-
-        # Wenn der Benutzer auf "Senden" klickt, prüfen wir erneut
-        if user_input is not None:
-            # Wenn es JETZT gekoppelt ist, fahren wir fort
-            if self._is_device_bonded(self.discovery_info):
-                return await self.async_step_bluetooth_confirm()
-
-            # Immer noch nicht gekoppelt, aber Benutzer hat bestätigt: Eintrag erstellen
-            # (Dies ermöglicht es dem Benutzer, die Warnung zu ignorieren, wenn er sicher ist)
-            try:
-                capabilities = await self._async_fetch_capabilities(
-                    self.discovery_info.address
-                )
-
-                return self.async_create_entry(
-                    title=f"Philips Shaver ({self.discovery_info.name or self.discovery_info.address})",
-                    data={
-                        CONF_ADDRESS: self.discovery_info.address,
-                        CONF_CAPABILITIES: capabilities["capabilities"],
-                    },
-                    options={
-                        CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL,
-                        CONF_ENABLE_LIVE_UPDATES: DEFAULT_ENABLE_LIVE_UPDATES,
-                    },
-                )
-            except DeviceNotFoundException:
-                _LOGGER.error("Setup failed: Device not found")
-                errors["base"] = "device_not_found"
-            except CannotConnectException:
-                _LOGGER.error("Setup failed: Cannot connect to the device")
-                errors["base"] = "cannot_connect"
-            except Exception:
-                _LOGGER.error(
-                    "Setup failed: Unable to connect to the device or fetch capabilities"
-                )
-                errors["base"] = "cannot_read_capabilities"
-
-        # Zeige das Warnformular an
-        self.context["title_placeholders"] = {
-            "name": self.discovery_info.name or self.discovery_info.address
-        }
-        return self.async_show_form(
-            step_id="bluetooth_unpaired",
-            description_placeholders={
-                "name": self.discovery_info.name or self.discovery_info.address,
-            },
-            # Leeres Schema, um einen "Senden"-Button anzuzeigen
-            data_schema=vol.Schema({}),
-            errors=errors,
-        )
-
-    # =============================================================================
-    # 2b. BESTÄTIGUNG (async_step_bluetooth_confirm)
-    # =============================================================================
     async def async_step_bluetooth_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Confirm discovery."""
+        """Confirm discovery and fetch capabilities."""
         assert self.discovery_info is not None
         errors: dict[str, str] = {}
 
         if user_input is not None:
             try:
+                # 1. Daten holen
                 capabilities = await self._async_fetch_capabilities(
                     self.discovery_info.address
                 )
 
-                return self.async_create_entry(
-                    title=f"Philips Shaver ({self.discovery_info.name or self.discovery_info.address})",
-                    data={
-                        CONF_ADDRESS: self.discovery_info.address,
-                        CONF_CAPABILITIES: capabilities["capabilities"],
-                    },
-                    options={
-                        CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL,
-                        CONF_ENABLE_LIVE_UPDATES: DEFAULT_ENABLE_LIVE_UPDATES,
-                    },
+                # 2. Daten zwischenspeichern
+                self.fetched_data = capabilities
+                self.fetched_address = self.discovery_info.address
+                self.fetched_name = (
+                    self.discovery_info.name or self.discovery_info.address
                 )
+
+                # 3. Weiterleiten zur Anzeige (statt create_entry)
+                return await self.async_step_show_capabilities()
+
             except Exception:
                 _LOGGER.error(
                     "Setup failed: Unable to connect to the device or fetch capabilities"
                 )
                 errors["base"] = "cannot_connect"
 
-        # Zeige das Bestätigungsformular an
         self.context["title_placeholders"] = {
             "name": self.discovery_info.name or self.discovery_info.address
         }
@@ -306,14 +215,10 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    # =============================================================================
-    # 3. MANUELLE EINGABE (async_step_user)
-    # =============================================================================
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle a flow initialized by the user (manual MAC address entry)."""
-        errors: dict[str, str] = {}
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -321,23 +226,18 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(address)
             self._abort_if_unique_id_configured()
 
-            # WICHTIG: Manuelle Eingabe überspringt den Pairing-Check und die Bestätigung
-            # Da der Benutzer die Adresse manuell eingibt, wird davon ausgegangen,
-            # dass er die Pairing-Anforderungen kennt (gemäß Readme).
             try:
+                # 1. Daten holen
                 capabilities = await self._async_fetch_capabilities(address)
 
-                return self.async_create_entry(
-                    title=f"Philips Shaver ({address})",
-                    data={
-                        CONF_ADDRESS: address,
-                        CONF_CAPABILITIES: capabilities["capabilities"],
-                    },
-                    options={
-                        CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL,
-                        CONF_ENABLE_LIVE_UPDATES: DEFAULT_ENABLE_LIVE_UPDATES,
-                    },
-                )
+                # 2. Daten zwischenspeichern
+                self.fetched_data = capabilities
+                self.fetched_address = address
+                self.fetched_name = address
+
+                # 3. Weiterleiten zur Anzeige
+                return await self.async_step_show_capabilities()
+
             except Exception:
                 _LOGGER.error(
                     "Setup failed: Unable to connect to the device or fetch capabilities"
@@ -348,7 +248,47 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=data_schema,
-            errors=errors,  # Fehler können hier eingefügt werden, falls nötig
+            errors=errors,
+        )
+
+    async def async_step_show_capabilities(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Show detected services and create entry."""
+
+        if self.fetched_data is None:
+            return await self.async_step_user()
+
+        # Wenn der User bestätigt -> Eintrag erstellen
+        if user_input is not None:
+            return self.async_create_entry(
+                title=f"Philips Shaver ({self.fetched_name})",
+                data={
+                    CONF_ADDRESS: self.fetched_address,
+                    CONF_CAPABILITIES: self.fetched_data.get("capabilities", 0),
+                },
+                options={
+                    CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL,
+                    CONF_ENABLE_LIVE_UPDATES: DEFAULT_ENABLE_LIVE_UPDATES,
+                },
+            )
+
+        # helper method to get services status text
+        services_text = self._get_service_status_text(
+            self.fetched_data.get("services", [])
+        )
+
+        # getting capability value for display
+        cap_val = self.fetched_data.get("capabilities", 0)
+
+        return self.async_show_form(
+            step_id="show_capabilities",
+            data_schema=vol.Schema({}),
+            description_placeholders={
+                "name": str(self.fetched_name),
+                "services": services_text,
+                "capability_value": f"{cap_val} (0x{cap_val:02X})",
+            },
         )
 
     @staticmethod
@@ -358,3 +298,29 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> PhilipsShaverOptionsFlow:
         """Create the options flow."""
         return PhilipsShaverOptionsFlow()
+
+    def _get_service_status_text(self, fetched_uuids: list[str]) -> str:
+        """Vergleicht gefundene Services mit PHILIPS_SERVICE_UUIDS und gibt formatierten Text zurück."""
+
+        # Listen normalisieren (Kleinschreibung)
+        fetched_lower = [s.lower() for s in fetched_uuids]
+        required_lower = [s.lower() for s in PHILIPS_SERVICE_UUIDS]
+
+        found_required = []
+        missing_required = []
+        unknown_services = []
+
+        # 1. Erwartete Services prüfen (sortiert)
+        for uuid in sorted(required_lower):
+            if uuid in fetched_lower:
+                found_required.append(f"✅ {uuid}")
+            else:
+                missing_required.append(f"❌ {uuid}")
+
+        # 2. Unbekannte Services identifizieren (sortiert)
+        for uuid in sorted(fetched_lower):
+            if uuid not in required_lower:
+                unknown_services.append(f"❔ {uuid}")
+
+        # Alles zusammenführen
+        return "\n".join(found_required + missing_required + unknown_services)
