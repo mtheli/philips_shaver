@@ -30,6 +30,7 @@ from .const import (
     CHAR_DEVICE_STATE,
     CHAR_FIRMWARE_REVISION,
     CHAR_HEAD_REMAINING,
+    CHAR_HEAD_REMAINING_MINUTES,
     CHAR_LIGHTRING_COLOR_HIGH,
     CHAR_LIGHTRING_COLOR_LOW,
     CHAR_LIGHTRING_COLOR_MOTION,
@@ -246,6 +247,9 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if raw := results.get(CHAR_HEAD_REMAINING):
             new_data["head_remaining"] = raw[0]
 
+        if raw := results.get(CHAR_HEAD_REMAINING_MINUTES):
+            new_data["head_remaining_minutes"] = int.from_bytes(raw, "little")
+
         if raw := results.get(CHAR_DAYS_SINCE_LAST_USED):
             new_data["days_since_last_used"] = int.from_bytes(raw, "little")
 
@@ -454,6 +458,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "motor_current_ma": CHAR_MOTOR_CURRENT,
             "pressure": CHAR_PRESSURE,
             "head_remaining": CHAR_HEAD_REMAINING,
+            "head_remaining_minutes": CHAR_HEAD_REMAINING_MINUTES,
             "shaving_time": CHAR_SHAVING_TIME,
             "shaving_settings": CHAR_SHAVING_MODE_SETTINGS,
             "total_age": CHAR_TOTAL_AGE,
@@ -477,6 +482,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             (CHAR_MOTOR_CURRENT, "motor_current_ma"),
             (CHAR_PRESSURE, "pressure"),
             (CHAR_HEAD_REMAINING, "head_remaining"),
+            (CHAR_HEAD_REMAINING_MINUTES, "head_remaining_minutes"),
             (CHAR_SHAVING_TIME, "shaving_time"),
             (CHAR_SHAVING_MODE_SETTINGS, "shaving_settings"),
             (CHAR_TOTAL_AGE, "total_age"),
@@ -508,6 +514,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             CHAR_MOTOR_CURRENT,
             CHAR_PRESSURE,
             CHAR_HEAD_REMAINING,
+            CHAR_HEAD_REMAINING_MINUTES,
             CHAR_SHAVING_TIME,
             CHAR_SHAVING_MODE_SETTINGS,
             CHAR_TOTAL_AGE,

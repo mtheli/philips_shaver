@@ -26,8 +26,8 @@
         "description": "Möchten Sie den erkannten Philips Shaver \"{name}\" zu Home Assistant hinzufügen?"
       },
       "show_capabilities": {
-        "title": "Hardware Capabilities detected",
-        "description": "Successfully connected to **{name}**.\n\n**Detected Capability Code:** {capability_value}\n\n**GATT Service Status:**\n{services}\n\n**Legend:**\n✅ Service found & supported\n❌ Expected service missing\n❔ Unknown service from device\n\nClick Submit to finish the setup."
+        "title": "Hardware-Fähigkeiten erkannt",
+        "description": "🔗 Erfolgreich mit **{name}** verbunden.\n\n**Erkannter Capability-Code:** {capability_value}\n\n**GATT Service Status:**\n{services}\n\n**Legende:**\n✅ Service gefunden & unterstützt\n❌ Erwarteter Service fehlt\n❔ Unbekannter Service vom Gerät\n\nKlicken Sie auf Absenden, um die Einrichtung abzuschließen."
       }
     },
     "error": {
@@ -135,13 +135,6 @@
       "motor_current_max": {
         "name": "Motorstrom (max)"
       },
-      "travel_lock": {
-        "name": "Reisesperre",
-        "state": {
-          "on": "Gesperrt",
-          "off": "Entsperrt"
-        }
-      },
       "shaving_mode": {
         "name": "Rasurmodus",
         "state": {
@@ -172,7 +165,11 @@
         "name": "Ladevorgang"
       },
       "travel_lock": {
-        "name": "Reisesicherung"
+        "name": "Reisesicherung",
+        "state": {
+          "on": "Gesperrt",
+          "off": "Entsperrt"
+        }
       }
     }
   }

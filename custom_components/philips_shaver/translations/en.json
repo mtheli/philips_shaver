@@ -135,13 +135,6 @@
       "motor_current_max": {
         "name": "Motor Current"
       },
-      "travel_lock": {
-        "name": "Travel Lock",
-        "state": {
-          "on": "Locked",
-          "off": "Unlocked"
-        }
-      },
       "shaving_mode": {
         "name": "Shaving mode",
         "state": {
@@ -172,7 +165,11 @@
         "name": "Charging"
       },
       "travel_lock": {
-        "name": "Travel Lock"
+        "name": "Travel Lock",
+        "state": {
+          "on": "Locked",
+          "off": "Unlocked"
+        }
       }
     }
   }

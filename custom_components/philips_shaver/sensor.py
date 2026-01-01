@@ -230,6 +230,14 @@ class PhilipsHeadRemainingSensor(PhilipsShaverEntity, SensorEntity):
     def native_value(self) -> int | None:
         return self.coordinator.data.get("head_remaining")
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        minutes = self.coordinator.data.get("head_remaining_minutes")
+        if minutes is None:
+            return None
+
+        return {"remaining_minutes": minutes}
+
     @hass_callback
     def _update_callback(self):
         self.async_write_ha_state()
