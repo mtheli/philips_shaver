@@ -2,7 +2,6 @@
 import struct
 import time
 from dataclasses import dataclass
-from datetime import datetime
 
 
 def parse_color(value: bytes | None):
@@ -75,11 +74,7 @@ def get_real_timestamp(history_ts, total_age):
     return now_seconds + offset
 
 
-import struct
-
 """ CHAR_HISTORY_PRESSURE_DATA """
-
-
 def parse_pressure_history(total_age, raw_data: bytes) -> list[dict]:
     """Parses the pressure history raw data into a list of dictionaries."""
 
