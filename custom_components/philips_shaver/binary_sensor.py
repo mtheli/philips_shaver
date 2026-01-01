@@ -55,8 +55,6 @@ class PhilipsChargingBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
 
 class PhilipsTravelLockBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
     _attr_translation_key = "travel_lock"
-    _attr_device_class = BinarySensorDeviceClass.LOCK
-    _attr_icon = "mdi:lock"
 
     def __init__(
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
@@ -67,3 +65,7 @@ class PhilipsTravelLockBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         return self.coordinator.data.get("travel_lock", False)
+
+    @property
+    def icon(self) -> str:
+        return "mdi:lock" if self.is_on else "mdi:lock-open-variant"
