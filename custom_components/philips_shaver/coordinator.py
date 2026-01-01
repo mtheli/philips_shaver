@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import struct
 from datetime import timedelta, datetime
 import logging
 from typing import Any
@@ -60,7 +59,6 @@ from .utils import (
     parse_color,
     parse_shaving_settings_to_dict,
     parse_capabilities,
-    ShaverCapabilities,
 )
 
 _LOGGER = logging.getLogger(__name__)
