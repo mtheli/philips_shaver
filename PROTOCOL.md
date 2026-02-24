@@ -44,8 +44,8 @@ The two modes are mutually exclusive — polling is skipped while a live connect
 | Characteristic | UUID | Properties | Data Type | Description |
 |---------------|------|------------|-----------|-------------|
 | Model Number | `00002a24-0000-1000-8000-00805f9b34fb` | READ | UTF-8 string | e.g. `XP9201` |
-| Serial Number | `00002a25-0000-1000-8000-00805f9b34fb` | READ | UTF-8 string | e.g. `XXXXXXXXXXXXXXXXXXXX` |
-| Firmware Revision | `00002a26-0000-1000-8000-00805f9b34fb` | READ | UTF-8 string | e.g. `300012593881` |
+| Serial Number | `00002a25-0000-1000-8000-00805f9b34fb` | READ | UTF-8 string | Device serial number |
+| Firmware Revision | `00002a26-0000-1000-8000-00805f9b34fb` | READ | UTF-8 string | Firmware version string |
 
 ### Battery (Standard GATT — Service 0x180F)
 
