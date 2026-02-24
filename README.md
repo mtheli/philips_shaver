@@ -1,6 +1,8 @@
 # Philips Shaver Integration for Home Assistant
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![GitHub Release](https://img.shields.io/github/v/release/mtheli/philips_shaver)](https://github.com/mtheli/philips_shaver/releases)
+[![License: MIT](https://img.shields.io/github/license/mtheli/philips_shaver)](LICENSE)
 
 This is a custom component for Home Assistant to integrate **Philips Bluetooth-enabled shavers**, specifically tested with the **i9000 / XP9201 series**.
 
@@ -154,3 +156,17 @@ Once the OS-level pairing is complete, proceed to add the integration via the Ho
 * *Connection Conflict*: If the integration fails to set up, ensure no smartphone is currently connected to the shaver.
 * *ESPHome Bluetooth Proxy*: This integration requires a *direct active Bluetooth connection* for real-time telemetry. Therefore, it is not possible to use an ESPHome Bluetooth Proxy. The shaver must be within direct range of the Home Assistant host's Bluetooth adapter.
 * *Stability:* Bluetooth signals are weak. Ensure your Home Assistant host is placed as close to the shaver's location as possible.
+
+---
+
+## BLE Protocol
+
+The integration communicates directly via BLE — no cloud, no app required. All communication is fully local.
+
+The shaver exposes multiple GATT services with individual characteristics for each data point (battery, motor, pressure, light ring, etc.). Data is read directly from these characteristics and live updates are received via GATT notifications.
+
+For a detailed technical description of the BLE protocol including service UUIDs, characteristic reference, data formats, and capability flags, see [PROTOCOL.md](PROTOCOL.md).
+
+## License
+
+[MIT](LICENSE)
