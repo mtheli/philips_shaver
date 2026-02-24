@@ -1,27 +1,14 @@
 # custom_components/philips_shaver/__init__.py
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timedelta
 import logging
 
-from homeassistant.components.bluetooth import (
-    BluetoothCallbackMatcher,
-    BluetoothScanningMode,
-    async_last_service_info,
-    async_register_callback,
-)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import device_registry as dr
+from homeassistant.core import HomeAssistant
 
-from . import bluetooth as shaver_bluetooth
-from .const import (
-    DOMAIN,
-)
+from .const import DOMAIN
 from .coordinator import PhilipsShaverCoordinator
-from .utils import parse_color
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,14 +19,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Philips Shaver from a config entry."""
     address = entry.data["address"]
 
-    # === NEU: Coordinator anlegen ===
     coordinator = PhilipsShaverCoordinator(hass, entry)
-    hass.async_create_task(coordinator._async_start_advertisement_logging())
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {"coordinator": coordinator}
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # Start polling/live monitoring after platforms are registered
+    await coordinator.async_start()
+    hass.async_create_task(coordinator._async_start_advertisement_logging())
 
     _LOGGER.info("Philips Shaver integration loaded – address: %s", address)
     return True

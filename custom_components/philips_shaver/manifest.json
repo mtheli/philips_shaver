@@ -1,7 +1,7 @@
 {
   "domain": "philips_shaver",
   "name": "Philips Shaver (i9000/XP9201)",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "documentation": "https://github.com/mtheli/philips_shaver",
   "requirements": ["bleak>=0.21.0", "bleak-retry-connector>=3.5.0"],
   "dependencies": [],
@@ -15,7 +15,7 @@
     { "service_uuid": "8d560600-3cb9-4387-a7e8-b79d826a7025" }
   ],
   "integration_type": "device",
-  "iot_class": "local_polling",
+  "iot_class": "local_push",
   "homeassistant": "2024.11.0",
   "hacs": "1.34.0"
 }

@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback as hass_callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers import entity_registry as er
@@ -129,9 +129,6 @@ class PhilipsBatterySensor(PhilipsShaverEntity, SensorEntity):
         except (ValueError, TypeError):
             return None
 
-    @hass_callback
-    def _update_callback(self):
-        self.async_write_ha_state()
 
 
 # =============================================================================
@@ -154,9 +151,6 @@ class PhilipsAmountOfChargesSensor(PhilipsShaverEntity, SensorEntity):
     def native_value(self) -> int | None:
         return self.coordinator.data.get("amount_of_charges")
 
-    @hass_callback
-    def _update_callback(self):
-        self.async_write_ha_state()
 
 
 # =============================================================================
@@ -199,9 +193,6 @@ class PhilipsFirmwareSensor(PhilipsShaverEntity, SensorEntity):
     def native_value(self) -> str | None:
         return self.coordinator.data.get("firmware")
 
-    @hass_callback
-    def _update_callback(self):
-        self.async_write_ha_state()
 
 
 # =============================================================================
@@ -233,9 +224,6 @@ class PhilipsHeadRemainingSensor(PhilipsShaverEntity, SensorEntity):
 
         return {"remaining_minutes": minutes}
 
-    @hass_callback
-    def _update_callback(self):
-        self.async_write_ha_state()
 
 
 class PhilipsDaysSinceLastUsedSensor(PhilipsShaverEntity, SensorEntity):
@@ -256,9 +244,6 @@ class PhilipsDaysSinceLastUsedSensor(PhilipsShaverEntity, SensorEntity):
     def native_value(self) -> int | None:
         return self.coordinator.data.get("days_since_last_used")
 
-    @hass_callback
-    def _update_callback(self):
-        self.async_write_ha_state()
 
 
 class PhilipsShavingTimeSensor(PhilipsShaverEntity, SensorEntity):
@@ -279,9 +264,6 @@ class PhilipsShavingTimeSensor(PhilipsShaverEntity, SensorEntity):
     def native_value(self) -> int | None:
         return self.coordinator.data.get("shaving_time")
 
-    @hass_callback
-    def _update_callback(self):
-        self.async_write_ha_state()
 
 
 # =============================================================================
@@ -314,9 +296,6 @@ class PhilipsDeviceStateSensor(PhilipsShaverEntity, SensorEntity):
             "unknown": "mdi:help-circle-outline",
         }.get(state, "mdi:help-circle-outline")
 
-    @hass_callback
-    def _update_callback(self):
-        self.async_write_ha_state()
 
 
 class PhilipsDeviceActivitySensor(PhilipsShaverEntity, SensorEntity):
@@ -365,9 +344,6 @@ class PhilipsDeviceActivitySensor(PhilipsShaverEntity, SensorEntity):
             "locked": "mdi:lock",
         }.get(self.native_value, "mdi:help-circle")
 
-    @hass_callback
-    def _update_callback(self):
-        self.async_write_ha_state()
 
 
 # =============================================================================
@@ -394,9 +370,6 @@ class PhilipsLastSeenSensor(PhilipsShaverEntity, SensorEntity):
             return None
         return int((datetime.now() - last_seen).total_seconds() // 60)
 
-    @hass_callback
-    def _update_callback(self):
-        self.async_write_ha_state()
 
 
 # =============================================================================
@@ -421,9 +394,6 @@ class PhilipsRssiSensor(PhilipsShaverEntity, SensorEntity):
         service_info = async_last_service_info(self.hass, self._address)
         return service_info.rssi if service_info else None
 
-    @hass_callback
-    def _update_callback(self):
-        self.async_write_ha_state()
 
 
 # =============================================================================
@@ -456,9 +426,6 @@ class PhilipsCleaningProgressSensor(PhilipsShaverEntity, SensorEntity):
             return "mdi:check-circle-outline"
         return "mdi:progress-wrench"
 
-    @hass_callback
-    def _update_callback(self):
-        self.async_write_ha_state()
 
 
 class PhilipsCleaningCyclesSensor(PhilipsShaverEntity, SensorEntity):
@@ -477,9 +444,6 @@ class PhilipsCleaningCyclesSensor(PhilipsShaverEntity, SensorEntity):
     def native_value(self) -> int | None:
         return self.coordinator.data.get("cleaning_cycles")
 
-    @hass_callback
-    def _update_callback(self):
-        self.async_write_ha_state()
 
 
 # =============================================================================
@@ -513,9 +477,6 @@ class PhilipsMotorSpeedSensor(PhilipsShaverEntity, SensorEntity):
             return "mdi:speedometer-medium"
         return "mdi:speedometer"
 
-    @hass_callback
-    def _update_callback(self):
-        self.async_write_ha_state()
 
 
 # =============================================================================
@@ -524,7 +485,6 @@ class PhilipsMotorSpeedSensor(PhilipsShaverEntity, SensorEntity):
 class PhilipsMotorCurrentSensor(PhilipsShaverEntity, SensorEntity):
     _attr_translation_key = "motor_current"
     _attr_native_unit_of_measurement = "mA"
-    _attr_device_class = SensorDeviceClass.CURRENT
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:current-dc"
@@ -553,9 +513,6 @@ class PhilipsMotorCurrentSensor(PhilipsShaverEntity, SensorEntity):
             return int((current / maximum) * 100)
         return None
 
-    @hass_callback
-    def _update_callback(self):
-        self.async_write_ha_state()
 
 
 class PhilipsMotorCurrentMaxSensor(PhilipsShaverEntity, SensorEntity):
@@ -563,7 +520,6 @@ class PhilipsMotorCurrentMaxSensor(PhilipsShaverEntity, SensorEntity):
 
     _attr_translation_key = "motor_current_max"
     _attr_native_unit_of_measurement = "mA"
-    _attr_device_class = SensorDeviceClass.CURRENT
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:shield-check"
 
@@ -577,9 +533,6 @@ class PhilipsMotorCurrentMaxSensor(PhilipsShaverEntity, SensorEntity):
     def native_value(self) -> int | None:
         return self.coordinator.data.get("motor_current_max_ma")
 
-    @hass_callback
-    def _update_callback(self):
-        self.async_write_ha_state()
 
 
 # =============================================================================
@@ -646,7 +599,7 @@ class PhilipsShavingModeSensor(PhilipsShaverEntity, SensorEntity):
 
 
 # =============================================================================
-# Shaving Mode
+# Pressure
 # =============================================================================
 class PhilipsShaverPressureSensor(PhilipsShaverEntity, SensorEntity):
     """Numerischer Drucksensor für Rohwerte."""

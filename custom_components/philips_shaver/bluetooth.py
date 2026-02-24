@@ -59,7 +59,7 @@ async def connect_and_read(
             try:
                 await client.disconnect()
                 _LOGGER.debug("Disconnected from %s (poll)", address)
-            except:
+            except Exception:
                 pass
 
     return data

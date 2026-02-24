@@ -59,7 +59,9 @@ class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
 
         if model_changed or fw_changed:
             device_registry = dr.async_get(self.hass)
-            device = device_registry.async_get_device(self._address)
+            device = device_registry.async_get_device(
+                    identifiers={(DOMAIN, self._address)}
+                )
 
             if device:
                 device_registry.async_update_device(

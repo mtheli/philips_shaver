@@ -30,7 +30,7 @@ class PhilipsShavingModeSelect(PhilipsShaverEntity, SelectEntity):
     """Steuerung des Rasiermodus (Sanft, Normal, Intensiv, Persönlich, Schaum)."""
 
     _attr_translation_key = "shaving_mode"
-    _attr_options = ["sensitive", "regular", "intense", "custom", "foam"]
+    _attr_options = ["sensitive", "regular", "intense", "custom", "foam", "battery_saving"]
 
     def __init__(self, coordinator: Any, entry: ConfigEntry) -> None:
         """Initialize the select entity."""
@@ -63,6 +63,7 @@ class PhilipsShavingModeSelect(PhilipsShaverEntity, SelectEntity):
             "intense": 0x02,
             "custom": 0x03,
             "foam": 0x04,
+            "battery_saving": 0x05,
         }
 
         val = write_mapping.get(option)
@@ -95,5 +96,6 @@ class PhilipsShavingModeSelect(PhilipsShaverEntity, SelectEntity):
             2: "mdi:lightning-bolt",  # intense
             3: "mdi:tune",  # custom
             4: "mdi:spray",  # foam
+            5: "mdi:battery-heart-outline",  # battery_saving
         }
         return ICONS.get(mode_id, "mdi:face-man")

@@ -136,14 +136,14 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "last_seen": None,
         }
 
-        # Erster Refresh sofort starten
+    async def async_start(self) -> None:
+        """Start initial refresh and live monitoring. Call after setup is complete."""
         self.hass.async_create_task(self.async_refresh())
 
-        # Live nur starten, wenn gewünscht
         if self.enable_live_updates:
             self._live_task = self.hass.loop.create_task(self._start_live_monitoring())
         else:
-            _LOGGER.info("Live-Updates deaktiviert – nur Polling")
+            _LOGGER.info("Live updates disabled – polling only")
 
     async def _async_start_advertisement_logging(self) -> None:
         """Loggt jedes Advertisement des Rasierers (super hilfreich beim Debuggen)."""
@@ -399,7 +399,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     if self.live_client and self.live_client.is_connected:
                         try:
                             await self.live_client.disconnect()
-                        except:
+                        except Exception:
                             pass
                     self.live_client = None
                     await asyncio.sleep(backoff)
@@ -543,5 +543,5 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self.live_client and self.live_client.is_connected:
             try:
                 await self.live_client.disconnect()
-            except:
+            except Exception:
                 pass
