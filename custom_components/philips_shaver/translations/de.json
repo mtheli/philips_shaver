@@ -69,7 +69,8 @@
           "regular": "Normal",
           "intense": "Intensiv",
           "custom": "Benutzerdefiniert",
-          "foam": "Schaum"
+          "foam": "Schaum",
+          "battery_saving": "Akkuschonend"
         }
       }
     },
@@ -135,6 +136,40 @@
       "motor_current_max": {
         "name": "Motorstrom (max)"
       },
+      "motor_rpm_max": {
+        "name": "Motor Drehzahl Max"
+      },
+      "motor_rpm_min": {
+        "name": "Motor Drehzahl Min"
+      },
+      "model_number": {
+        "name": "Modellnummer"
+      },
+      "handle_load_type": {
+        "name": "Aufsatztyp",
+        "state": {
+          "not_supported": "Nicht unterstützt",
+          "undefined": "Undefiniert",
+          "detection_in_progress": "Erkennung läuft",
+          "trimmer": "Trimmer",
+          "shaving_heads": "Scherköpfe",
+          "styler": "Styler",
+          "brush": "Bürste",
+          "precision_trimmer": "Präzisionstrimmer",
+          "beardstyler": "Bartstyler",
+          "precision_trimmer_or_beardstyler": "Präzisionstrimmer oder Bartstyler",
+          "no_load": "Kein Aufsatz",
+          "unknown": "Unbekannt"
+        }
+      },
+      "motion_type": {
+        "name": "Bewegung",
+        "state": {
+          "no_motion": "Keine Bewegung",
+          "small_circle": "Kleine Kreise",
+          "large_stroke": "Große Züge"
+        }
+      },
       "shaving_mode": {
         "name": "Rasurmodus",
         "state": {
@@ -146,6 +181,9 @@
           "battery_saving": "Akku-sparend",
           "unknown": "Unbekannt"
         }
+      },
+      "total_age": {
+        "name": "Gesamtbetriebszeit"
       },
       "pressure": {
         "name": "Druck Wert"

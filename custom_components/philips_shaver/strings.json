@@ -136,6 +136,40 @@
       "motor_current_max": {
         "name": "Motor Current Limit"
       },
+      "motor_rpm_max": {
+        "name": "Motor RPM Max"
+      },
+      "motor_rpm_min": {
+        "name": "Motor RPM Min"
+      },
+      "model_number": {
+        "name": "Model Number"
+      },
+      "handle_load_type": {
+        "name": "Handle Load Type",
+        "state": {
+          "not_supported": "Not Supported",
+          "undefined": "Undefined",
+          "detection_in_progress": "Detection in Progress",
+          "trimmer": "Trimmer",
+          "shaving_heads": "Shaving Heads",
+          "styler": "Styler",
+          "brush": "Brush",
+          "precision_trimmer": "Precision Trimmer",
+          "beardstyler": "Beardstyler",
+          "precision_trimmer_or_beardstyler": "Precision Trimmer or Beardstyler",
+          "no_load": "No Load",
+          "unknown": "Unknown"
+        }
+      },
+      "motion_type": {
+        "name": "Motion",
+        "state": {
+          "no_motion": "No Motion",
+          "small_circle": "Small Circles",
+          "large_stroke": "Large Strokes"
+        }
+      },
       "shaving_mode": {
         "name": "Shaving mode",
         "state": {

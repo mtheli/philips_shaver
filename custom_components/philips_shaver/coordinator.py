@@ -31,6 +31,11 @@ from .const import (
     CHAR_FIRMWARE_REVISION,
     CHAR_HEAD_REMAINING,
     CHAR_HEAD_REMAINING_MINUTES,
+    CHAR_HISTORY_AVG_CURRENT,
+    CHAR_HISTORY_DURATION,
+    CHAR_HISTORY_RPM,
+    CHAR_HISTORY_SYNC_STATUS,
+    CHAR_HISTORY_TIMESTAMP,
     CHAR_LIGHTRING_COLOR_HIGH,
     CHAR_LIGHTRING_COLOR_LOW,
     CHAR_LIGHTRING_COLOR_MOTION,
@@ -39,6 +44,11 @@ from .const import (
     CHAR_MOTOR_CURRENT,
     CHAR_MOTOR_CURRENT_MAX,
     CHAR_MOTOR_RPM,
+    CHAR_MOTOR_RPM_MAX,
+    CHAR_MOTOR_RPM_MIN,
+    CHAR_HANDLE_LOAD_TYPE,
+    HANDLE_LOAD_TYPES,
+    CHAR_MOTION_TYPE,
     CHAR_PRESSURE,
     CHAR_SERIAL_NUMBER,
     CHAR_SHAVING_TIME,
@@ -122,6 +132,11 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "motor_rpm": 0,
             "motor_current_ma": 0,
             "motor_current_max_ma": None,
+            "motor_rpm_max": None,
+            "motor_rpm_min": None,
+            "handle_load_type": None,
+            "handle_load_type_value": None,
+            "motion_type_value": None,
             "amount_of_charges": None,
             "amount_of_operational_turns": None,
             "shaving_mode": None,
@@ -284,6 +299,12 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # rounding to int value
             new_data["motor_rpm"] = int(round(raw_val / 3.036))
 
+        if raw := results.get(CHAR_MOTOR_RPM_MAX):
+            new_data["motor_rpm_max"] = int(round(int.from_bytes(raw, "little") / 3.036))
+
+        if raw := results.get(CHAR_MOTOR_RPM_MIN):
+            new_data["motor_rpm_min"] = int(round(int.from_bytes(raw, "little") / 3.036))
+
         if raw := results.get(CHAR_AMOUNT_OF_CHARGES):
             new_data["amount_of_charges"] = int.from_bytes(raw, "little")
 
@@ -326,6 +347,17 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if raw := results.get(CHAR_TOTAL_AGE):
             total_age_value = int.from_bytes(raw, "little")
             new_data["total_age"] = total_age_value
+
+        # Handle Load Type
+        if raw := results.get(CHAR_HANDLE_LOAD_TYPE):
+            load_value = int.from_bytes(raw, "little")
+            new_data["handle_load_type_value"] = load_value
+            new_data["handle_load_type"] = HANDLE_LOAD_TYPES.get(load_value, "unknown")
+
+        # Motion Type
+        # Motion Type (uint8 – single byte, as per app FORMAT_UINT8)
+        if raw := results.get(CHAR_MOTION_TYPE):
+            new_data["motion_type_value"] = raw[0]
 
         # Immer aktualisieren – wichtig für "available"
         new_data["last_seen"] = datetime.now()
@@ -461,6 +493,8 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "shaving_time": CHAR_SHAVING_TIME,
             "shaving_settings": CHAR_SHAVING_MODE_SETTINGS,
             "total_age": CHAR_TOTAL_AGE,
+            "handle_load_type": CHAR_HANDLE_LOAD_TYPE,
+            "motion_type": CHAR_MOTION_TYPE,
         }
         return mapping.get(key, "")
 
@@ -485,6 +519,8 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             (CHAR_SHAVING_TIME, "shaving_time"),
             (CHAR_SHAVING_MODE_SETTINGS, "shaving_settings"),
             (CHAR_TOTAL_AGE, "total_age"),
+            (CHAR_HANDLE_LOAD_TYPE, "handle_load_type"),
+            (CHAR_MOTION_TYPE, "motion_type"),
         ]
 
         for char_uuid, key in notifications:
@@ -517,6 +553,8 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             CHAR_SHAVING_TIME,
             CHAR_SHAVING_MODE_SETTINGS,
             CHAR_TOTAL_AGE,
+            CHAR_HANDLE_LOAD_TYPE,
+            CHAR_MOTION_TYPE,
         ]
 
         for char_uuid in char_uuids:
@@ -525,6 +563,117 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.debug("Stopped notifications for %s", char_uuid)
             except Exception:
                 pass  # ignore – wird eh disconnected
+
+    # ------------------------------------------------------------------
+    # History retrieval
+    # ------------------------------------------------------------------
+    async def async_fetch_history(self) -> list[dict[str, Any]]:
+        """Fetch shaving session history from the device.
+
+        Flow (as per decompiled GroomTribe app):
+        1. Read sync status → number of available sessions
+        2. For each session:
+           a. Read timestamp (UINT32)
+           b. Read duration  (UINT16)
+           c. Read avg current (UINT16)
+           d. Read RPM (UINT16)
+           e. Write 0 to sync status → advance to next record
+        """
+        sessions: list[dict[str, Any]] = []
+
+        async with self._connection_lock:
+            # Use live client if connected, otherwise establish new connection
+            client = self.live_client if self.live_client and self.live_client.is_connected else None
+            disconnect_after = False
+
+            if not client:
+                service_info = async_last_service_info(self.hass, self.address)
+                if not service_info:
+                    _LOGGER.warning("Device %s not in range for history fetch", self.address)
+                    return sessions
+
+                client = await shaver_bluetooth.establish_connection(
+                    BleakClient,
+                    service_info.device,
+                    "philips_shaver_history",
+                    timeout=15.0,
+                )
+                disconnect_after = True
+
+            try:
+                # Step 1: Read sync status → number of sessions available
+                raw = await client.read_gatt_char(CHAR_HISTORY_SYNC_STATUS)
+                session_count = raw[0] if raw else 0
+                _LOGGER.info("History: %d sessions available", session_count)
+
+                if session_count == 0:
+                    return sessions
+
+                # Step 2: Read each session
+                for i in range(session_count):
+                    session: dict[str, Any] = {"index": i}
+
+                    # Timestamp (UINT32, little-endian)
+                    try:
+                        raw = await client.read_gatt_char(CHAR_HISTORY_TIMESTAMP)
+                        if raw:
+                            timestamp = int.from_bytes(raw[:4], "little")
+                            session["timestamp"] = timestamp
+                            session["date"] = datetime.fromtimestamp(timestamp).isoformat()
+                    except Exception as e:
+                        _LOGGER.debug("History: failed to read timestamp for session %d: %s", i, e)
+
+                    # Duration (UINT16, little-endian) in seconds
+                    try:
+                        raw = await client.read_gatt_char(CHAR_HISTORY_DURATION)
+                        if raw:
+                            session["duration_seconds"] = int.from_bytes(raw[:2], "little")
+                    except Exception as e:
+                        _LOGGER.debug("History: failed to read duration for session %d: %s", i, e)
+
+                    # Average current (UINT16, little-endian) in mA
+                    try:
+                        raw = await client.read_gatt_char(CHAR_HISTORY_AVG_CURRENT)
+                        if raw:
+                            session["avg_current_ma"] = int.from_bytes(raw[:2], "little")
+                    except Exception as e:
+                        _LOGGER.debug("History: failed to read avg current for session %d: %s", i, e)
+
+                    # RPM (UINT16, little-endian)
+                    try:
+                        raw = await client.read_gatt_char(CHAR_HISTORY_RPM)
+                        if raw:
+                            raw_rpm = int.from_bytes(raw[:2], "little")
+                            session["avg_rpm"] = int(round(raw_rpm / 3.036))
+                    except Exception as e:
+                        _LOGGER.debug("History: failed to read RPM for session %d: %s", i, e)
+
+                    sessions.append(session)
+                    _LOGGER.info("History session %d: %s", i, session)
+
+                    # Advance to next record by writing 0
+                    try:
+                        await client.write_gatt_char(
+                            CHAR_HISTORY_SYNC_STATUS, bytes([0])
+                        )
+                    except Exception as e:
+                        _LOGGER.warning("History: failed to advance sync for session %d: %s", i, e)
+                        break
+
+            except Exception as err:
+                _LOGGER.error("History fetch error: %s", err)
+            finally:
+                if disconnect_after and client and client.is_connected:
+                    try:
+                        await client.disconnect()
+                    except Exception:
+                        pass
+
+        # Store in coordinator data for access by sensors/frontend
+        self.data["history_sessions"] = sessions
+        self.async_set_updated_data(self.data)
+
+        return sessions
 
     async def async_shutdown(self) -> None:
         """Wird beim Unload aufgerufen – räumt alles sauber auf."""

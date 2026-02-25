@@ -1,0 +1,12 @@
+fetch_history:
+  name: Fetch Shaving History
+  description: >-
+    Fetches the shaving session history stored on the device.
+    Returns a list of sessions with timestamp, duration, average current, and RPM.
+  fields:
+    entry_id:
+      name: Config Entry ID
+      description: The config entry ID of the shaver device. If omitted, uses the first available device.
+      required: false
+      selector:
+        text:

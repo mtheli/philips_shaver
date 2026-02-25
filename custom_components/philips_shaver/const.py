@@ -163,6 +163,18 @@ CHAR_MOTOR_CURRENT_MAX = "8d560103-3cb9-4387-a7e8-b79d826a7025"
 	UUID: 0x2902
 """
 CHAR_MOTOR_RPM = "8d560104-3cb9-4387-a7e8-b79d826a7025"
+"""
+	MOTOR_RPM_MAX_CHARACTERISTIC_UUID
+	UUID: 8d560105-3cb9-4387-a7e8-b79d826a7025
+	Properties: READ
+"""
+CHAR_MOTOR_RPM_MAX = "8d560105-3cb9-4387-a7e8-b79d826a7025"
+"""
+	MOTOR_RPM_MIN_CHARACTERISTIC_UUID
+	UUID: 8d56011b-3cb9-4387-a7e8-b79d826a7025
+	Properties: READ
+"""
+CHAR_MOTOR_RPM_MIN = "8d56011b-3cb9-4387-a7e8-b79d826a7025"
 
 # Charging characteristics
 """
@@ -291,6 +303,74 @@ CHAR_CUSTOM_SHAVING_MODE_SETTINGS = "8d560330-3cb9-4387-a7e8-b79d826a7025"
 """
 CHAR_PRESSURE = "8d56030c-3cb9-4387-a7e8-b79d826a7025"
 
+# Motion type
+"""
+	SMART_SHAVER_CHARACTERISTIC_MOTION_TYPE
+	UUID: 8d560305-3cb9-4387-a7e8-b79d826a7025
+	Properties: NOTIFY, READ
+"""
+CHAR_MOTION_TYPE = "8d560305-3cb9-4387-a7e8-b79d826a7025"
+
+# Handle load type
+"""
+	SMART_SHAVER_CHARACTERISTIC_HANDLE_LOAD_TYPE
+	UUID: 8d560322-3cb9-4387-a7e8-b79d826a7025
+	Properties: NOTIFY, READ
+"""
+CHAR_HANDLE_LOAD_TYPE = "8d560322-3cb9-4387-a7e8-b79d826a7025"
+HANDLE_LOAD_TYPES = {
+    0: "not_supported",
+    1: "undefined",
+    2: "detection_in_progress",
+    3: "trimmer",
+    4: "shaving_heads",
+    5: "styler",
+    6: "brush",
+    7: "precision_trimmer",
+    8: "beardstyler",
+    9: "precision_trimmer_or_beardstyler",
+    65535: "no_load",
+}
+
+# ------------------------------------------------------
+# History characteristics
+# ------------------------------------------------------
+"""
+	HISTORY_SYNCHRONIZATION_STATUS_CHARACTERISTIC
+	UUID: 8d560209-3cb9-4387-a7e8-b79d826a7025
+	Properties: NOTIFY, READ, WRITE
+	Value: Number of available history sessions (UINT8)
+	Write 0 to advance to next record after reading.
+"""
+CHAR_HISTORY_SYNC_STATUS = "8d560209-3cb9-4387-a7e8-b79d826a7025"
+"""
+	HISTORY_TIMESTAMP_CHARACTERISTIC
+	UUID: 8d560202-3cb9-4387-a7e8-b79d826a7025
+	Properties: READ, NOTIFY
+	Value: Unix timestamp (UINT32)
+"""
+CHAR_HISTORY_TIMESTAMP = "8d560202-3cb9-4387-a7e8-b79d826a7025"
+"""
+	HISTORY_OPERATION_DURATION_CHARACTERISTIC
+	UUID: 8d560207-3cb9-4387-a7e8-b79d826a7025
+	Properties: READ, NOTIFY
+	Value: Duration in seconds (UINT16)
+"""
+CHAR_HISTORY_DURATION = "8d560207-3cb9-4387-a7e8-b79d826a7025"
+"""
+	HISTORY_AVERAGE_CURRENT_CHARACTERISTIC
+	UUID: 8d560206-3cb9-4387-a7e8-b79d826a7025
+	Properties: READ, NOTIFY
+	Value: Average current in mA (UINT16)
+"""
+CHAR_HISTORY_AVG_CURRENT = "8d560206-3cb9-4387-a7e8-b79d826a7025"
+"""
+	HISTORY_OPERATION_RPM_CHARACTERISTIC
+	UUID: 8d560208-3cb9-4387-a7e8-b79d826a7025
+	Properties: READ, NOTIFY
+"""
+CHAR_HISTORY_RPM = "8d560208-3cb9-4387-a7e8-b79d826a7025"
+
 # Shaver age
 """
 	Unknown Characteristic
@@ -329,6 +409,8 @@ POLL_READ_CHARS = [
     # CHAR_MOTOR_CURRENT,
     CHAR_MOTOR_CURRENT_MAX,
     # CHAR_MOTOR_RPM,
+    # CHAR_MOTOR_RPM_MAX,
+    # CHAR_MOTOR_RPM_MIN,
     CHAR_LIGHTRING_COLOR_LOW,
     CHAR_LIGHTRING_COLOR_OK,
     CHAR_LIGHTRING_COLOR_HIGH,
@@ -341,6 +423,8 @@ POLL_READ_CHARS = [
     CHAR_CUSTOM_SHAVING_MODE_SETTINGS,
     # CHAR_PRESSURE,
     CHAR_TOTAL_AGE,
+    CHAR_HANDLE_LOAD_TYPE,
+    CHAR_MOTION_TYPE,
 ]
 
 # characteristics for initial reading of live thread
@@ -360,6 +444,8 @@ LIVE_READ_CHARS = [
     # CHAR_MOTOR_CURRENT,
     CHAR_MOTOR_CURRENT_MAX,
     # CHAR_MOTOR_RPM,
+    # CHAR_MOTOR_RPM_MAX,
+    # CHAR_MOTOR_RPM_MIN,
     CHAR_LIGHTRING_COLOR_LOW,
     CHAR_LIGHTRING_COLOR_OK,
     CHAR_LIGHTRING_COLOR_HIGH,
@@ -372,6 +458,8 @@ LIVE_READ_CHARS = [
     CHAR_CUSTOM_SHAVING_MODE_SETTINGS,
     # CHAR_PRESSURE,
     CHAR_TOTAL_AGE,
+    CHAR_HANDLE_LOAD_TYPE,
+    CHAR_MOTION_TYPE,
 ]
 
 DEFAULT_POLL_INTERVAL = 60

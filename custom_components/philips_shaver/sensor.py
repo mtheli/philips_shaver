@@ -48,6 +48,11 @@ async def async_setup_entry(
         PhilipsMotorSpeedSensor(coordinator, entry),
         PhilipsMotorCurrentSensor(coordinator, entry),
         PhilipsMotorCurrentMaxSensor(coordinator, entry),
+        PhilipsMotorRpmMaxSensor(coordinator, entry),
+        PhilipsMotorRpmMinSensor(coordinator, entry),
+        PhilipsHandleLoadTypeSensor(coordinator, entry),
+        PhilipsMotionTypeSensor(coordinator, entry),
+        PhilipsModelNumberSensor(coordinator, entry),
         PhilipsShavingModeSensor(coordinator, entry),
         PhilipsTotalAgeSensor(coordinator, entry),
     ]
@@ -533,6 +538,172 @@ class PhilipsMotorCurrentMaxSensor(PhilipsShaverEntity, SensorEntity):
     def native_value(self) -> int | None:
         return self.coordinator.data.get("motor_current_max_ma")
 
+
+
+# =============================================================================
+# Motor RPM Max / Min
+# =============================================================================
+class PhilipsMotorRpmMaxSensor(PhilipsShaverEntity, SensorEntity):
+    _attr_translation_key = "motor_rpm_max"
+    _attr_native_unit_of_measurement = "RPM"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:speedometer"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._address}_motor_rpm_max"
+
+    @property
+    def native_value(self) -> int | None:
+        return self.coordinator.data.get("motor_rpm_max")
+
+
+class PhilipsMotorRpmMinSensor(PhilipsShaverEntity, SensorEntity):
+    _attr_translation_key = "motor_rpm_min"
+    _attr_native_unit_of_measurement = "RPM"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:speedometer-slow"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._address}_motor_rpm_min"
+
+    @property
+    def native_value(self) -> int | None:
+        return self.coordinator.data.get("motor_rpm_min")
+
+
+# =============================================================================
+# Handle Load Type
+# =============================================================================
+class PhilipsHandleLoadTypeSensor(PhilipsShaverEntity, SensorEntity):
+    _attr_translation_key = "handle_load_type"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [
+        "not_supported",
+        "undefined",
+        "detection_in_progress",
+        "trimmer",
+        "shaving_heads",
+        "styler",
+        "brush",
+        "precision_trimmer",
+        "beardstyler",
+        "precision_trimmer_or_beardstyler",
+        "no_load",
+        "unknown",
+    ]
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:puzzle"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._address}_handle_load_type"
+
+    @property
+    def native_value(self) -> str | None:
+        return self.coordinator.data.get("handle_load_type")
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        raw = self.coordinator.data.get("handle_load_type_value")
+        if raw is None:
+            return None
+        return {"raw_value": raw}
+
+    @property
+    def icon(self) -> str:
+        load_type = self.native_value
+        icons = {
+            "trimmer": "mdi:content-cut",
+            "shaving_heads": "mdi:razor-double-edge",
+            "styler": "mdi:hair-dryer",
+            "brush": "mdi:broom",
+            "precision_trimmer": "mdi:content-cut",
+            "beardstyler": "mdi:face-man-profile",
+            "precision_trimmer_or_beardstyler": "mdi:content-cut",
+            "no_load": "mdi:puzzle-outline",
+        }
+        return icons.get(load_type, "mdi:puzzle")
+
+
+# =============================================================================
+# Motion Type
+# =============================================================================
+class PhilipsMotionTypeSensor(PhilipsShaverEntity, SensorEntity):
+    """Motion type sensor with threshold-based categorization.
+
+    The BLE characteristic returns a dynamic intensity value (0-255).
+    The app categorizes it using thresholds (BR2 model):
+      0     = no_motion
+      1-49  = large_stroke  ("Try smaller circles")
+      >= 50 = small_circle  ("Keep going!")
+    """
+
+    _attr_translation_key = "motion_type"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["no_motion", "small_circle", "large_stroke"]
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:gesture-swipe"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._address}_motion_type"
+
+    @property
+    def native_value(self) -> str | None:
+        raw = self.coordinator.data.get("motion_type_value")
+        if raw is None:
+            return None
+        if raw == 0:
+            return "no_motion"
+        if raw < 50:
+            return "large_stroke"
+        return "small_circle"
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        raw = self.coordinator.data.get("motion_type_value")
+        if raw is None:
+            return None
+        return {"raw_value": raw}
+
+    @property
+    def icon(self) -> str:
+        motion = self.native_value
+        icons = {
+            "no_motion": "mdi:hand-back-right-off",
+            "small_circle": "mdi:circle-outline",
+            "large_stroke": "mdi:gesture-swipe",
+        }
+        return icons.get(motion, "mdi:gesture-swipe")
+
+
+# =============================================================================
+# Model Number (Device Type)
+# =============================================================================
+class PhilipsModelNumberSensor(PhilipsShaverEntity, SensorEntity):
+    _attr_translation_key = "model_number"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:information-outline"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._address}_model_number"
+
+    @property
+    def native_value(self) -> str | None:
+        return self.coordinator.data.get("model_number")
 
 
 # =============================================================================
