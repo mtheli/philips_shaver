@@ -12,13 +12,14 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.config_entries import ConfigEntry
 
-from . import (
-    bluetooth as shaver_bluetooth,
+from homeassistant.components.bluetooth import (
     BluetoothCallbackMatcher,
     BluetoothScanningMode,
     async_last_service_info,
     async_register_callback,
 )
+
+from . import bluetooth as shaver_bluetooth
 from .const import (
     CHAR_AMOUNT_OF_CHARGES,
     CHAR_AMOUNT_OF_OPERATIONAL_TURNS,
