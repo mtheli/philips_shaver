@@ -49,7 +49,7 @@ esp32_ble_tracker:
     window: 120ms
 
 ble_client:
-  - mac_address: "EC:EC:66:27:F0:ED"       # <-- Replace with your shaver's MAC
+  - mac_address: "XX:XX:XX:XX:XX:XX"       # <-- Replace with your shaver's MAC
     id: philips_shaver_ble
     auto_connect: true
     on_connect:

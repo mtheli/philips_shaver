@@ -20,7 +20,7 @@ The shaver advertises via BLE when it is powered on or placed on the charging st
 **Option A — Home Assistant Bluetooth:**
 1. Go to **Settings > Devices & Services > Bluetooth**
 2. Look for a device named "Philips XP9201" (or similar)
-3. Note the MAC address (e.g. `EC:EC:66:27:F0:ED`)
+3. Note the MAC address (e.g. `AA:BB:CC:11:22:33`)
 
 **Option B — nRF Connect (Android/iOS):**
 1. Open the nRF Connect app and scan for devices
@@ -43,7 +43,7 @@ Copy the template to your ESPHome configuration directory and customize:
 
 ### Required changes
 
-1. **Shaver MAC address** — replace `EC:EC:66:27:F0:ED` with your shaver's MAC:
+1. **Shaver MAC address** — replace `XX:XX:XX:XX:XX:XX` with your shaver's MAC:
    ```yaml
    ble_client:
      - mac_address: "XX:XX:XX:XX:XX:XX"   # <-- your shaver's MAC
