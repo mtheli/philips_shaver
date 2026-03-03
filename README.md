@@ -62,7 +62,7 @@ This integration creates a new device for your shaver and provides the following
 * A compatible Philips Shaver (e.g., i9000/XP9201).
 * **Either** a Home Assistant instance with the **Bluetooth integration** enabled and a working Bluetooth adapter, **or** an ESP32 running the [BLE bridge component](ESP_BRIDGE_SETUP.md).
 * *Exclusive Connection:* The shaver supports only one active connection at a time.
-* *GroomTribe App:* You must unpair/remove the shaver from any other devices (especially smartphones with the manufacturer's "GroomTribe" app) before Home Assistant can connect.
+* *GroomTribe App:* You must unpair/remove the shaver from any other devices (especially smartphones with the manufacturer's [GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) app) before Home Assistant can connect.
 
 ---
 
@@ -95,7 +95,7 @@ Before attempting to connect to Home Assistant, ensure the shaver is not connect
 
 1. Open the Bluetooth settings on your phone.
 2. *Unpair / Forget* the Shaver.
-3. If you used the *GroomTribe* app, ensure the device is removed there as well. The shaver will refuse a new connection if it is still "bonded" to a mobile app.
+3. If you used the [GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) app, ensure the device is removed there as well. The shaver will refuse a new connection if it is still "bonded" to a mobile app.
 
 ### Step 1: OS-Level Pairing with `bluetoothctl`
 

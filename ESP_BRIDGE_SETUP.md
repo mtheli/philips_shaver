@@ -116,7 +116,7 @@ pairing succeeded. If you don't see this, check the troubleshooting section belo
 ### Pairing fails (no `auth success` in logs)
 
 - Ensure the shaver is **not connected to your phone** (disconnect Bluetooth or
-  close the GroomTribe app)
+  close the [GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) app)
 - The shaver must be **powered on or on the charging stand**
 - Pairing is handled automatically on connect — no manual button press required
 - The SMP parameters in the component work across all ESP32 boards
