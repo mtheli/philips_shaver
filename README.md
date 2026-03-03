@@ -8,9 +8,7 @@ This is a custom component for Home Assistant to integrate **Philips Bluetooth-e
 
 The integration connects to your shaver via **Bluetooth Low Energy (BLE)** to provide status, usage, and advanced telemetry data. It automatically detects the capabilities of your specific model during setup to only show relevant entities.
 
-| Discovery | Capabilities | Device | Diagnostics |
-| :---: | :---: | :---: | :---: |
-| ![Discovery](./images/discovery.png) | ![Capabilities](./images/capabilities.png) | ![Device](./images/device.png) | ![Diagnostics](./images/diagnostic.png) |
+![Device overview in Home Assistant](./images/device.png)
 
 Two connection methods are supported:
 
@@ -180,6 +178,12 @@ The integration communicates directly via BLE — no cloud, no app required. All
 The shaver exposes multiple GATT services with individual characteristics for each data point (battery, motor, pressure, light ring, etc.). Data is read directly from these characteristics and live updates are received via GATT notifications.
 
 For a detailed technical description of the BLE protocol including service UUIDs, characteristic reference, data formats, and capability flags, see [PROTOCOL.md](PROTOCOL.md).
+
+## Screenshots
+
+| Discovery | Capabilities | Device | Diagnostics |
+| :---: | :---: | :---: | :---: |
+| ![Discovery](./images/discovery.png) | ![Capabilities](./images/capabilities.png) | ![Device](./images/device.png) | ![Diagnostics](./images/diagnostic.png) |
 
 ## License
 
