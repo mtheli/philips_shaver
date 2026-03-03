@@ -8,10 +8,12 @@ This is a custom component for Home Assistant to integrate **Philips Bluetooth-e
 
 ![Screenshot of the device inHA](./images/screenshot.png)
 
-The integration connects to your shaver via **Bluetooth Low Energy (BLE)** to provide status, usage, and advanced telemetry data. It automatically detects the capabilities of your specific model during setup to only show relevant entities and employs a dual-connection approach:
+The integration connects to your shaver via **Bluetooth Low Energy (BLE)** to provide status, usage, and advanced telemetry data. It automatically detects the capabilities of your specific model during setup to only show relevant entities.
 
-1.  **Live Connection:** A persistent connection is maintained while the device is in range and active, offering instant updates for shaving status, motor metrics, and cleaning progress.
-2.  **Poll Fallback:** A periodic poll (every 60 seconds) runs as a fallback to retrieve data when the device is in standby.
+Two connection methods are supported:
+
+1.  **Direct Bluetooth** — connects from the HA host's Bluetooth adapter. Uses a persistent live connection with a poll fallback.
+2.  **ESP32 BLE Bridge** — an ESP32 running ESPHome acts as a wireless BLE relay. Ideal when the shaver is out of Bluetooth range of the HA host. See the [ESP Bridge Setup Guide](ESP_BRIDGE_SETUP.md) for instructions.
 
 ---
 
@@ -57,8 +59,8 @@ This integration creates a new device for your shaver and provides the following
 
 ## Prerequisites
 
-* A Home Assistant instance with the **Bluetooth integration** enabled and a working Bluetooth adapter.
 * A compatible Philips Shaver (e.g., i9000/XP9201).
+* **Either** a Home Assistant instance with the **Bluetooth integration** enabled and a working Bluetooth adapter, **or** an ESP32 running the [BLE bridge component](ESP_BRIDGE_SETUP.md).
 * *Exclusive Connection:* The shaver supports only one active connection at a time.
 * *GroomTribe App:* You must unpair/remove the shaver from any other devices (especially smartphones with the manufacturer's "GroomTribe" app) before Home Assistant can connect.
 
@@ -81,9 +83,11 @@ This integration creates a new device for your shaver and provides the following
 
 ---
 
-## Configuration (Pairing)
+## Configuration
 
-This integration requires that the shaver be **paired at the operating system (OS) level** of your Home Assistant host before you can add the integration in Home Assistant.
+### Option A: Direct Bluetooth (Pairing)
+
+This method requires that the shaver be **paired at the operating system (OS) level** of your Home Assistant host before you can add the integration.
 
 ### Step 0: Clear Existing Connections (Crucial)
 
@@ -149,13 +153,21 @@ Once the OS-level pairing is complete, proceed to add the integration via the Ho
 3.  Enter the **MAC Address** (e.g., `AA:BB:CC:11:22:33`) you used in Step 1.
 4.  Click **Submit**.
 
+### Option B: ESP32 BLE Bridge
+
+If your Home Assistant host is too far from the shaver for a direct Bluetooth connection, you can use an ESP32 as a wireless BLE bridge. The ESP32 connects to the shaver and relays data to HA over WiFi.
+
+This is **not** a standard ESPHome Bluetooth Proxy — it is a custom component that handles the shaver's LE Secure Connections pairing and provides full read/write/subscribe access to all GATT characteristics.
+
+For the complete setup guide, see **[ESP_BRIDGE_SETUP.md](ESP_BRIDGE_SETUP.md)**.
+
 ---
 
 ## Troubleshooting & Caveats
 
 * *Connection Conflict*: If the integration fails to set up, ensure no smartphone is currently connected to the shaver.
-* *ESPHome Bluetooth Proxy*: This integration requires a *direct active Bluetooth connection* for real-time telemetry. Therefore, it is not possible to use an ESPHome Bluetooth Proxy. The shaver must be within direct range of the Home Assistant host's Bluetooth adapter.
-* *Stability:* Bluetooth signals are weak. Ensure your Home Assistant host is placed as close to the shaver's location as possible.
+* *ESPHome Bluetooth Proxy*: The standard ESPHome Bluetooth Proxy does **not** work with this shaver because it requires LE Secure Connections pairing. Use the dedicated [ESP32 BLE Bridge](ESP_BRIDGE_SETUP.md) instead.
+* *Stability:* Bluetooth signals are weak. Ensure your HA host or ESP32 bridge is placed as close to the shaver's location as possible.
 
 ---
 
