@@ -6,8 +6,6 @@ from datetime import timedelta, datetime
 import logging
 from typing import Any
 
-from bleak import BleakClient
-
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.config_entries import ConfigEntry
@@ -15,11 +13,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.components.bluetooth import (
     BluetoothCallbackMatcher,
     BluetoothScanningMode,
-    async_last_service_info,
     async_register_callback,
 )
 
-from . import bluetooth as shaver_bluetooth
+from .transport import ShaverTransport
+from .exceptions import TransportError
 from .const import (
     CHAR_AMOUNT_OF_CHARGES,
     CHAR_AMOUNT_OF_OPERATIONAL_TURNS,
@@ -58,6 +56,7 @@ from .const import (
     CHAR_SHAVING_MODE_SETTINGS,
     CHAR_CUSTOM_SHAVING_MODE_SETTINGS,
     CONF_CAPABILITIES,
+    CONF_ESP_DEVICE_NAME,
     CONF_POLL_INTERVAL,
     CONF_ENABLE_LIVE_UPDATES,
     DEFAULT_ENABLE_LIVE_UPDATES,
@@ -74,6 +73,27 @@ from .utils import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Characteristics to subscribe for live notifications
+NOTIFICATION_CHARS = [
+    CHAR_DEVICE_STATE,
+    CHAR_TRAVEL_LOCK,
+    CHAR_BATTERY_LEVEL,
+    CHAR_AMOUNT_OF_CHARGES,
+    CHAR_AMOUNT_OF_OPERATIONAL_TURNS,
+    CHAR_CLEANING_PROGRESS,
+    CHAR_CLEANING_CYCLES,
+    CHAR_MOTOR_RPM,
+    CHAR_MOTOR_CURRENT,
+    CHAR_PRESSURE,
+    CHAR_HEAD_REMAINING,
+    CHAR_HEAD_REMAINING_MINUTES,
+    CHAR_SHAVING_TIME,
+    CHAR_SHAVING_MODE_SETTINGS,
+    CHAR_TOTAL_AGE,
+    CHAR_HANDLE_LOAD_TYPE,
+    CHAR_MOTION_TYPE,
+]
+
 
 class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Data update coordinator for Philips Shaver."""
@@ -82,10 +102,12 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self,
         hass: HomeAssistant,
         entry: ConfigEntry,
+        transport: ShaverTransport,
     ) -> None:
         """Initialize the coordinator."""
         self.entry = entry
-        self.address = entry.data["address"]
+        self.address = entry.data.get("address") or entry.data.get(CONF_ESP_DEVICE_NAME, "unknown")
+        self.transport = transport
 
         # reading capabilities
         cap_int = entry.data.get(CONF_CAPABILITIES, 0)
@@ -99,9 +121,12 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             CONF_ENABLE_LIVE_UPDATES, DEFAULT_ENABLE_LIVE_UPDATES
         )
 
-        self.live_client: BleakClient | None = None
+        self._poll_chars = list(POLL_READ_CHARS)
+        self._live_chars = list(LIVE_READ_CHARS)
+
         self._connection_lock = asyncio.Lock()
         self._live_task: asyncio.Task | None = None
+        self._live_setup_done = False
 
         _LOGGER.debug(
             "Initializing coordinator for %s with poll interval %s seconds (live updates: %s)",
@@ -116,7 +141,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(seconds=self.poll_interval_seconds),
         )
 
-        # Initialer leerer Datensatz
+        # Initial empty dataset
         self.data = {
             "battery": None,
             "firmware": None,
@@ -162,16 +187,16 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.info("Live updates disabled – polling only")
 
     async def _async_start_advertisement_logging(self) -> None:
-        """Loggt jedes Advertisement des Rasierers (super hilfreich beim Debuggen)."""
+        """Log every advertisement from the shaver (useful for debugging)."""
 
         @callback
         def _advertisement_debug_callback(service_info, change):
             adv = service_info.advertisement
-            _LOGGER.debug(  # debug statt warning → nicht so laut
+            _LOGGER.debug(
                 "ADVERTISEMENT %s | Name: %s | RSSI: %s dBm | "
                 "Mfr: %s | SvcData: %s | SvcUUIDs: %s",
                 service_info.address,
-                service_info.name or "unbekannt",
+                service_info.name or "unknown",
                 service_info.rssi,
                 (
                     {k: v.hex() for k, v in adv.manufacturer_data.items()}
@@ -186,7 +211,6 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 adv.service_uuids or "none",
             )
 
-        # Nur für dieses eine Gerät loggen
         self._unsub_adv_debug = async_register_callback(
             self.hass,
             _advertisement_debug_callback,
@@ -195,22 +219,20 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
 
     # ------------------------------------------------------------------
-    # Wird vom Coordinator automatisch aufgerufen (Polling)
+    # Called automatically by the coordinator (polling)
     # ------------------------------------------------------------------
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data via polling fallback."""
 
-        # 1. Live-Verbindung aktiv → sofort überspringen
-        if self.live_client and self.live_client.is_connected:
+        # 1. Live connection active → skip polling
+        if self.transport.is_connected:
             _LOGGER.debug("Live connection active – polling skipped")
             return self.data or {}
 
-        # if data is null
         if self.data is None:
-            # Fallback initialisieren, falls self.data None ist
             self.data = {}
 
-        # 2. Wir hatten vor weniger als 2 Minuten Live-Daten → auch überspringen!
+        # 2. Recent data within poll interval → skip
         last_seen = self.data.get("last_seen")
         if last_seen:
             age = (datetime.now() - last_seen).total_seconds()
@@ -225,17 +247,13 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         async with self._connection_lock:
             try:
-                results = await shaver_bluetooth.connect_and_read(
-                    self.hass,
-                    self.address,
-                    POLL_READ_CHARS,
-                )
+                results = await self.transport.read_chars(self._poll_chars)
                 return self._process_results(results)
             except Exception as err:
                 raise UpdateFailed(f"Error communicating with device: {err}") from err
 
     # ------------------------------------------------------------------
-    # Gemeinsame Verarbeitung für Poll + Live
+    # Shared processing for poll + live
     # ------------------------------------------------------------------
     def _process_results(self, results: dict[str, bytes | None]) -> dict[str, Any]:
         """Process raw GATT values into coordinator data – using proper constants."""
@@ -257,7 +275,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if raw := results.get(CHAR_SERIAL_NUMBER):
             new_data["serial_number"] = raw.decode("utf-8", "ignore").strip()
 
-        # === Philips-spezifische Characteristics ===
+        # === Philips-specific Characteristics ===
         if raw := results.get(CHAR_HEAD_REMAINING):
             new_data["head_remaining"] = raw[0]
 
@@ -311,7 +329,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if raw := results.get(CHAR_AMOUNT_OF_OPERATIONAL_TURNS):
             new_data["amount_of_operational_turns"] = int.from_bytes(raw, "little")
 
-        # === Farben – mit Konstanten aus const.py ===
+        # === Colors ===
         color_map = {
             CHAR_LIGHTRING_COLOR_LOW: "color_low",
             CHAR_LIGHTRING_COLOR_OK: "color_ok",
@@ -354,94 +372,85 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             new_data["handle_load_type_value"] = load_value
             new_data["handle_load_type"] = HANDLE_LOAD_TYPES.get(load_value, "unknown")
 
-        # Motion Type
         # Motion Type (uint8 – single byte, as per app FORMAT_UINT8)
         if raw := results.get(CHAR_MOTION_TYPE):
             new_data["motion_type_value"] = raw[0]
 
-        # Immer aktualisieren – wichtig für "available"
+        # Always update – important for "available"
         new_data["last_seen"] = datetime.now()
         return new_data
 
     async def _start_live_monitoring(self) -> None:
-        """Dauerhafte Live-Verbindung mit Notifications – exklusiv und intelligent."""
+        """Persistent live connection with notifications – exclusive and intelligent."""
         backoff = 5
         max_backoff = 300
 
         while True:
-            # Nur versuchen, wenn gerade niemand verbunden ist
             async with self._connection_lock:
                 try:
-                    service_info = async_last_service_info(self.hass, self.address)
-                    if not service_info:
-                        _LOGGER.debug(
-                            "Device %s not in range – retrying in %ds",
-                            self.address,
-                            backoff,
-                        )
-                        await asyncio.sleep(backoff)
-                        backoff = min(backoff * 2, max_backoff)
-                        continue
-
-                    # Reset backoff bei Sichtkontakt
-                    backoff = 5
-
-                    if self.live_client and self.live_client.is_connected:
-                        # Sollte nie passieren – aber sicher
+                    if self.transport.is_connected and self._live_setup_done:
                         await asyncio.sleep(5)
                         continue
 
-                    def _on_disconnect(_client):
+                    def _on_disconnect():
                         _LOGGER.info("Live connection lost (remote disconnect)")
-                        self.live_client = None
-                        self.hass.async_create_task(self._stop_all_notifications())
+
+                    self.transport.set_disconnect_callback(_on_disconnect)
 
                     _LOGGER.info("Establishing live connection to %s...", self.address)
-                    client = await shaver_bluetooth.establish_connection(
-                        BleakClient,
-                        service_info.device,
-                        "philips_shaver",
-                        disconnected_callback=_on_disconnect,
-                        timeout=15.0,
-                    )
+                    await self.transport.connect()
 
-                    self.live_client = client
+                    # Reset backoff on successful connection
+                    backoff = 5
 
-                    # Initial alle LIVE-Chars lesen
+                    # Initial read of all live chars
                     results = {}
-                    for uuid in LIVE_READ_CHARS:
+                    for uuid in self._live_chars:
                         try:
-                            value = await client.read_gatt_char(uuid)
-                            results[uuid] = bytes(value) if value else None
+                            value = await self.transport.read_char(uuid)
+                            results[uuid] = value
                         except Exception as e:
                             _LOGGER.debug(
                                 "Live initial read failed for %s: %s", uuid, e
                             )
 
+                    # If ALL reads failed, the bridge is not ready
+                    if not any(v is not None for v in results.values()):
+                        raise TransportError(
+                            "No characteristics could be read – bridge may not be ready"
+                        )
+
                     new_data = self._process_results(results)
                     self.async_set_updated_data(new_data)
 
-                    # === Notifications starten ===
+                    # === Start notifications ===
                     await self._start_all_notifications()
+                    self._live_setup_done = True
                     _LOGGER.info("Live monitoring active – polling paused")
+
+                except TransportError as err:
+                    _LOGGER.debug(
+                        "Transport error: %s – retrying in %ds", err, backoff
+                    )
+                    await asyncio.sleep(backoff)
+                    backoff = min(backoff * 2, max_backoff)
+                    continue
 
                 except Exception as err:
                     _LOGGER.error(
                         "Live monitoring error: %s – retrying in %ds", err, backoff
                     )
-                    if self.live_client and self.live_client.is_connected:
-                        try:
-                            await self.live_client.disconnect()
-                        except Exception:
-                            pass
-                    self.live_client = None
+                    try:
+                        await self.transport.disconnect()
+                    except Exception:
+                        pass
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, max_backoff)
                     continue
 
-            # Außerhalb des Locks: warten bis disconnect
+            # Outside the lock: wait until disconnect
             try:
-                while self.live_client and self.live_client.is_connected:
+                while self.transport.is_connected:
                     await asyncio.sleep(1)
             except asyncio.CancelledError:
                 _LOGGER.error("Live connection was cancelled")
@@ -449,120 +458,44 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             except Exception as err:
                 _LOGGER.error("Unexpected error in live monitoring: %s", err)
             finally:
-                await self._stop_all_notifications()
-                self.live_client = None
+                self._live_setup_done = False
+                await self.transport.unsubscribe_all()
                 _LOGGER.info("Live connection ended – polling will resume")
-                await asyncio.sleep(5)  # kurze Pause vor reconnect
+                await asyncio.sleep(5)  # short pause before reconnect
 
-    def _make_live_callback(self, key: str):
-        """Erzeugt einen Live-Callback, der exakt wie _process_results() arbeitet."""
+    def _make_live_callback(self):
+        """Create a single notification callback for all subscribed characteristics."""
 
         @callback
-        def _callback(_sender, data):
+        def _callback(char_uuid: str, data: bytes):
             if not data:
                 return
 
-            # Wir simulieren ein results-Dict mit nur dieser einen Characteristic
-            fake_results = {self._key_to_uuid(key): data}
-
-            # _process_results() macht alles: Typkonvertierung, Mapping, etc.
-            new_data = self._process_results(fake_results)
+            new_data = self._process_results({char_uuid: data})
 
             if new_data == self.data:
-                return  # nichts geändert
+                return  # nothing changed
 
             self.async_set_updated_data(new_data)
 
         return _callback
 
-    def _key_to_uuid(self, key: str) -> str:
-        """Mapps data-key → GATT-UUID (for fake results dict)."""
-        mapping = {
-            "device_state": CHAR_DEVICE_STATE,
-            "travel_lock": CHAR_TRAVEL_LOCK,
-            "battery": CHAR_BATTERY_LEVEL,
-            "amount_of_charges": CHAR_AMOUNT_OF_CHARGES,
-            "amount_of_operational_turns": CHAR_AMOUNT_OF_OPERATIONAL_TURNS,
-            "cleaning_progress": CHAR_CLEANING_PROGRESS,
-            "cleaning_cycles": CHAR_CLEANING_CYCLES,
-            "motor_rpm": CHAR_MOTOR_RPM,
-            "motor_current_ma": CHAR_MOTOR_CURRENT,
-            "pressure": CHAR_PRESSURE,
-            "head_remaining": CHAR_HEAD_REMAINING,
-            "head_remaining_minutes": CHAR_HEAD_REMAINING_MINUTES,
-            "shaving_time": CHAR_SHAVING_TIME,
-            "shaving_settings": CHAR_SHAVING_MODE_SETTINGS,
-            "total_age": CHAR_TOTAL_AGE,
-            "handle_load_type": CHAR_HANDLE_LOAD_TYPE,
-            "motion_type": CHAR_MOTION_TYPE,
-        }
-        return mapping.get(key, "")
-
     async def _start_all_notifications(self) -> None:
-        """Starts all GATT-Notifications for Live-Updates."""
-        if not self.live_client or not self.live_client.is_connected:
+        """Start GATT notifications for live updates."""
+        if not self.transport.is_connected:
             return
 
-        notifications = [
-            (CHAR_DEVICE_STATE, "device_state"),
-            (CHAR_TRAVEL_LOCK, "travel_lock"),
-            (CHAR_BATTERY_LEVEL, "battery"),
-            (CHAR_AMOUNT_OF_CHARGES, "amount_of_charges"),
-            (CHAR_AMOUNT_OF_OPERATIONAL_TURNS, "amount_of_operational_turns"),
-            (CHAR_CLEANING_PROGRESS, "cleaning_progress"),
-            (CHAR_CLEANING_CYCLES, "cleaning_cycles"),
-            (CHAR_MOTOR_RPM, "motor_rpm"),
-            (CHAR_MOTOR_CURRENT, "motor_current_ma"),
-            (CHAR_PRESSURE, "pressure"),
-            (CHAR_HEAD_REMAINING, "head_remaining"),
-            (CHAR_HEAD_REMAINING_MINUTES, "head_remaining_minutes"),
-            (CHAR_SHAVING_TIME, "shaving_time"),
-            (CHAR_SHAVING_MODE_SETTINGS, "shaving_settings"),
-            (CHAR_TOTAL_AGE, "total_age"),
-            (CHAR_HANDLE_LOAD_TYPE, "handle_load_type"),
-            (CHAR_MOTION_TYPE, "motion_type"),
-        ]
-
-        for char_uuid, key in notifications:
+        cb = self._make_live_callback()
+        for char_uuid in NOTIFICATION_CHARS:
             try:
-                await self.live_client.start_notify(
-                    char_uuid, self._make_live_callback(key)
-                )
-                _LOGGER.debug("Started notifications for %s", key)
+                await self.transport.subscribe(char_uuid, cb)
+                _LOGGER.debug("Subscribed to %s", char_uuid)
             except Exception as e:
-                _LOGGER.warning("Failed to start notify %s: %s", key, e)
+                _LOGGER.warning("Failed to subscribe %s: %s", char_uuid, e)
 
     async def _stop_all_notifications(self) -> None:
-        """Stops all GATT-Notifications."""
-        if not self.live_client or not self.live_client.is_connected:
-            return
-
-        char_uuids = [
-            CHAR_DEVICE_STATE,
-            CHAR_TRAVEL_LOCK,
-            CHAR_BATTERY_LEVEL,
-            CHAR_AMOUNT_OF_CHARGES,
-            CHAR_AMOUNT_OF_OPERATIONAL_TURNS,
-            CHAR_CLEANING_PROGRESS,
-            CHAR_CLEANING_CYCLES,
-            CHAR_MOTOR_RPM,
-            CHAR_MOTOR_CURRENT,
-            CHAR_PRESSURE,
-            CHAR_HEAD_REMAINING,
-            CHAR_HEAD_REMAINING_MINUTES,
-            CHAR_SHAVING_TIME,
-            CHAR_SHAVING_MODE_SETTINGS,
-            CHAR_TOTAL_AGE,
-            CHAR_HANDLE_LOAD_TYPE,
-            CHAR_MOTION_TYPE,
-        ]
-
-        for char_uuid in char_uuids:
-            try:
-                await self.live_client.stop_notify(char_uuid)
-                _LOGGER.debug("Stopped notifications for %s", char_uuid)
-            except Exception:
-                pass  # ignore – wird eh disconnected
+        """Stop all GATT notifications."""
+        await self.transport.unsubscribe_all()
 
     # ------------------------------------------------------------------
     # History retrieval
@@ -582,27 +515,14 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         sessions: list[dict[str, Any]] = []
 
         async with self._connection_lock:
-            # Use live client if connected, otherwise establish new connection
-            client = self.live_client if self.live_client and self.live_client.is_connected else None
-            disconnect_after = False
-
-            if not client:
-                service_info = async_last_service_info(self.hass, self.address)
-                if not service_info:
-                    _LOGGER.warning("Device %s not in range for history fetch", self.address)
-                    return sessions
-
-                client = await shaver_bluetooth.establish_connection(
-                    BleakClient,
-                    service_info.device,
-                    "philips_shaver_history",
-                    timeout=15.0,
-                )
-                disconnect_after = True
+            was_connected = self.transport.is_connected
 
             try:
+                if not was_connected:
+                    await self.transport.connect()
+
                 # Step 1: Read sync status → number of sessions available
-                raw = await client.read_gatt_char(CHAR_HISTORY_SYNC_STATUS)
+                raw = await self.transport.read_char(CHAR_HISTORY_SYNC_STATUS)
                 session_count = raw[0] if raw else 0
                 _LOGGER.info("History: %d sessions available", session_count)
 
@@ -615,7 +535,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                     # Timestamp (UINT32, little-endian)
                     try:
-                        raw = await client.read_gatt_char(CHAR_HISTORY_TIMESTAMP)
+                        raw = await self.transport.read_char(CHAR_HISTORY_TIMESTAMP)
                         if raw:
                             timestamp = int.from_bytes(raw[:4], "little")
                             session["timestamp"] = timestamp
@@ -625,7 +545,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                     # Duration (UINT16, little-endian) in seconds
                     try:
-                        raw = await client.read_gatt_char(CHAR_HISTORY_DURATION)
+                        raw = await self.transport.read_char(CHAR_HISTORY_DURATION)
                         if raw:
                             session["duration_seconds"] = int.from_bytes(raw[:2], "little")
                     except Exception as e:
@@ -633,7 +553,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                     # Average current (UINT16, little-endian) in mA
                     try:
-                        raw = await client.read_gatt_char(CHAR_HISTORY_AVG_CURRENT)
+                        raw = await self.transport.read_char(CHAR_HISTORY_AVG_CURRENT)
                         if raw:
                             session["avg_current_ma"] = int.from_bytes(raw[:2], "little")
                     except Exception as e:
@@ -641,7 +561,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                     # RPM (UINT16, little-endian)
                     try:
-                        raw = await client.read_gatt_char(CHAR_HISTORY_RPM)
+                        raw = await self.transport.read_char(CHAR_HISTORY_RPM)
                         if raw:
                             raw_rpm = int.from_bytes(raw[:2], "little")
                             session["avg_rpm"] = int(round(raw_rpm / 3.036))
@@ -653,7 +573,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                     # Advance to next record by writing 0
                     try:
-                        await client.write_gatt_char(
+                        await self.transport.write_char(
                             CHAR_HISTORY_SYNC_STATUS, bytes([0])
                         )
                     except Exception as e:
@@ -663,9 +583,9 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             except Exception as err:
                 _LOGGER.error("History fetch error: %s", err)
             finally:
-                if disconnect_after and client and client.is_connected:
+                if not was_connected:
                     try:
-                        await client.disconnect()
+                        await self.transport.disconnect()
                     except Exception:
                         pass
 
@@ -676,8 +596,8 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return sessions
 
     async def async_shutdown(self) -> None:
-        """Wird beim Unload aufgerufen – räumt alles sauber auf."""
-        await self._stop_all_notifications()
+        """Called on unload – clean up everything."""
+        await self.transport.unsubscribe_all()
 
         if hasattr(self, "_unsub_adv_debug") and self._unsub_adv_debug:
             self._unsub_adv_debug()
@@ -690,8 +610,4 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             except asyncio.CancelledError:
                 pass
 
-        if self.live_client and self.live_client.is_connected:
-            try:
-                await self.live_client.disconnect()
-            except Exception:
-                pass
+        await self.transport.disconnect()

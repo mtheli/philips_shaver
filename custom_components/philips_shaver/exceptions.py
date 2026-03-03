@@ -11,3 +11,11 @@ class DeviceNotFoundException(PhilipsShaverException):
 
 class CannotConnectException(PhilipsShaverException):
     """Cannot connect to the device."""
+
+
+class NotPairedException(PhilipsShaverException):
+    """Device is not paired at OS level."""
+
+
+class TransportError(PhilipsShaverException):
+    """Transport-level communication error."""

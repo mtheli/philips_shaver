@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 
 from .coordinator import PhilipsShaverCoordinator
-from .const import DOMAIN
+from .const import DOMAIN, CONF_TRANSPORT_TYPE, TRANSPORT_ESP_BRIDGE, CONF_ESP_DEVICE_NAME
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,16 +29,25 @@ class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
         """Initialize the entity."""
         super().__init__(coordinator)
         self.entry = entry
-        self._address = entry.data["address"]
+        self._is_esp_bridge = (
+            entry.data.get(CONF_TRANSPORT_TYPE) == TRANSPORT_ESP_BRIDGE
+        )
+
+        # Device identifier: MAC for BLE, esp_device_name for ESP bridge
+        if self._is_esp_bridge:
+            self._device_id = entry.data[CONF_ESP_DEVICE_NAME]
+        else:
+            self._device_id = entry.data["address"]
 
         # Device-Info wird beim ersten Mal gesetzt
-        self._attr_device_info = dr.DeviceInfo(
-            identifiers={(DOMAIN, self._address)},
-            connections={(dr.CONNECTION_BLUETOOTH, self._address)},
+        device_info = dr.DeviceInfo(
+            identifiers={(DOMAIN, self._device_id)},
             manufacturer="Philips",
             name="Philips Shaver",
-            # Model und Firmware kommen später → werden in _handle_coordinator_update aktualisiert
         )
+        if not self._is_esp_bridge:
+            device_info["connections"] = {(dr.CONNECTION_BLUETOOTH, self._device_id)}
+        self._attr_device_info = device_info
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -60,7 +69,7 @@ class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
         if model_changed or fw_changed:
             device_registry = dr.async_get(self.hass)
             device = device_registry.async_get_device(
-                    identifiers={(DOMAIN, self._address)}
+                    identifiers={(DOMAIN, self._device_id)}
                 )
 
             if device:
@@ -87,8 +96,17 @@ class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
 
     @property
     def available(self) -> bool:
-        """Return True if the device is currently in Bluetooth range."""
+        """Return True if the device is reachable (BLE range or ESP bridge data)."""
 
-        # Checking if the device is currently in range
-        service_info = async_last_service_info(self.hass, self._address)
-        return service_info is not None
+        if not self._is_esp_bridge:
+            # Direct BLE: check if device is advertising
+            service_info = async_last_service_info(self.hass, self._device_id)
+            if service_info is not None:
+                return True
+
+        # ESP bridge / BLE fallback: check last_seen freshness (10 min timeout)
+        last_seen = self.coordinator.data.get("last_seen") if self.coordinator.data else None
+        if last_seen:
+            return (datetime.now() - last_seen).total_seconds() < 600
+
+        return False
