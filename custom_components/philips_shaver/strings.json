@@ -18,8 +18,29 @@
     "flow_title": "Philips Shaver ({name})",
     "step": {
       "user": {
-        "title": "Add Philips Shaver manually",
-        "description": "Enter the Bluetooth MAC address of the shaver."
+        "title": "Add Philips Shaver",
+        "description": "Choose how to connect to your shaver.",
+        "menu_options": {
+          "user_bleak": "Direct Bluetooth",
+          "esp_bridge": "ESP32 Bridge (ESPHome)"
+        }
+      },
+      "user_bleak": {
+        "title": "Direct Bluetooth",
+        "description": "Enter the Bluetooth MAC address of the shaver.",
+        "data": {
+          "address": "MAC Address"
+        }
+      },
+      "esp_bridge": {
+        "title": "ESP32 Bridge (ESPHome)",
+        "description": "Select the ESPHome device that acts as the BLE bridge for your shaver.",
+        "data": {
+          "esp_device_name": "ESPHome Bridge Device"
+        },
+        "data_description": {
+          "esp_device_name": "The ESPHome device that runs the Philips Shaver BLE bridge component."
+        }
       },
       "bluetooth_confirm": {
         "title": "Confirm detected device",
@@ -27,13 +48,15 @@
       },
       "show_capabilities": {
         "title": "Hardware Capabilities detected",
-        "description": "🔗 Successfully connected to **{name}**.\n\n**Detected Capability Code:** {capability_value}\n\n**GATT Service Status:**\n{services}\n\n**Legend:**\n✅ Service found & supported\n❌ Expected service missing\n❔ Unknown service from device\n\nClick Submit to finish the setup."
+        "description": "Successfully connected to **{name}**.\n\n**Hardware Capabilities:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legend:**\n✅ Service found & supported\n❌ Expected service missing\n❔ Unknown service from device\n\nClick Submit to finish the setup."
       }
     },
     "error": {
       "abort_if_unique_id_configured": "This device is already configured.",
+      "no_esphome_devices": "No ESPHome devices found. Please set up an ESPHome device with the BLE bridge component first. See the [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/ESP_BRIDGE_SETUP.md) for instructions.",
       "cannot_connect": "Failed to connect to the shaver. Please ensure it is powered on, in range, and not connected to another device (e.g. your phone).",
       "device_not_found": "Device not found. Please ensure it is powered on and in range.",
+      "not_paired": "The shaver is not paired with this system. Please pair it first using `bluetoothctl pair <MAC>` via SSH. See the README for detailed instructions.",
       "unknown": "Unexpected error. Please check the logs."
     },
     "abort": {

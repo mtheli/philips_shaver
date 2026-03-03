@@ -17,6 +17,7 @@ from homeassistant.components.bluetooth import (
     async_ble_device_from_address,
 )
 from bleak import BleakClient
+from bleak.exc import BleakError
 from bleak_retry_connector import BleakConnectionError, establish_connection
 
 from homeassistant.helpers.selector import (
@@ -24,13 +25,23 @@ from homeassistant.helpers.selector import (
     NumberSelectorConfig,
     NumberSelectorMode,
     BooleanSelector,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectOptionDict,
 )
-from .exceptions import DeviceNotFoundException, CannotConnectException
-
 from .const import (
     DOMAIN,
     PHILIPS_SERVICE_UUIDS,
     CHAR_CAPABILITIES,
+    CHAR_BATTERY_LEVEL,
+    CHAR_MODEL_NUMBER,
+    CHAR_DEVICE_STATE,
+    CHAR_HISTORY_SYNC_STATUS,
+    SVC_BATTERY,
+    SVC_DEVICE_INFO,
+    SVC_PLATFORM,
+    SVC_HISTORY,
+    SVC_CONTROL,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_ENABLE_LIVE_UPDATES,
     MIN_POLL_INTERVAL,
@@ -39,13 +50,24 @@ from .const import (
     CONF_POLL_INTERVAL,
     CONF_ENABLE_LIVE_UPDATES,
     CONF_CAPABILITIES,
+    CONF_TRANSPORT_TYPE,
+    TRANSPORT_BLEAK,
+    TRANSPORT_ESP_BRIDGE,
+    CONF_ESP_DEVICE_NAME,
+)
+from .transport import EspBridgeTransport
+from .exceptions import (
+    DeviceNotFoundException,
+    CannotConnectException,
+    NotPairedException,
+    TransportError,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class PhilipsShaverOptionsFlow(OptionsFlowWithReload):
-    """Options flow für Philips Shaver."""
+    """Options flow for Philips Shaver."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -107,10 +129,12 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
     discovery_info: BluetoothServiceInfoBleak | None = None
 
-    # Zwischenspeicher für Daten zwischen den Steps
+    # Intermediate data storage between steps
     fetched_data: dict[str, Any] | None = None
     fetched_address: str | None = None
     fetched_name: str | None = None
+    fetched_transport_type: str | None = None
+    fetched_esp_device_name: str | None = None
 
     async def _async_fetch_capabilities(
         self,
@@ -119,14 +143,10 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         """Connect to the BLE device and read its capabilities."""
         capabilities: dict[str, Any] = {}
 
-        # getting BLE device
         device = async_ble_device_from_address(self.hass, address)
         if not device:
             raise DeviceNotFoundException("BLE device not found")
 
-        # connecting to the device using retry connector
-        # Note: We use standard BleakClient here for discovery,
-        # coordinator will use InitialGattCache later.
         try:
             client: BleakClient | None = None
             client = await establish_connection(
@@ -137,23 +157,38 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 raise CannotConnectException("BLE connection failed")
             _LOGGER.info("Connected to %s, address=%s", device.name, address)
 
-            # getting services
             _LOGGER.info("Reading services from %s...", address)
             services = client.services
             capabilities["services"] = [str(s.uuid) for s in services]
 
-            # reading capabilities characteristic
             _LOGGER.info("Reading capabilities from %s...", address)
             if services.get_characteristic(CHAR_CAPABILITIES):
-                raw_cap = await client.read_gatt_char(CHAR_CAPABILITIES)
+                try:
+                    raw_cap = await client.read_gatt_char(CHAR_CAPABILITIES)
+                except BleakError as err:
+                    err_msg = str(err).lower()
+                    if any(
+                        hint in err_msg
+                        for hint in (
+                            "notpermitted",
+                            "not permitted",
+                            "authentication",
+                            "security",
+                            "insufficient",
+                        )
+                    ):
+                        raise NotPairedException from err
+                    raise CannotConnectException from err
+
                 if raw_cap:
-                    # WICHTIG: Als Int speichern für JSON Serialisierung
                     cap_int = int.from_bytes(raw_cap, "little")
                     capabilities["capabilities"] = cap_int
+                else:
+                    raise NotPairedException(
+                        "Could not read characteristics – device may not be paired"
+                    )
             else:
-                capabilities["capabilities"] = (
-                    0  # Fallback 0 statt None für einfachere Handhabung
-                )
+                capabilities["capabilities"] = 0
 
         except (BleakConnectionError, TimeoutError) as err:
             _LOGGER.error("Connection error during capabilities fetch: %s", err)
@@ -170,7 +205,6 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
         self.discovery_info = discovery_info
 
-        # Direkt zur Bestätigung, Unpaired-Check entfernt
         return await self.async_step_bluetooth_confirm()
 
     async def async_step_bluetooth_confirm(
@@ -182,21 +216,21 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
-                # 1. Daten holen
                 capabilities = await self._async_fetch_capabilities(
                     self.discovery_info.address
                 )
 
-                # 2. Daten zwischenspeichern
                 self.fetched_data = capabilities
                 self.fetched_address = self.discovery_info.address
                 self.fetched_name = (
                     self.discovery_info.name or self.discovery_info.address
                 )
 
-                # 3. Weiterleiten zur Anzeige (statt create_entry)
                 return await self.async_step_show_capabilities()
 
+            except NotPairedException:
+                _LOGGER.error("Device %s is not paired", self.discovery_info.address)
+                errors["base"] = "not_paired"
             except Exception:
                 _LOGGER.error(
                     "Setup failed: Unable to connect to the device or fetch capabilities"
@@ -218,7 +252,16 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle a flow initialized by the user (manual MAC address entry)."""
+        """Handle a flow initialized by the user — choose connection type."""
+        return self.async_show_menu(
+            step_id="user",
+            menu_options=["user_bleak", "esp_bridge"],
+        )
+
+    async def async_step_user_bleak(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle manual MAC address entry for direct BLE."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -227,17 +270,17 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             self._abort_if_unique_id_configured()
 
             try:
-                # 1. Daten holen
                 capabilities = await self._async_fetch_capabilities(address)
 
-                # 2. Daten zwischenspeichern
                 self.fetched_data = capabilities
                 self.fetched_address = address
                 self.fetched_name = address
 
-                # 3. Weiterleiten zur Anzeige
                 return await self.async_step_show_capabilities()
 
+            except NotPairedException:
+                _LOGGER.error("Device %s is not paired", address)
+                errors["base"] = "not_paired"
             except Exception:
                 _LOGGER.error(
                     "Setup failed: Unable to connect to the device or fetch capabilities"
@@ -246,7 +289,132 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
         data_schema = vol.Schema({vol.Required("address"): str})
         return self.async_show_form(
-            step_id="user",
+            step_id="user_bleak",
+            data_schema=data_schema,
+            errors=errors,
+        )
+
+    # Map each service to one representative characteristic for probing
+    SERVICE_PROBE_CHARS: dict[str, str] = {
+        SVC_BATTERY: CHAR_BATTERY_LEVEL,
+        SVC_DEVICE_INFO: CHAR_MODEL_NUMBER,
+        SVC_PLATFORM: CHAR_DEVICE_STATE,
+        SVC_HISTORY: CHAR_HISTORY_SYNC_STATUS,
+        SVC_CONTROL: CHAR_CAPABILITIES,
+    }
+
+    async def _async_fetch_capabilities_esp(
+        self,
+        address: str,
+        esp_device_name: str,
+    ) -> dict[str, Any]:
+        """Read capabilities and probe services via ESP32 bridge."""
+        transport = EspBridgeTransport(self.hass, address, esp_device_name)
+        try:
+            await transport.connect()
+
+            # Read capabilities first — proves bridge ↔ shaver connectivity
+            raw_cap = await transport.read_char(CHAR_CAPABILITIES)
+            if raw_cap is None:
+                raise CannotConnectException(
+                    "Could not read capabilities via ESP bridge – shaver may not be connected"
+                )
+
+            cap_int = int.from_bytes(raw_cap, "little")
+
+            # Probe each service with one representative characteristic
+            found_services: list[str] = []
+            for svc_uuid, probe_char in self.SERVICE_PROBE_CHARS.items():
+                if probe_char == CHAR_CAPABILITIES:
+                    # Already read successfully above
+                    found_services.append(svc_uuid)
+                    continue
+                raw = await transport.read_char(probe_char)
+                if raw is not None:
+                    found_services.append(svc_uuid)
+
+            return {
+                "services": found_services,
+                "capabilities": cap_int,
+            }
+
+        except TransportError as err:
+            raise CannotConnectException(str(err)) from err
+
+        finally:
+            await transport.disconnect()
+
+    def _get_esphome_device_options(self) -> list[SelectOptionDict]:
+        """Build a list of available ESPHome devices for the selector."""
+        esphome_entries = self.hass.config_entries.async_entries("esphome")
+        options: list[SelectOptionDict] = []
+        for entry in esphome_entries:
+            device_name = entry.data.get("device_name")
+            if device_name:
+                options.append(
+                    SelectOptionDict(
+                        value=device_name,
+                        label=f"{entry.title} ({device_name})",
+                    )
+                )
+        return options
+
+    async def async_step_esp_bridge(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle ESP32 bridge configuration."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            esp_device_name = user_input["esp_device_name"].strip().replace("-", "_")
+
+            await self.async_set_unique_id(f"esp_{esp_device_name}")
+            self._abort_if_unique_id_configured()
+
+            try:
+                capabilities = await self._async_fetch_capabilities_esp(
+                    esp_device_name, esp_device_name
+                )
+
+                self.fetched_data = capabilities
+                self.fetched_address = None
+                self.fetched_name = esp_device_name
+                self.fetched_transport_type = TRANSPORT_ESP_BRIDGE
+                self.fetched_esp_device_name = esp_device_name
+
+                return await self.async_step_show_capabilities()
+
+            except CannotConnectException:
+                _LOGGER.error(
+                    "ESP bridge setup failed: unable to read from shaver via %s",
+                    esp_device_name,
+                )
+                errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception("Unexpected error in ESP bridge setup")
+                errors["base"] = "unknown"
+
+        esp_options = self._get_esphome_device_options()
+
+        if esp_options:
+            data_schema = vol.Schema(
+                {
+                    vol.Required("esp_device_name"): SelectSelector(
+                        SelectSelectorConfig(options=esp_options)
+                    ),
+                }
+            )
+        else:
+            # Fallback to text input if no ESPHome devices found
+            data_schema = vol.Schema(
+                {
+                    vol.Required("esp_device_name"): str,
+                }
+            )
+            errors["base"] = "no_esphome_devices"
+
+        return self.async_show_form(
+            step_id="esp_bridge",
             data_schema=data_schema,
             errors=errors,
         )
@@ -259,27 +427,32 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         if self.fetched_data is None:
             return await self.async_step_user()
 
-        # Wenn der User bestätigt -> Eintrag erstellen
         if user_input is not None:
+            entry_data: dict[str, Any] = {
+                CONF_CAPABILITIES: self.fetched_data.get("capabilities", 0),
+            }
+
+            if self.fetched_transport_type == TRANSPORT_ESP_BRIDGE:
+                entry_data[CONF_TRANSPORT_TYPE] = TRANSPORT_ESP_BRIDGE
+                entry_data[CONF_ESP_DEVICE_NAME] = self.fetched_esp_device_name
+            else:
+                entry_data[CONF_ADDRESS] = self.fetched_address
+
             return self.async_create_entry(
                 title=f"Philips Shaver ({self.fetched_name})",
-                data={
-                    CONF_ADDRESS: self.fetched_address,
-                    CONF_CAPABILITIES: self.fetched_data.get("capabilities", 0),
-                },
+                data=entry_data,
                 options={
                     CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL,
                     CONF_ENABLE_LIVE_UPDATES: DEFAULT_ENABLE_LIVE_UPDATES,
                 },
             )
 
-        # helper method to get services status text
         services_text = self._get_service_status_text(
             self.fetched_data.get("services", [])
         )
 
-        # getting capability value for display
         cap_val = self.fetched_data.get("capabilities", 0)
+        capabilities_text = self._get_capabilities_text(cap_val)
 
         return self.async_show_form(
             step_id="show_capabilities",
@@ -287,7 +460,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             description_placeholders={
                 "name": str(self.fetched_name),
                 "services": services_text,
-                "capability_value": f"{cap_val} (0x{cap_val:02X})",
+                "capabilities": capabilities_text,
             },
         )
 
@@ -299,10 +472,30 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         """Create the options flow."""
         return PhilipsShaverOptionsFlow()
 
-    def _get_service_status_text(self, fetched_uuids: list[str]) -> str:
-        """Vergleicht gefundene Services mit PHILIPS_SERVICE_UUIDS und gibt formatierten Text zurück."""
+    CAPABILITY_FLAGS = [
+        (0, "Motion Sensing"),
+        (1, "Brush Programs"),
+        (2, "Motion Speed Sensing"),
+        (3, "Pressure Feedback"),
+        (4, "Unit Cleaning"),
+        (5, "Cleaning Mode"),
+        (6, "Light Ring"),
+    ]
 
-        # Listen normalisieren (Kleinschreibung)
+    @staticmethod
+    def _get_capabilities_text(cap_val: int) -> str:
+        """Format capability flags as human-readable checklist."""
+        lines: list[str] = []
+        for bit, name in PhilipsShaverConfigFlow.CAPABILITY_FLAGS:
+            if cap_val & (1 << bit):
+                lines.append(f"✅ {name}")
+            else:
+                lines.append(f"⬜ {name}")
+        return "\n".join(lines)
+
+    def _get_service_status_text(self, fetched_uuids: list[str]) -> str:
+        """Compare found services with PHILIPS_SERVICE_UUIDS and return formatted text."""
+
         fetched_lower = [s.lower() for s in fetched_uuids]
         required_lower = [s.lower() for s in PHILIPS_SERVICE_UUIDS]
 
@@ -310,17 +503,14 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         missing_required = []
         unknown_services = []
 
-        # 1. Erwartete Services prüfen (sortiert)
         for uuid in sorted(required_lower):
             if uuid in fetched_lower:
                 found_required.append(f"✅ {uuid}")
             else:
                 missing_required.append(f"❌ {uuid}")
 
-        # 2. Unbekannte Services identifizieren (sortiert)
         for uuid in sorted(fetched_lower):
             if uuid not in required_lower:
                 unknown_services.append(f"❔ {uuid}")
 
-        # Alles zusammenführen
         return "\n".join(found_required + missing_required + unknown_services)

@@ -8,9 +8,16 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
+from homeassistant.helpers import device_registry as dr
 
-from .const import DOMAIN
+from .const import (
+    DOMAIN,
+    CONF_TRANSPORT_TYPE,
+    TRANSPORT_ESP_BRIDGE,
+    CONF_ESP_DEVICE_NAME,
+)
 from .coordinator import PhilipsShaverCoordinator
+from .transport import BleakTransport, EspBridgeTransport
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -19,20 +26,68 @@ PLATFORMS = [Platform.SENSOR, Platform.LIGHT, Platform.SELECT, Platform.BINARY_S
 SERVICE_FETCH_HISTORY = "fetch_history"
 
 
+def _async_link_via_esp_device(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Link the shaver device to its ESP32 bridge in the device registry."""
+    esp_device_name = entry.data[CONF_ESP_DEVICE_NAME]
+    dev_reg = dr.async_get(hass)
+
+    # Find the ESPHome config entry matching our bridge device name
+    # ESPHome uses hyphens (atom-lite), we store underscores (atom_lite)
+    esp_mac: str | None = None
+    normalized = esp_device_name.replace("_", "-")
+    for esphome_entry in hass.config_entries.async_entries("esphome"):
+        entry_name = esphome_entry.data.get("device_name", "")
+        if entry_name == esp_device_name or entry_name == normalized:
+            esp_mac = esphome_entry.unique_id
+            break
+
+    if not esp_mac:
+        _LOGGER.debug("ESPHome config entry for '%s' not found", esp_device_name)
+        return
+
+    # ESPHome registers devices by network MAC connection
+    esp_device = dev_reg.async_get_device(
+        connections={(dr.CONNECTION_NETWORK_MAC, esp_mac)}
+    )
+    if not esp_device:
+        _LOGGER.debug("ESPHome device for '%s' not in registry", esp_device_name)
+        return
+
+    # Find our shaver device and set via_device
+    shaver_device = dev_reg.async_get_device(
+        identifiers={(DOMAIN, esp_device_name)}
+    )
+    if shaver_device:
+        dev_reg.async_update_device(shaver_device.id, via_device_id=esp_device.id)
+        _LOGGER.info("Linked shaver device to ESP bridge '%s'", esp_device_name)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Philips Shaver from a config entry."""
-    address = entry.data["address"]
+    # Create transport based on config
+    transport_type = entry.data.get(CONF_TRANSPORT_TYPE)
+    if transport_type == TRANSPORT_ESP_BRIDGE:
+        esp_device_name = entry.data[CONF_ESP_DEVICE_NAME]
+        transport = EspBridgeTransport(hass, esp_device_name, esp_device_name)
+    else:
+        address = entry.data["address"]
+        transport = BleakTransport(hass, address)
 
-    coordinator = PhilipsShaverCoordinator(hass, entry)
+    coordinator = PhilipsShaverCoordinator(hass, entry, transport)
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {"coordinator": coordinator}
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    # Link shaver device to ESP bridge device via device registry
+    if transport_type == TRANSPORT_ESP_BRIDGE:
+        _async_link_via_esp_device(hass, entry)
+
     # Start polling/live monitoring after platforms are registered
     await coordinator.async_start()
-    hass.async_create_task(coordinator._async_start_advertisement_logging())
+    if transport_type != TRANSPORT_ESP_BRIDGE:
+        hass.async_create_task(coordinator._async_start_advertisement_logging())
 
     # Register services (only once)
     if not hass.services.has_service(DOMAIN, SERVICE_FETCH_HISTORY):
@@ -63,7 +118,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             supports_response=SupportsResponse.ONLY,
         )
 
-    _LOGGER.info("Philips Shaver integration loaded – address: %s", address)
+    device_id = entry.data.get("address") or entry.data.get(CONF_ESP_DEVICE_NAME)
+    _LOGGER.info("Philips Shaver integration loaded – device: %s", device_id)
     return True
 
 

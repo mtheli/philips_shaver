@@ -18,8 +18,29 @@
     "flow_title": "Philips Shaver ({name})",
     "step": {
       "user": {
-        "title": "Philips Shaver manuell hinzufügen",
-        "description": "Geben Sie die Bluetooth-MAC-Adresse des Rasierers ein."
+        "title": "Philips Shaver hinzufügen",
+        "description": "Wählen Sie die Verbindungsart zu Ihrem Rasierer.",
+        "menu_options": {
+          "user_bleak": "Direktes Bluetooth",
+          "esp_bridge": "ESP32 Bridge (ESPHome)"
+        }
+      },
+      "user_bleak": {
+        "title": "Direktes Bluetooth",
+        "description": "Geben Sie die Bluetooth-MAC-Adresse des Rasierers ein.",
+        "data": {
+          "address": "MAC-Adresse"
+        }
+      },
+      "esp_bridge": {
+        "title": "ESP32 Bridge (ESPHome)",
+        "description": "Wählen Sie das ESPHome-Gerät, das als BLE-Bridge für Ihren Rasierer dient.",
+        "data": {
+          "esp_device_name": "ESPHome Bridge-Gerät"
+        },
+        "data_description": {
+          "esp_device_name": "Das ESPHome-Gerät, auf dem die Philips Shaver BLE-Bridge-Komponente läuft."
+        }
       },
       "bluetooth_confirm": {
         "title": "Erkanntes Gerät bestätigen",
@@ -27,13 +48,15 @@
       },
       "show_capabilities": {
         "title": "Hardware-Fähigkeiten erkannt",
-        "description": "🔗 Erfolgreich mit **{name}** verbunden.\n\n**Erkannter Capability-Code:** {capability_value}\n\n**GATT Service Status:**\n{services}\n\n**Legende:**\n✅ Service gefunden & unterstützt\n❌ Erwarteter Service fehlt\n❔ Unbekannter Service vom Gerät\n\nKlicken Sie auf Absenden, um die Einrichtung abzuschließen."
+        "description": "Erfolgreich mit **{name}** verbunden.\n\n**Hardware-Fähigkeiten:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legende:**\n✅ Service gefunden & unterstützt\n❌ Erwarteter Service fehlt\n❔ Unbekannter Service vom Gerät\n\nKlicken Sie auf Absenden, um die Einrichtung abzuschließen."
       }
     },
     "error": {
       "abort_if_unique_id_configured": "Das Gerät ist bereits konfiguriert.",
+      "no_esphome_devices": "Keine ESPHome-Geräte gefunden. Bitte richten Sie zuerst ein ESPHome-Gerät mit der BLE-Bridge-Komponente ein. Siehe [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/ESP_BRIDGE_SETUP.md) für eine Anleitung.",
       "cannot_connect": "Verbindung zum Rasierer fehlgeschlagen. Bitte stelle sicher, dass er eingeschaltet, in Reichweite und nicht mit einem anderen Gerät (z.B. deinem Smartphone) verbunden ist.",
       "device_not_found": "Das Gerät wurde nicht gefunden. Bitte stelle sicher, dass es eingeschaltet und in Reichweite ist.",
+      "not_paired": "Der Rasierer ist nicht mit diesem System gepairt. Bitte zuerst über SSH mit `bluetoothctl pair <MAC>` pairen. Siehe README für eine detaillierte Anleitung.",
       "unknown": "Unerwarteter Fehler. Bitte prüfe die Systemprotokolle."
     },
     "abort": {
