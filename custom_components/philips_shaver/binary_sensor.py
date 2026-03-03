@@ -41,7 +41,7 @@ class PhilipsChargingBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
     ) -> None:
         """Initialize the charging sensor."""
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_is_charging"
+        self._attr_unique_id = f"{self._device_id}_is_charging"
 
     @property
     def is_on(self) -> bool:
@@ -60,7 +60,7 @@ class PhilipsTravelLockBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_travel_lock"
+        self._attr_unique_id = f"{self._device_id}_travel_lock"
 
     @property
     def is_on(self) -> bool:

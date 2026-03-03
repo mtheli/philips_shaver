@@ -120,7 +120,7 @@ class PhilipsBatterySensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_battery"
+        self._attr_unique_id = f"{self._device_id}_battery"
 
     @property
     def native_value(self) -> int | None:
@@ -150,7 +150,7 @@ class PhilipsAmountOfChargesSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_amount_of_charges"
+        self._attr_unique_id = f"{self._device_id}_amount_of_charges"
 
     @property
     def native_value(self) -> int | None:
@@ -173,7 +173,7 @@ class PhilipsShaverAmountOfOperationalTurnsSensor(PhilipsShaverEntity, SensorEnt
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_amount_of_operational_turns"
+        self._attr_unique_id = f"{self._device_id}_amount_of_operational_turns"
 
     @property
     def native_value(self) -> int | None:
@@ -192,7 +192,7 @@ class PhilipsFirmwareSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_firmware"
+        self._attr_unique_id = f"{self._device_id}_firmware"
 
     @property
     def native_value(self) -> str | None:
@@ -215,7 +215,7 @@ class PhilipsHeadRemainingSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_head_remaining"
+        self._attr_unique_id = f"{self._device_id}_head_remaining"
 
     @property
     def native_value(self) -> int | None:
@@ -243,7 +243,7 @@ class PhilipsDaysSinceLastUsedSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_days_last_used"
+        self._attr_unique_id = f"{self._device_id}_days_last_used"
 
     @property
     def native_value(self) -> int | None:
@@ -263,7 +263,7 @@ class PhilipsShavingTimeSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_shaving_time"
+        self._attr_unique_id = f"{self._device_id}_shaving_time"
 
     @property
     def native_value(self) -> int | None:
@@ -284,7 +284,7 @@ class PhilipsDeviceStateSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_device_state"
+        self._attr_unique_id = f"{self._device_id}_device_state"
 
     @property
     def native_value(self) -> str | None:
@@ -313,7 +313,7 @@ class PhilipsDeviceActivitySensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_activity"
+        self._attr_unique_id = f"{self._device_id}_activity"
 
     @property
     def native_value(self) -> str:
@@ -366,7 +366,7 @@ class PhilipsLastSeenSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_last_seen"
+        self._attr_unique_id = f"{self._device_id}_last_seen"
 
     @property
     def native_value(self) -> int | None:
@@ -392,11 +392,11 @@ class PhilipsRssiSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_rssi"
+        self._attr_unique_id = f"{self._device_id}_rssi"
 
     @property
     def native_value(self) -> int | None:
-        service_info = async_last_service_info(self.hass, self._address)
+        service_info = async_last_service_info(self.hass, self._device_id)
         return service_info.rssi if service_info else None
 
 
@@ -416,7 +416,7 @@ class PhilipsCleaningProgressSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_cleaning_progress"
+        self._attr_unique_id = f"{self._device_id}_cleaning_progress"
 
     @property
     def native_value(self) -> int | None:
@@ -443,7 +443,7 @@ class PhilipsCleaningCyclesSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_cleaning_cycles"
+        self._attr_unique_id = f"{self._device_id}_cleaning_cycles"
 
     @property
     def native_value(self) -> int | None:
@@ -465,7 +465,7 @@ class PhilipsMotorSpeedSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_motor_rpm"
+        self._attr_unique_id = f"{self._device_id}_motor_rpm"
 
     @property
     def native_value(self) -> int | None:
@@ -498,7 +498,7 @@ class PhilipsMotorCurrentSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_motor_current"
+        self._attr_unique_id = f"{self._device_id}_motor_current"
 
     @property
     def native_value(self) -> int | None:
@@ -532,7 +532,7 @@ class PhilipsMotorCurrentMaxSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_motor_current_max"
+        self._attr_unique_id = f"{self._device_id}_motor_current_max"
 
     @property
     def native_value(self) -> int | None:
@@ -553,7 +553,7 @@ class PhilipsMotorRpmMaxSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_motor_rpm_max"
+        self._attr_unique_id = f"{self._device_id}_motor_rpm_max"
 
     @property
     def native_value(self) -> int | None:
@@ -570,7 +570,7 @@ class PhilipsMotorRpmMinSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_motor_rpm_min"
+        self._attr_unique_id = f"{self._device_id}_motor_rpm_min"
 
     @property
     def native_value(self) -> int | None:
@@ -604,7 +604,7 @@ class PhilipsHandleLoadTypeSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_handle_load_type"
+        self._attr_unique_id = f"{self._device_id}_handle_load_type"
 
     @property
     def native_value(self) -> str | None:
@@ -656,7 +656,7 @@ class PhilipsMotionTypeSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_motion_type"
+        self._attr_unique_id = f"{self._device_id}_motion_type"
 
     @property
     def native_value(self) -> str | None:
@@ -699,7 +699,7 @@ class PhilipsModelNumberSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_model_number"
+        self._attr_unique_id = f"{self._device_id}_model_number"
 
     @property
     def native_value(self) -> str | None:
@@ -728,7 +728,7 @@ class PhilipsShavingModeSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_shaving_mode"
+        self._attr_unique_id = f"{self._device_id}_shaving_mode"
 
     @property
     def native_value(self) -> str | None:
@@ -784,7 +784,7 @@ class PhilipsShaverPressureSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_pressure"
+        self._attr_unique_id = f"{self._device_id}_pressure"
 
     @property
     def native_value(self) -> int | None:
@@ -803,7 +803,7 @@ class PhilipsShaverPressureStateSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_pressure_state"
+        self._attr_unique_id = f"{self._device_id}_pressure_state"
 
     @property
     def native_value(self) -> str | None:
@@ -862,7 +862,7 @@ class PhilipsTotalAgeSensor(PhilipsShaverEntity, SensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_total_age"
+        self._attr_unique_id = f"{self._device_id}_total_age"
 
     @property
     def native_value(self) -> int | None:

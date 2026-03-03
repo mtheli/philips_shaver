@@ -98,7 +98,7 @@ class PhilipsColorConfigLight(PhilipsShaverEntity, LightEntity):
         self._attr_translation_key = translation_key
 
         # Unique ID keeps HA happy
-        self._attr_unique_id = f"{self._address}_{uuid}"
+        self._attr_unique_id = f"{self._device_id}_{uuid}"
 
         # Default color until read (future improvement)
         key = {
@@ -145,9 +145,7 @@ class PhilipsColorConfigLight(PhilipsShaverEntity, LightEntity):
     # ------------------------------------------------------------------
     async def async_turn_on(self, **kwargs) -> None:
         """Set new RGB color on the shaver."""
-        client = self.coordinator.live_client
-
-        if not client or not client.is_connected:
+        if not self.coordinator.transport.is_connected:
             _LOGGER.warning(
                 "Shaver not connected – cannot write color %s (%s)",
                 self._attr_translation_key,
@@ -156,16 +154,15 @@ class PhilipsColorConfigLight(PhilipsShaverEntity, LightEntity):
             return
 
         if "rgb_color" not in kwargs:
-            # Nur anschalten ohne Farbänderung → nichts tun (Licht ist immer "an")
             return
 
         r, g, b = kwargs["rgb_color"]
 
-        # Philips erwartet RGBA mit letztem Byte = 0xFF
+        # Philips expects RGBA with last byte = 0xFF
         payload = bytes([r, g, b, 0xFF])
 
         try:
-            await client.write_gatt_char(self._uuid, payload)
+            await self.coordinator.transport.write_char(self._uuid, payload)
             _LOGGER.info(
                 "Color %s set to (%d, %d, %d) → characteristic %s",
                 self._attr_translation_key,
@@ -176,7 +173,7 @@ class PhilipsColorConfigLight(PhilipsShaverEntity, LightEntity):
             )
         except Exception as e:
             _LOGGER.error("Failed to write color %s: %s", self._attr_translation_key, e)
-            return  # Nicht lokal updaten, wenn Schreiben fehlgeschlagen ist
+            return
 
         # Erfolgreich geschrieben → sofort im Coordinator aktualisieren
         key_map = {

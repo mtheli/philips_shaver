@@ -35,7 +35,7 @@ class PhilipsShavingModeSelect(PhilipsShaverEntity, SelectEntity):
     def __init__(self, coordinator: Any, entry: ConfigEntry) -> None:
         """Initialize the select entity."""
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._address}_shaving_mode_select"
+        self._attr_unique_id = f"{self._device_id}_shaving_mode_select"
 
     @property
     def current_option(self) -> str | None:
@@ -46,17 +46,13 @@ class PhilipsShavingModeSelect(PhilipsShaverEntity, SelectEntity):
         return SHAVING_MODES.get(mode_id)
 
     async def async_select_option(self, option: str) -> None:
-        """Sendet den gewählten Modus an den Rasierer – Muster aus light.py."""
-        client = self.coordinator.live_client
-
-        # 1. Verbindung prüfen
-        if not client or not client.is_connected:
+        """Send the selected mode to the shaver."""
+        if not self.coordinator.transport.is_connected:
             _LOGGER.warning(
                 "Shaver not connected – cannot set shaving mode to %s", option
             )
             return
 
-        # 2. Mapping der Auswahl auf Hex-Werte (sensitive=0x00)
         write_mapping = {
             "sensitive": 0x00,
             "regular": 0x01,
@@ -70,9 +66,8 @@ class PhilipsShavingModeSelect(PhilipsShaverEntity, SelectEntity):
         if val is None:
             return
 
-        # 3. Schreibvorgang ausführen
         try:
-            await client.write_gatt_char(CHAR_SHAVING_MODE, bytes([val]))
+            await self.coordinator.transport.write_char(CHAR_SHAVING_MODE, bytes([val]))
             _LOGGER.info("Shaving mode set to %s (0x%02x)", option, val)
         except Exception as e:
             _LOGGER.error("Failed to write shaving mode %s: %s", option, e)
