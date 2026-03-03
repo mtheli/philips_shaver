@@ -1,6 +1,7 @@
 #include "philips_shaver.h"
 #include "esphome/core/log.h"
 #include "esphome/core/helpers.h"
+#include "esp_gap_ble_api.h"
 
 namespace espbt = esphome::esp32_ble_tracker;
 
@@ -18,13 +19,44 @@ static espbt::ESPBTUUID parse_uuid(const std::string &uuid_str) {
 }
 
 void PhilipsShaver::setup() {
+  // --- BLE Security (SMP) configuration ---
+  //
+  // The Philips shaver requires LE Secure Connections for pairing.
+  // ESPHome's default pair() uses ESP_BLE_SEC_ENCRYPT (level 1) which the
+  // shaver rejects with disconnect reason 0x13 ("Remote User Terminated").
+  //
+  // These parameters were derived from a btmon capture of a successful
+  // pairing on a Linux host:
+  //   Host  → Shaver:  io=DisplayYesNo(0x01), auth=0x2D (Bond+MITM+SC+CT2)
+  //   Shaver → Host:   io=NoInputNoOutput(0x03), auth=0x09 (Bond+SC)
+  //   Result: LE SC "Just Works" pairing (ECDH key exchange, no PIN)
+  //
+  // The on_connect lambda in the YAML calls esp_ble_set_encryption() with
+  // ESP_BLE_SEC_ENCRYPT_MITM to initiate pairing using these params.
+  //
+  // Note: This overrides ESPHome's io_capability YAML setting.
+  uint8_t auth_req = 0x2D;  // Bond(1) | MITM(4) | SC(8) | CT2(0x20)
+  esp_ble_io_cap_t io_cap = ESP_IO_CAP_IO;  // DisplayYesNo (0x01)
+  uint8_t key_size = 16;
+  uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+  uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
+
+  esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req, sizeof(auth_req));
+  esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &io_cap, sizeof(io_cap));
+  esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, sizeof(key_size));
+  esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(init_key));
+  esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(rsp_key));
+  ESP_LOGI(TAG, "SMP security configured for LE Secure Connections");
+
   this->register_service(&PhilipsShaver::on_read_characteristic,
                           "ble_read_char", {"service_uuid", "char_uuid"});
   this->register_service(&PhilipsShaver::on_subscribe,
                           "ble_subscribe", {"service_uuid", "char_uuid"});
   this->register_service(&PhilipsShaver::on_unsubscribe,
                           "ble_unsubscribe", {"service_uuid", "char_uuid"});
-  ESP_LOGI(TAG, "Services registered: ble_read_char, ble_subscribe, ble_unsubscribe");
+  this->register_service(&PhilipsShaver::on_write_characteristic,
+                          "ble_write_char", {"service_uuid", "char_uuid", "data"});
+  ESP_LOGI(TAG, "Services registered: ble_read_char, ble_subscribe, ble_unsubscribe, ble_write_char");
 }
 
 void PhilipsShaver::loop() {}
@@ -254,6 +286,50 @@ void PhilipsShaver::on_unsubscribe(std::string service_uuid,
       chr->handle);
 
   this->notify_map_.erase(chr->handle);
+}
+
+void PhilipsShaver::on_write_characteristic(std::string service_uuid,
+                                              std::string characteristic_uuid,
+                                              std::string hex_data) {
+  if (!this->connected_) {
+    ESP_LOGW(TAG, "Cannot write: not connected");
+    return;
+  }
+
+  auto svc = parse_uuid(service_uuid);
+  auto chr_uuid = parse_uuid(characteristic_uuid);
+
+  auto *chr = this->parent()->get_characteristic(svc, chr_uuid);
+  if (chr == nullptr) {
+    ESP_LOGW(TAG, "Characteristic %s not found in service %s",
+             characteristic_uuid.c_str(), service_uuid.c_str());
+    return;
+  }
+
+  // Parse hex string to bytes
+  std::vector<uint8_t> bytes;
+  size_t count = hex_data.length() / 2;
+  if (count == 0 || !parse_hex(hex_data, bytes, count)) {
+    ESP_LOGW(TAG, "Invalid hex data: %s", hex_data.c_str());
+    return;
+  }
+
+  ESP_LOGI(TAG, "Writing %s (handle 0x%04X): %s (%d bytes)",
+           characteristic_uuid.c_str(), chr->handle,
+           hex_data.c_str(), bytes.size());
+
+  auto status = esp_ble_gattc_write_char(
+      this->parent()->get_gattc_if(),
+      this->parent()->get_conn_id(),
+      chr->handle,
+      bytes.size(),
+      bytes.data(),
+      ESP_GATT_WRITE_TYPE_RSP,
+      ESP_GATT_AUTH_REQ_NO_MITM);
+
+  if (status != ESP_OK) {
+    ESP_LOGW(TAG, "Write request failed: %d", status);
+  }
 }
 
 }  // namespace philips_shaver

@@ -32,6 +32,9 @@ class PhilipsShaver : public ble_client::BLEClientNode,
                      std::string characteristic_uuid);
   void on_unsubscribe(std::string service_uuid,
                        std::string characteristic_uuid);
+  void on_write_characteristic(std::string service_uuid,
+                                std::string characteristic_uuid,
+                                std::string hex_data);
 
  protected:
   bool connected_{false};
