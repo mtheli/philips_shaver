@@ -118,9 +118,8 @@ pairing succeeded. If you don't see this, check the troubleshooting section belo
 - Ensure the shaver is **not connected to your phone** (disconnect Bluetooth or
   close the GroomTribe app)
 - The shaver must be **powered on or on the charging stand**
-- Try pressing the pairing button on the ESP32 (Atom Lite: GPIO39 button)
-- If using a different ESP32 board, the SMP parameters in the component should still
-  work — the pairing is handled automatically
+- Pairing is handled automatically on connect — no manual button press required
+- The SMP parameters in the component work across all ESP32 boards
 
 ### "No ESPHome devices found" in HA config flow
 
