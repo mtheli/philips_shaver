@@ -6,9 +6,11 @@
 
 This is a custom component for Home Assistant to integrate **Philips Bluetooth-enabled shavers**, specifically tested with the **i9000 / XP9201 series**.
 
-![Screenshot of the device inHA](./images/screenshot.png)
-
 The integration connects to your shaver via **Bluetooth Low Energy (BLE)** to provide status, usage, and advanced telemetry data. It automatically detects the capabilities of your specific model during setup to only show relevant entities.
+
+| Discovery | Capabilities | Device | Diagnostics |
+| :---: | :---: | :---: | :---: |
+| ![Discovery](./images/discovery.png) | ![Capabilities](./images/capabilities.png) | ![Device](./images/device.png) | ![Diagnostics](./images/diagnostic.png) |
 
 Two connection methods are supported:
 
