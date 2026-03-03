@@ -103,3 +103,9 @@ philips_shaver:
 #     num_leds: 1
 #     id: status_led
 #     name: "Status LED"
+
+# --- Optional: Bluetooth Proxy ---
+# The ESP32 can also act as a standard BLE proxy for other sensors
+# (e.g. Xiaomi temperature sensors) while maintaining the shaver connection.
+# bluetooth_proxy:
+#   active: true

@@ -104,19 +104,8 @@ light:
     name: "Status LED"
     restore_mode: ALWAYS_OFF
 
-# Button (GPIO39) - manual pair trigger
-binary_sensor:
-  - platform: gpio
-    id: atom_button
-    name: "Pairing Button"
-    pin:
-      number: GPIO39
-      inverted: true
-    on_press:
-      then:
-        - light.turn_on:
-            id: status_led
-            red: 0%
-            green: 0%
-            blue: 100%
-        - lambda: "id(philips_shaver_ble).pair();"
+# --- Optional: Bluetooth Proxy ---
+# The ESP32 can also act as a standard BLE proxy for other sensors
+# (e.g. Xiaomi temperature sensors) while maintaining the shaver connection.
+bluetooth_proxy:
+  active: true
