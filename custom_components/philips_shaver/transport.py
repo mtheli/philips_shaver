@@ -44,6 +44,16 @@ class ShaverTransport(abc.ABC):
     def is_connected(self) -> bool:
         """Return True if the transport has an active connection."""
 
+    @property
+    def is_bridge_alive(self) -> bool:
+        """Return True if the bridge (ESP) is reachable. Same as is_connected for direct BLE."""
+        return self.is_connected
+
+    @property
+    def is_shaver_connected(self) -> bool:
+        """Return True if the shaver BLE link is active. Same as is_connected for direct BLE."""
+        return self.is_connected
+
     @abc.abstractmethod
     async def read_char(self, char_uuid: str) -> bytes | None:
         """Read a single GATT characteristic."""
@@ -265,17 +275,22 @@ class EspBridgeTransport(ShaverTransport):
         return self._detected_mac
 
     @property
-    def is_connected(self) -> bool:
+    def is_bridge_alive(self) -> bool:
+        """Return True if the ESP bridge is reachable (heartbeat within timeout)."""
         if not self._connected:
             return False
-        # Verify ESPHome device is still available (service disappears when ESP goes offline)
         if not self._hass.services.has_service("esphome", self._svc_name("ble_read_char")):
             return False
-        # Check ESP heartbeat (ESP sends heartbeat every 15s, timeout after 45s)
-        if not self._esp_alive:
-            return False
-        # Check ESP↔Shaver BLE connection (tracked via ble_status events)
+        return self._esp_alive
+
+    @property
+    def is_shaver_connected(self) -> bool:
+        """Return True if the ESP↔Shaver BLE link is active."""
         return self._shaver_connected
+
+    @property
+    def is_connected(self) -> bool:
+        return self.is_bridge_alive and self._shaver_connected
 
     async def connect(self) -> None:
         """Start listening for ESP32 bridge events."""

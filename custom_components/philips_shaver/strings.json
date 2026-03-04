@@ -246,11 +246,18 @@
           "off": "Unlocked"
         }
       },
-      "ble_connected": {
-        "name": "BLE Connected",
+      "shaver_ble_connected": {
+        "name": "Shaver BLE",
         "state": {
           "on": "Connected",
           "off": "Disconnected"
+        }
+      },
+      "esp_bridge_alive": {
+        "name": "ESP Bridge",
+        "state": {
+          "on": "Online",
+          "off": "Offline"
         }
       }
     }

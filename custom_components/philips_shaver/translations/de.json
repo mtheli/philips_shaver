@@ -246,11 +246,18 @@
           "off": "Entsperrt"
         }
       },
-      "ble_connected": {
-        "name": "BLE Verbunden",
+      "shaver_ble_connected": {
+        "name": "Rasierer BLE",
         "state": {
           "on": "Verbunden",
           "off": "Getrennt"
+        }
+      },
+      "esp_bridge_alive": {
+        "name": "ESP Bridge",
+        "state": {
+          "on": "Online",
+          "off": "Offline"
         }
       }
     }

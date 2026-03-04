@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .coordinator import PhilipsShaverCoordinator
 from .entity import PhilipsShaverEntity
-from .const import DOMAIN
+from .const import DOMAIN, CONF_TRANSPORT_TYPE, TRANSPORT_ESP_BRIDGE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,11 +23,17 @@ async def async_setup_entry(
     """Set up Philips Shaver binary sensors based on a config entry."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
+    is_esp = entry.data.get(CONF_TRANSPORT_TYPE) == TRANSPORT_ESP_BRIDGE
+
     entities = [
         PhilipsChargingBinarySensor(coordinator, entry),
         PhilipsTravelLockBinarySensor(coordinator, entry),
-        PhilipsBleConnectedBinarySensor(coordinator, entry),
+        PhilipsShaverBleConnectedSensor(coordinator, entry),
     ]
+
+    # ESP bridge sensor only for ESP transport
+    if is_esp:
+        entities.append(PhilipsEspBridgeAliveSensor(coordinator, entry))
 
     async_add_entities(entities)
 
@@ -73,10 +79,10 @@ class PhilipsTravelLockBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
         return "mdi:lock" if self.is_on else "mdi:lock-open-variant"
 
 
-class PhilipsBleConnectedBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
-    """Binary sensor showing whether the BLE connection to the shaver is active."""
+class PhilipsShaverBleConnectedSensor(PhilipsShaverEntity, BinarySensorEntity):
+    """Binary sensor showing whether the BLE link to the shaver is active."""
 
-    _attr_translation_key = "ble_connected"
+    _attr_translation_key = "shaver_ble_connected"
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -84,13 +90,34 @@ class PhilipsBleConnectedBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
     ) -> None:
         super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._device_id}_ble_connected"
+        self._attr_unique_id = f"{self._device_id}_shaver_ble_connected"
 
     @property
     def available(self) -> bool:
-        """Always available — it reports the connection state itself."""
         return True
 
     @property
     def is_on(self) -> bool:
-        return self.coordinator.transport.is_connected
+        return self.coordinator.transport.is_shaver_connected
+
+
+class PhilipsEspBridgeAliveSensor(PhilipsShaverEntity, BinarySensorEntity):
+    """Binary sensor showing whether the ESP32 bridge is reachable."""
+
+    _attr_translation_key = "esp_bridge_alive"
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._device_id}_esp_bridge_alive"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def is_on(self) -> bool:
+        return self.coordinator.transport.is_bridge_alive
