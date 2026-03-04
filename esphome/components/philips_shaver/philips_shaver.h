@@ -7,6 +7,8 @@
 
 #include <map>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace esphome {
 namespace philips_shaver {
@@ -46,6 +48,10 @@ class PhilipsShaver : public ble_client::BLEClientNode,
   std::map<uint16_t, std::string> notify_map_;
   // char_handle → cccd_handle for writing notification enable
   std::map<uint16_t, uint16_t> cccd_map_;
+  // Subscriptions that should be restored after reconnect (service_uuid, char_uuid)
+  std::vector<std::pair<std::string, std::string>> desired_subscriptions_;
+
+  void resubscribe_all_();
 };
 
 }  // namespace philips_shaver

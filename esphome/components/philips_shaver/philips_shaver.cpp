@@ -79,7 +79,7 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
   switch (event) {
     case ESP_GATTC_OPEN_EVT: {
       if (param->open.status == ESP_GATT_OK) {
-        ESP_LOGI(TAG, "Connected to shaver");
+        ESP_LOGI(TAG, "Connected to shaver (%s)", this->get_shaver_mac_().c_str());
         this->connected_ = true;
       } else {
         ESP_LOGW(TAG, "Connection failed, status=%d", param->open.status);
@@ -88,9 +88,14 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
     }
 
     case ESP_GATTC_DISCONNECT_EVT: {
-      ESP_LOGI(TAG, "Disconnected from shaver");
+      ESP_LOGW(TAG, "Disconnected from shaver (reason=0x%02X). "
+               "%d subscription(s) will be restored on reconnect.",
+               param->disconnect.reason,
+               this->desired_subscriptions_.size());
       this->connected_ = false;
       this->pending_handle_ = 0;
+      // Clear handle-based maps (handles are invalid after disconnect)
+      // but keep desired_subscriptions_ for auto-resubscribe
       this->notify_map_.clear();
       this->cccd_map_.clear();
       break;
@@ -98,6 +103,11 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
 
     case ESP_GATTC_SEARCH_CMPL_EVT: {
       ESP_LOGI(TAG, "Service discovery complete");
+      if (!this->desired_subscriptions_.empty()) {
+        ESP_LOGI(TAG, "Restoring %d notification subscription(s)...",
+                 this->desired_subscriptions_.size());
+        this->resubscribe_all_();
+      }
       break;
     }
 
@@ -255,6 +265,19 @@ void PhilipsShaver::on_subscribe(std::string service_uuid,
 
   this->notify_map_[chr->handle] = characteristic_uuid;
 
+  // Track for auto-resubscribe after reconnect
+  auto pair = std::make_pair(service_uuid, characteristic_uuid);
+  bool already_tracked = false;
+  for (const auto &entry : this->desired_subscriptions_) {
+    if (entry.first == service_uuid && entry.second == characteristic_uuid) {
+      already_tracked = true;
+      break;
+    }
+  }
+  if (!already_tracked) {
+    this->desired_subscriptions_.push_back(pair);
+  }
+
   ESP_LOGI(TAG, "Subscribing to %s (handle 0x%04X, cccd 0x%04X)...",
            characteristic_uuid.c_str(), chr->handle, cccd_handle);
 
@@ -285,6 +308,15 @@ void PhilipsShaver::on_unsubscribe(std::string service_uuid,
     ESP_LOGW(TAG, "Characteristic %s not found in service %s",
              characteristic_uuid.c_str(), service_uuid.c_str());
     return;
+  }
+
+  // Remove from desired subscriptions
+  for (auto it = this->desired_subscriptions_.begin();
+       it != this->desired_subscriptions_.end(); ++it) {
+    if (it->first == service_uuid && it->second == characteristic_uuid) {
+      this->desired_subscriptions_.erase(it);
+      break;
+    }
   }
 
   ESP_LOGI(TAG, "Unsubscribing from %s (handle 0x%04X)...",
@@ -339,6 +371,55 @@ void PhilipsShaver::on_write_characteristic(std::string service_uuid,
 
   if (status != ESP_OK) {
     ESP_LOGW(TAG, "Write request failed: %d", status);
+  }
+}
+
+void PhilipsShaver::resubscribe_all_() {
+  for (const auto &entry : this->desired_subscriptions_) {
+    const auto &svc_uuid_str = entry.first;
+    const auto &chr_uuid_str = entry.second;
+
+    auto svc = parse_uuid(svc_uuid_str);
+    auto chr_uuid = parse_uuid(chr_uuid_str);
+
+    auto *chr = this->parent()->get_characteristic(svc, chr_uuid);
+    if (chr == nullptr) {
+      ESP_LOGW(TAG, "Resubscribe: characteristic %s not found, skipping",
+               chr_uuid_str.c_str());
+      continue;
+    }
+
+    // Find CCCD descriptor (0x2902)
+    uint16_t cccd_handle = 0;
+    for (auto *desc : chr->descriptors) {
+      if (desc->uuid == espbt::ESPBTUUID::from_uint16(0x2902)) {
+        cccd_handle = desc->handle;
+        break;
+      }
+    }
+    if (cccd_handle == 0) {
+      cccd_handle = chr->handle + 1;
+      ESP_LOGW(TAG, "Resubscribe: no CCCD for %s, using fallback 0x%04X",
+               chr_uuid_str.c_str(), cccd_handle);
+    }
+
+    this->cccd_map_[chr->handle] = cccd_handle;
+    this->notify_map_[chr->handle] = chr_uuid_str;
+
+    auto status = esp_ble_gattc_register_for_notify(
+        this->parent()->get_gattc_if(),
+        this->parent()->get_remote_bda(),
+        chr->handle);
+
+    if (status == ESP_OK) {
+      ESP_LOGI(TAG, "Resubscribe: %s (handle 0x%04X, cccd 0x%04X)",
+               chr_uuid_str.c_str(), chr->handle, cccd_handle);
+    } else {
+      ESP_LOGW(TAG, "Resubscribe failed for %s: %d",
+               chr_uuid_str.c_str(), status);
+      this->notify_map_.erase(chr->handle);
+      this->cccd_map_.erase(chr->handle);
+    }
   }
 }
 
