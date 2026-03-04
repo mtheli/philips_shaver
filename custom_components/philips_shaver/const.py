@@ -45,7 +45,16 @@ CHAR_FIRMWARE_REVISION = "00002a26-0000-1000-8000-00805f9b34fb"
 """
 CHAR_DAYS_SINCE_LAST_USED = "8d560108-3cb9-4387-a7e8-b79d826a7025"
 
-"""System notifications – purpose not fully understood, NOTIFY+READ+WRITE, default 0x12000000"""
+"""
+	TODO: System Notifications — implement notification handling
+
+	UUID: 8d560110-3cb9-4387-a7e8-b79d826a7025
+	Properties: NOTIFY, READ, WRITE
+	Value: (0x) 12-00-00-00
+	Descriptors:
+	Client Characteristic Configuration
+	UUID: 0x2902
+"""
 CHAR_SYSTEM_NOTIFICATIONS = "8d560110-3cb9-4387-a7e8-b79d826a7025"
 
 """
