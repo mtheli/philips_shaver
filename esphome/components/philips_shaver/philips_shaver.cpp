@@ -81,6 +81,12 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
       if (param->open.status == ESP_GATT_OK) {
         ESP_LOGI(TAG, "Connected to shaver (%s)", this->get_shaver_mac_().c_str());
         this->connected_ = true;
+        this->fire_homeassistant_event(
+            "esphome.philips_shaver_ble_status",
+            {
+                {"status", "connected"},
+                {"mac", this->get_shaver_mac_()},
+            });
       } else {
         ESP_LOGW(TAG, "Connection failed, status=%d", param->open.status);
       }
@@ -98,6 +104,15 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
       // but keep desired_subscriptions_ for auto-resubscribe
       this->notify_map_.clear();
       this->cccd_map_.clear();
+      char reason_str[5];
+      snprintf(reason_str, sizeof(reason_str), "0x%02X", param->disconnect.reason);
+      this->fire_homeassistant_event(
+          "esphome.philips_shaver_ble_status",
+          {
+              {"status", "disconnected"},
+              {"mac", this->get_shaver_mac_()},
+              {"reason", reason_str},
+          });
       break;
     }
 
@@ -108,6 +123,12 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
                  this->desired_subscriptions_.size());
         this->resubscribe_all_();
       }
+      this->fire_homeassistant_event(
+          "esphome.philips_shaver_ble_status",
+          {
+              {"status", "ready"},
+              {"mac", this->get_shaver_mac_()},
+          });
       break;
     }
 
