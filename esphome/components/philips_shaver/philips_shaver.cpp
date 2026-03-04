@@ -61,7 +61,7 @@ void PhilipsShaver::setup() {
 
 void PhilipsShaver::loop() {}
 
-std::string PhilipsShaver::get_shaver_mac_() const {
+std::string PhilipsShaver::get_shaver_mac_() {
   char mac[18];
   auto *bda = this->parent()->get_remote_bda();
   snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
