@@ -42,6 +42,7 @@ class PhilipsShaver : public ble_client::BLEClientNode,
   void set_connected_sensor(binary_sensor::BinarySensor *sensor) {
     this->connected_sensor_ = sensor;
   }
+  void set_notify_throttle(uint32_t ms) { this->notify_throttle_ms_ = ms; }
 
  protected:
   std::string get_shaver_mac_();
@@ -59,8 +60,8 @@ class PhilipsShaver : public ble_client::BLEClientNode,
 
   void resubscribe_all_();
 
-  // Notification throttle: max 1 event per second per characteristic
-  static const uint32_t NOTIFY_THROTTLE_MS = 500;
+  // Notification throttle: min interval between events per characteristic
+  uint32_t notify_throttle_ms_{500};
   std::map<uint16_t, uint32_t> last_notify_ms_;
 };
 

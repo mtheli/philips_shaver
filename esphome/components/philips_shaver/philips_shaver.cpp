@@ -202,7 +202,7 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
       uint32_t now = millis();
       auto last_it = this->last_notify_ms_.find(param->notify.handle);
       if (last_it != this->last_notify_ms_.end() &&
-          (now - last_it->second) < NOTIFY_THROTTLE_MS) {
+          (now - last_it->second) < this->notify_throttle_ms_) {
         break;
       }
       this->last_notify_ms_[param->notify.handle] = now;
