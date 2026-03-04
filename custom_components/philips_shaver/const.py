@@ -1,12 +1,12 @@
 DOMAIN = "philips_shaver"
 
 PHILIPS_SERVICE_UUIDS = [
-    # Philips Spezifische Services
-    "8d560100-3cb9-4387-a7e8-b79d826a7025",  # Device Properties (Modell, Seriennummer)
-    "8d560200-3cb9-4387-a7e8-b79d826a7025",  # Unknown Service (Batterie-Rohdaten, Firmware, Alter)
-    "8d560300-3cb9-4387-a7e8-b79d826a7025",  # Control Service (Modus, Lichtring)
-    "8d560600-3cb9-4387-a7e8-b79d826a7025",  # Cleaning Service (Reinigung)
-    # Standard Bluetooth Services (werden für Standard-Charakteristiken benötigt)
+    # Philips-specific services
+    "8d560100-3cb9-4387-a7e8-b79d826a7025",  # Device Properties (model, serial number)
+    "8d560200-3cb9-4387-a7e8-b79d826a7025",  # History Service (battery raw, firmware, age)
+    "8d560300-3cb9-4387-a7e8-b79d826a7025",  # Control Service (mode, light ring)
+    "8d560600-3cb9-4387-a7e8-b79d826a7025",  # Cleaning Service
+    # Standard Bluetooth services (required for standard characteristics)
     "0000180f-0000-1000-8000-00805f9b34fb",  # Battery Service (0x180F)
     "0000180a-0000-1000-8000-00805f9b34fb",  # Device Information Service (0x180A)
 ]
@@ -45,17 +45,7 @@ CHAR_FIRMWARE_REVISION = "00002a26-0000-1000-8000-00805f9b34fb"
 """
 CHAR_DAYS_SINCE_LAST_USED = "8d560108-3cb9-4387-a7e8-b79d826a7025"
 
-"""
-	TODO
-
-	Unknown Characteristic
-	UUID: 8d560110-3cb9-4387-a7e8-b79d826a7025
-	Properties: NOTIFY, READ, WRITE
-	Value: (0x) 12-00-00-00
-	Descriptors:
-	Client Characteristic Configuration
-	UUID: 0x2902
-"""
+"""System notifications – purpose not fully understood, NOTIFY+READ+WRITE, default 0x12000000"""
 CHAR_SYSTEM_NOTIFICATIONS = "8d560110-3cb9-4387-a7e8-b79d826a7025"
 
 """
@@ -248,10 +238,10 @@ CHAR_LIGHTRING_COLOR_MOTION = "8d56031c-3cb9-4387-a7e8-b79d826a7025"
 CHAR_LIGHTRING_COLOR_BRIGHTNESS = "8d560331-3cb9-4387-a7e8-b79d826a7025"
 
 LIGHTRING_DEFAULT_COLORS = {
-    CHAR_LIGHTRING_COLOR_LOW: (0xFF, 0x00, 0x00),  # (0x00, 0x8F, 0xFF),
-    CHAR_LIGHTRING_COLOR_OK: (0xFF, 0x00, 0x00),  # (0xFF, 0x49, 0xFF),
-    CHAR_LIGHTRING_COLOR_HIGH: (0xFF, 0x00, 0x00),  # (0xFF, 0x85, 0x00),
-    CHAR_LIGHTRING_COLOR_MOTION: (0xFF, 0x00, 0x00),  # (0x37, 0xFF, 0x00),
+    CHAR_LIGHTRING_COLOR_LOW: (0x00, 0x8F, 0xFF),
+    CHAR_LIGHTRING_COLOR_OK: (0xFF, 0x49, 0xFF),
+    CHAR_LIGHTRING_COLOR_HIGH: (0xFF, 0x85, 0x00),
+    CHAR_LIGHTRING_COLOR_MOTION: (0x37, 0xFF, 0x00),
 }
 
 # Shaving mode
@@ -427,40 +417,8 @@ POLL_READ_CHARS = [
     CHAR_MOTION_TYPE,
 ]
 
-# characteristics for initial reading of live thread
-LIVE_READ_CHARS = [
-    CHAR_BATTERY_LEVEL,
-    CHAR_FIRMWARE_REVISION,
-    CHAR_HEAD_REMAINING,
-    CHAR_HEAD_REMAINING_MINUTES,
-    CHAR_DAYS_SINCE_LAST_USED,
-    CHAR_MODEL_NUMBER,
-    CHAR_SERIAL_NUMBER,
-    CHAR_SHAVING_TIME,
-    CHAR_DEVICE_STATE,
-    CHAR_TRAVEL_LOCK,
-    # CHAR_CLEANING_PROGRESS,
-    CHAR_CLEANING_CYCLES,
-    # CHAR_MOTOR_CURRENT,
-    CHAR_MOTOR_CURRENT_MAX,
-    # CHAR_MOTOR_RPM,
-    # CHAR_MOTOR_RPM_MAX,
-    # CHAR_MOTOR_RPM_MIN,
-    CHAR_LIGHTRING_COLOR_LOW,
-    CHAR_LIGHTRING_COLOR_OK,
-    CHAR_LIGHTRING_COLOR_HIGH,
-    CHAR_LIGHTRING_COLOR_MOTION,
-    CHAR_LIGHTRING_COLOR_BRIGHTNESS,
-    CHAR_AMOUNT_OF_CHARGES,
-    CHAR_AMOUNT_OF_OPERATIONAL_TURNS,
-    CHAR_SHAVING_MODE,
-    CHAR_SHAVING_MODE_SETTINGS,
-    CHAR_CUSTOM_SHAVING_MODE_SETTINGS,
-    # CHAR_PRESSURE,
-    CHAR_TOTAL_AGE,
-    CHAR_HANDLE_LOAD_TYPE,
-    CHAR_MOTION_TYPE,
-]
+# Characteristics for initial reading of live thread (same as poll)
+LIVE_READ_CHARS = POLL_READ_CHARS
 
 DEFAULT_POLL_INTERVAL = 60
 DEFAULT_ENABLE_LIVE_UPDATES = True

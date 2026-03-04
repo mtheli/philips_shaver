@@ -19,7 +19,7 @@ from homeassistant.const import UnitOfTime, PERCENTAGE
 from homeassistant.components.bluetooth import async_last_service_info
 from .coordinator import PhilipsShaverCoordinator
 
-from .const import DOMAIN, CONF_ENABLE_LIVE_UPDATES, DEFAULT_ENABLE_LIVE_UPDATES
+from .const import DOMAIN, CONF_ENABLE_LIVE_UPDATES, DEFAULT_ENABLE_LIVE_UPDATES, CONF_TRANSPORT_TYPE, TRANSPORT_ESP_BRIDGE
 from .entity import PhilipsShaverEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -44,7 +44,6 @@ async def async_setup_entry(
         PhilipsDeviceStateSensor(coordinator, entry),
         PhilipsDeviceActivitySensor(coordinator, entry),
         PhilipsLastSeenSensor(coordinator, entry),
-        PhilipsRssiSensor(coordinator, entry),
         PhilipsMotorSpeedSensor(coordinator, entry),
         PhilipsMotorCurrentSensor(coordinator, entry),
         PhilipsMotorCurrentMaxSensor(coordinator, entry),
@@ -74,6 +73,10 @@ async def async_setup_entry(
         _LOGGER.info(
             "Shaver does not support cleaning mode – skipping cleaning sensors"
         )
+
+    # RSSI sensor only for direct BLE (not available via ESP bridge)
+    if entry.data.get(CONF_TRANSPORT_TYPE) != TRANSPORT_ESP_BRIDGE:
+        entities.append(PhilipsRssiSensor(coordinator, entry))
 
     async_add_entities(entities)
 
@@ -328,15 +331,15 @@ class PhilipsDeviceActivitySensor(PhilipsShaverEntity, SensorEntity):
         if progress is not None and 0 < progress < 100:
             return "cleaning"
 
-        # 2. check for shaving
+        # 3. check for shaving
         if data.get("device_state") == "shaving":
             return "shaving"
 
-        # 3. check for charging
+        # 4. check for charging
         if data.get("device_state") == "charging":
             return "charging"
 
-        # 4. Everything else
+        # 5. Everything else
         return "off"
 
     @property

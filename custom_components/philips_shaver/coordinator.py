@@ -127,6 +127,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._connection_lock = asyncio.Lock()
         self._live_task: asyncio.Task | None = None
         self._live_setup_done = False
+        self._unsub_adv_debug = None
 
         _LOGGER.debug(
             "Initializing coordinator for %s with poll interval %s seconds (live updates: %s)",
@@ -599,7 +600,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Called on unload – clean up everything."""
         await self.transport.unsubscribe_all()
 
-        if hasattr(self, "_unsub_adv_debug") and self._unsub_adv_debug:
+        if self._unsub_adv_debug:
             self._unsub_adv_debug()
             self._unsub_adv_debug = None
 

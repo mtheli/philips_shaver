@@ -232,7 +232,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.error("Device %s is not paired", self.discovery_info.address)
                 errors["base"] = "not_paired"
             except Exception:
-                _LOGGER.error(
+                _LOGGER.exception(
                     "Setup failed: Unable to connect to the device or fetch capabilities"
                 )
                 errors["base"] = "cannot_connect"
@@ -282,7 +282,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.error("Device %s is not paired", address)
                 errors["base"] = "not_paired"
             except Exception:
-                _LOGGER.error(
+                _LOGGER.exception(
                     "Setup failed: Unable to connect to the device or fetch capabilities"
                 )
                 errors["base"] = "cannot_connect"
