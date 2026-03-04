@@ -104,6 +104,7 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
       // but keep desired_subscriptions_ for auto-resubscribe
       this->notify_map_.clear();
       this->cccd_map_.clear();
+      this->last_notify_ms_.clear();
       char reason_str[5];
       snprintf(reason_str, sizeof(reason_str), "0x%02X", param->disconnect.reason);
       this->fire_homeassistant_event(
@@ -192,6 +193,15 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
       auto it = this->notify_map_.find(param->notify.handle);
       if (it == this->notify_map_.end())
         break;
+
+      // Throttle: max 1 event per NOTIFY_THROTTLE_MS per characteristic
+      uint32_t now = millis();
+      auto last_it = this->last_notify_ms_.find(param->notify.handle);
+      if (last_it != this->last_notify_ms_.end() &&
+          (now - last_it->second) < NOTIFY_THROTTLE_MS) {
+        break;
+      }
+      this->last_notify_ms_[param->notify.handle] = now;
 
       std::string hex_payload =
           format_hex(param->notify.value, param->notify.value_len);

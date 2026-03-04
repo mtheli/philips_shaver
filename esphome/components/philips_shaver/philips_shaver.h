@@ -52,6 +52,10 @@ class PhilipsShaver : public ble_client::BLEClientNode,
   std::vector<std::pair<std::string, std::string>> desired_subscriptions_;
 
   void resubscribe_all_();
+
+  // Notification throttle: max 1 event per second per characteristic
+  static const uint32_t NOTIFY_THROTTLE_MS = 1000;
+  std::map<uint16_t, uint32_t> last_notify_ms_;
 };
 
 }  // namespace philips_shaver
