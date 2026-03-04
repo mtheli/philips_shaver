@@ -25,7 +25,7 @@ This integration creates a new device for your shaver and provides the following
 | Entity | Type | Description |
 | :--- | :--- | :--- |
 | **Activity** | Sensor | Current detailed status (`Off`, `Shaving`, `Charging`, `Cleaning`). |
-| **Shaving Mode* | Select | Change the shaving intensity (e.g., `Sensitive`, `Normal`, `Intense`, `Custom`, `Foam`). |
+| **Shaving Mode** | Select | Change the shaving intensity (e.g., `Sensitive`, `Normal`, `Intense`, `Custom`, `Foam`). |
 | **Battery Level** | Sensor | The current battery charge level (`%`). |
 | **Travel Lock** | Binary Sensor | Indicates if the travel lock is active. |
 
@@ -34,7 +34,7 @@ This integration creates a new device for your shaver and provides the following
 | :--- | :--- | :--- |
 | **Pressure Value** | Sensor | Live pressure data from the sensor. |
 | **Pressure State** | Sensor | Categorized feedback (`Too Low`, `Optimal`, `Too High`). |
-| **Last Session Duration** | Light | Configure the LED ring colors for various pressure states. |
+| **Pressure Light Ring** | Light | Configure the LED ring colors for various pressure states. |
 | **Motor Speed** | Sensor | Current motor speed in RPM (e.g., ~2200 RPM). |
 | **Motor Current** | Sensor | Current motor power consumption in mA. |
 

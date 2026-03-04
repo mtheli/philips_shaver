@@ -197,7 +197,7 @@ The following characteristics support GATT notifications (indicated by the CCCD 
 |-------|----------|------------|
 | Exclusive connection | Shaver allows only one BLE connection at a time | Unpair from phone/GroomTribe app before connecting HA |
 | OS-level pairing required | GATT characteristics are inaccessible without prior pairing | Pair via `bluetoothctl` before adding the integration |
-| No ESPHome proxy support | Requires direct active BLE connection for notifications | Use a local Bluetooth adapter on the HA host |
+| No standard ESPHome proxy | Standard BLE proxy cannot handle LE Secure Connections pairing | Use the dedicated [ESP32 BLE Bridge](ESP_BRIDGE_SETUP.md) or a local Bluetooth adapter |
 | Motor RPM raw values | RPM characteristic reports raw sensor values | Divide by 3.036 for actual RPM |
 | Device state mapping | State byte uses 1/2/3 instead of 0/1/2 | Map 1=off, 2=shaving, 3=charging |
 
