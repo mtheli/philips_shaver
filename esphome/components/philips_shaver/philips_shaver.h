@@ -60,7 +60,7 @@ class PhilipsShaver : public ble_client::BLEClientNode,
   void resubscribe_all_();
 
   // Notification throttle: max 1 event per second per characteristic
-  static const uint32_t NOTIFY_THROTTLE_MS = 1000;
+  static const uint32_t NOTIFY_THROTTLE_MS = 500;
   std::map<uint16_t, uint32_t> last_notify_ms_;
 };
 
