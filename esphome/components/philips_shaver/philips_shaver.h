@@ -37,6 +37,8 @@ class PhilipsShaver : public ble_client::BLEClientNode,
                                 std::string hex_data);
 
  protected:
+  std::string get_shaver_mac_() const;
+
   bool connected_{false};
   uint16_t pending_handle_{0};
   std::string pending_char_uuid_;

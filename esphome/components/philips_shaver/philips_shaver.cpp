@@ -61,6 +61,14 @@ void PhilipsShaver::setup() {
 
 void PhilipsShaver::loop() {}
 
+std::string PhilipsShaver::get_shaver_mac_() const {
+  char mac[18];
+  auto *bda = this->parent()->get_remote_bda();
+  snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X",
+           bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
+  return std::string(mac);
+}
+
 void PhilipsShaver::dump_config() {
   ESP_LOGCONFIG(TAG, "Philips Shaver BLE Bridge");
 }
@@ -114,6 +122,7 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
             {
                 {"uuid", this->pending_char_uuid_},
                 {"payload", hex_payload},
+                {"mac", this->get_shaver_mac_()},
             });
 
         this->pending_handle_ = 0;
@@ -165,6 +174,7 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
           {
               {"uuid", it->second},
               {"payload", hex_payload},
+              {"mac", this->get_shaver_mac_()},
           });
       break;
     }
