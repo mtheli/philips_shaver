@@ -90,6 +90,8 @@ external_components:
 
 philips_shaver:
   ble_client_id: philips_shaver_ble
+  connected:
+    name: "Shaver Connected"
 
 # --- Hardware: M5Stack Atom Lite ---
 

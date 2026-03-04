@@ -4,6 +4,7 @@
 #include "esphome/components/ble_client/ble_client.h"
 #include "esphome/components/esp32_ble_tracker/esp32_ble_tracker.h"
 #include "esphome/components/api/custom_api_device.h"
+#include "esphome/components/binary_sensor/binary_sensor.h"
 
 #include <map>
 #include <string>
@@ -38,9 +39,14 @@ class PhilipsShaver : public ble_client::BLEClientNode,
                                 std::string characteristic_uuid,
                                 std::string hex_data);
 
+  void set_connected_sensor(binary_sensor::BinarySensor *sensor) {
+    this->connected_sensor_ = sensor;
+  }
+
  protected:
   std::string get_shaver_mac_();
 
+  binary_sensor::BinarySensor *connected_sensor_{nullptr};
   bool connected_{false};
   uint16_t pending_handle_{0};
   std::string pending_char_uuid_;

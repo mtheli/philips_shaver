@@ -81,6 +81,8 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
       if (param->open.status == ESP_GATT_OK) {
         ESP_LOGI(TAG, "Connected to shaver (%s)", this->get_shaver_mac_().c_str());
         this->connected_ = true;
+        if (this->connected_sensor_ != nullptr)
+          this->connected_sensor_->publish_state(true);
         this->fire_homeassistant_event(
             "esphome.philips_shaver_ble_status",
             {
@@ -99,6 +101,8 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
                param->disconnect.reason,
                this->desired_subscriptions_.size());
       this->connected_ = false;
+      if (this->connected_sensor_ != nullptr)
+        this->connected_sensor_->publish_state(false);
       this->pending_handle_ = 0;
       // Clear handle-based maps (handles are invalid after disconnect)
       // but keep desired_subscriptions_ for auto-resubscribe
