@@ -61,7 +61,18 @@ void PhilipsShaver::setup() {
   ESP_LOGI(TAG, "Services registered: ble_read_char, ble_subscribe, ble_unsubscribe, ble_write_char, ble_set_throttle");
 }
 
-void PhilipsShaver::loop() {}
+void PhilipsShaver::loop() {
+  uint32_t now = millis();
+  if ((now - this->last_heartbeat_ms_) >= HEARTBEAT_INTERVAL_MS) {
+    this->last_heartbeat_ms_ = now;
+    this->fire_homeassistant_event(
+        "esphome.philips_shaver_ble_status",
+        {
+            {"status", "heartbeat"},
+            {"ble_connected", this->connected_ ? "true" : "false"},
+        });
+  }
+}
 
 std::string PhilipsShaver::get_shaver_mac_() {
   char mac[18];

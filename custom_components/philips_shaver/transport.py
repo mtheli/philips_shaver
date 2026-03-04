@@ -9,6 +9,7 @@ from __future__ import annotations
 import abc
 import asyncio
 import logging
+import time
 from typing import Callable
 
 from homeassistant.core import HomeAssistant, Event, callback
@@ -23,6 +24,8 @@ _LOGGER = logging.getLogger(__name__)
 ESP_EVENT_NAME = "esphome.philips_shaver_ble_data"
 ESP_STATUS_EVENT_NAME = "esphome.philips_shaver_ble_status"
 ESP_READ_TIMEOUT = 5.0
+# Heartbeat timeout: if no heartbeat received within this time, ESP is considered offline
+ESP_HEARTBEAT_TIMEOUT = 45.0  # 3x heartbeat interval (15s)
 
 
 class ShaverTransport(abc.ABC):
@@ -221,9 +224,12 @@ class EspBridgeTransport(ShaverTransport):
         self._device_name = esphome_device_name  # e.g. "atom_lite"
         self._connected = False
         self._shaver_connected = False
+        self._esp_alive = False
+        self._last_heartbeat: float = 0.0
         self._disconnect_cb: Callable[[], None] | None = None
         self._event_unsub: Callable | None = None
         self._status_unsub: Callable | None = None
+        self._heartbeat_check_unsub: Callable | None = None
         self._pending_reads: dict[str, asyncio.Future[bytes | None]] = {}
         self._notify_callbacks: dict[str, Callable[[str, bytes], None]] = {}
         self._detected_mac: str | None = None
@@ -264,6 +270,9 @@ class EspBridgeTransport(ShaverTransport):
             return False
         # Verify ESPHome device is still available (service disappears when ESP goes offline)
         if not self._hass.services.has_service("esphome", self._svc_name("ble_read_char")):
+            return False
+        # Check ESP heartbeat (ESP sends heartbeat every 15s, timeout after 45s)
+        if not self._esp_alive:
             return False
         # Check ESP↔Shaver BLE connection (tracked via ble_status events)
         return self._shaver_connected
@@ -315,14 +324,38 @@ class EspBridgeTransport(ShaverTransport):
             ESP_EVENT_NAME, _handle_event
         )
 
-        # Listen for ESP↔Shaver BLE status events (connected/disconnected/ready)
+        # Listen for ESP↔Shaver BLE status events (connected/disconnected/ready/heartbeat)
         @callback
         def _handle_status_event(event: Event) -> None:
             status = event.data.get("status", "")
-            if status in ("connected", "ready"):
+
+            # Every status event (including heartbeat) proves ESP is alive
+            self._last_heartbeat = time.monotonic()
+            if not self._esp_alive:
+                self._esp_alive = True
+                _LOGGER.info("ESP bridge alive (status: %s)", status)
+                if self._disconnect_cb:
+                    self._disconnect_cb()  # trigger entity update
+
+            if status == "heartbeat":
+                # Update shaver BLE state from heartbeat payload
+                ble_connected = event.data.get("ble_connected") == "true"
+                if ble_connected != self._shaver_connected:
+                    self._shaver_connected = ble_connected
+                    _LOGGER.info(
+                        "ESP↔Shaver BLE: %s (via heartbeat)",
+                        "connected" if ble_connected else "disconnected",
+                    )
+                    if not ble_connected:
+                        self._cancel_pending_reads()
+                    if self._disconnect_cb:
+                        self._disconnect_cb()  # trigger entity update
+            elif status in ("connected", "ready"):
                 if not self._shaver_connected:
                     self._shaver_connected = True
                     _LOGGER.info("ESP↔Shaver BLE: %s", status)
+                    if self._disconnect_cb:
+                        self._disconnect_cb()  # trigger entity update
             elif status == "disconnected":
                 if self._shaver_connected:
                     self._shaver_connected = False
@@ -335,9 +368,35 @@ class EspBridgeTransport(ShaverTransport):
             ESP_STATUS_EVENT_NAME, _handle_status_event
         )
 
+        # Periodic heartbeat timeout check
+        @callback
+        def _check_heartbeat(now=None) -> None:
+            if not self._connected:
+                return
+            if self._last_heartbeat == 0:
+                return  # no heartbeat received yet
+            elapsed = time.monotonic() - self._last_heartbeat
+            if elapsed > ESP_HEARTBEAT_TIMEOUT and self._esp_alive:
+                self._esp_alive = False
+                _LOGGER.warning(
+                    "ESP heartbeat timeout (%.0fs) — bridge offline", elapsed
+                )
+                self._cancel_pending_reads()
+                if self._disconnect_cb:
+                    self._disconnect_cb()
+
+        from homeassistant.helpers.event import async_track_time_interval
+        from datetime import timedelta
+
+        self._heartbeat_check_unsub = async_track_time_interval(
+            self._hass, _check_heartbeat, timedelta(seconds=15)
+        )
+
         self._connected = True
-        # Assume shaver is connected initially (ESP sends "ready" event after connect)
+        # Assume ESP + shaver connected initially (first heartbeat confirms)
+        self._esp_alive = True
         self._shaver_connected = True
+        self._last_heartbeat = time.monotonic()
         _LOGGER.info("EspBridgeTransport: event listeners registered")
 
     async def disconnect(self) -> None:
@@ -347,8 +406,12 @@ class EspBridgeTransport(ShaverTransport):
         if self._status_unsub:
             self._status_unsub()
             self._status_unsub = None
+        if self._heartbeat_check_unsub:
+            self._heartbeat_check_unsub()
+            self._heartbeat_check_unsub = None
         self._connected = False
         self._shaver_connected = False
+        self._esp_alive = False
         self._pending_reads.clear()
         self._notify_callbacks.clear()
 

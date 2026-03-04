@@ -65,6 +65,10 @@ class PhilipsShaver : public ble_client::BLEClientNode,
   // Notification throttle: min interval between events per characteristic
   uint32_t notify_throttle_ms_{500};
   std::map<uint16_t, uint32_t> last_notify_ms_;
+
+  // Heartbeat: periodic status event to HA
+  static const uint32_t HEARTBEAT_INTERVAL_MS = 15000;
+  uint32_t last_heartbeat_ms_{0};
 };
 
 }  // namespace philips_shaver
