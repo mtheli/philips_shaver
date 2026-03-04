@@ -5,10 +5,12 @@
         "title": "Philips Shaver Einstellungen",
         "data": {
           "poll_interval": "Abfrageinterval",
-          "enable_live_updates": "Live Update"
+          "enable_live_updates": "Live Update",
+          "notify_throttle_ms": "Benachrichtigungs-Drosselung"
         },
         "data_description": {
-          "poll_interval": "Das empfohlene Interval beträgt {rec_int} Sekunden und maximal {max_int} Sekunden."
+          "poll_interval": "Das empfohlene Interval beträgt {rec_int} Sekunden und maximal {max_int} Sekunden.",
+          "notify_throttle_ms": "Mindestabstand zwischen BLE-Benachrichtigungen, die von der ESP-Bridge weitergeleitet werden (in Millisekunden). Niedrigere Werte liefern schnellere Updates, können aber den ESP-API-Buffer überlasten. Gilt nur für ESP32-Bridge-Verbindungen."
         },
         "description": "Das Abfrageintervall bestimmt den Abstand zwischen den Anfragen zur Aktualisierung der Geräteinformationen, falls das Live Update nicht aktiviert ist."
       }

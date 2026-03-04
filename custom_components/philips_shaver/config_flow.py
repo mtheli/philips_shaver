@@ -54,6 +54,10 @@ from .const import (
     TRANSPORT_BLEAK,
     TRANSPORT_ESP_BRIDGE,
     CONF_ESP_DEVICE_NAME,
+    CONF_NOTIFY_THROTTLE,
+    DEFAULT_NOTIFY_THROTTLE,
+    MIN_NOTIFY_THROTTLE,
+    MAX_NOTIFY_THROTTLE,
 )
 from .transport import EspBridgeTransport
 from .exceptions import (
@@ -74,28 +78,47 @@ class PhilipsShaverOptionsFlow(OptionsFlowWithReload):
     ) -> ConfigFlowResult:
         """Manage the options."""
         errors: dict[str, str] = {}
+        is_esp = (
+            self.config_entry.data.get(CONF_TRANSPORT_TYPE) == TRANSPORT_ESP_BRIDGE
+        )
+
         if user_input is not None:
-            return self.async_create_entry(
-                data={
-                    CONF_POLL_INTERVAL: user_input[CONF_POLL_INTERVAL],
-                    CONF_ENABLE_LIVE_UPDATES: user_input[CONF_ENABLE_LIVE_UPDATES],
-                }
+            entry_data = {
+                CONF_POLL_INTERVAL: user_input[CONF_POLL_INTERVAL],
+                CONF_ENABLE_LIVE_UPDATES: user_input[CONF_ENABLE_LIVE_UPDATES],
+            }
+            if is_esp and CONF_NOTIFY_THROTTLE in user_input:
+                entry_data[CONF_NOTIFY_THROTTLE] = int(
+                    user_input[CONF_NOTIFY_THROTTLE]
+                )
+            return self.async_create_entry(data=entry_data)
+
+        schema_fields: dict = {
+            vol.Required(CONF_POLL_INTERVAL): NumberSelector(
+                NumberSelectorConfig(
+                    min=MIN_POLL_INTERVAL,
+                    max=MAX_POLL_INTERVAL,
+                    step=1,
+                    unit_of_measurement="s",
+                    mode=NumberSelectorMode.BOX,
+                )
+            ),
+            vol.Required(CONF_ENABLE_LIVE_UPDATES): BooleanSelector(),
+        }
+
+        if is_esp:
+            schema_fields[vol.Required(CONF_NOTIFY_THROTTLE)] = NumberSelector(
+                NumberSelectorConfig(
+                    min=MIN_NOTIFY_THROTTLE,
+                    max=MAX_NOTIFY_THROTTLE,
+                    step=50,
+                    unit_of_measurement="ms",
+                    mode=NumberSelectorMode.BOX,
+                )
             )
 
-        data_schema: vol.Schema = vol.Schema(
-            {
-                vol.Required(CONF_POLL_INTERVAL): NumberSelector(
-                    NumberSelectorConfig(
-                        min=MIN_POLL_INTERVAL,
-                        max=MAX_POLL_INTERVAL,
-                        step=1,
-                        unit_of_measurement="s",
-                        mode=NumberSelectorMode.BOX,
-                    )
-                ),
-                vol.Required(CONF_ENABLE_LIVE_UPDATES): BooleanSelector(),
-            }
-        )
+        data_schema = vol.Schema(schema_fields)
+
         suggested_values = {
             CONF_POLL_INTERVAL: self.config_entry.options.get(
                 CONF_POLL_INTERVAL,
@@ -106,6 +129,11 @@ class PhilipsShaverOptionsFlow(OptionsFlowWithReload):
                 DEFAULT_ENABLE_LIVE_UPDATES,
             ),
         }
+        if is_esp:
+            suggested_values[CONF_NOTIFY_THROTTLE] = self.config_entry.options.get(
+                CONF_NOTIFY_THROTTLE,
+                DEFAULT_NOTIFY_THROTTLE,
+            )
 
         return self.async_show_form(
             step_id="init",

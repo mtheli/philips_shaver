@@ -56,7 +56,9 @@ void PhilipsShaver::setup() {
                           "ble_unsubscribe", {"service_uuid", "char_uuid"});
   this->register_service(&PhilipsShaver::on_write_characteristic,
                           "ble_write_char", {"service_uuid", "char_uuid", "data"});
-  ESP_LOGI(TAG, "Services registered: ble_read_char, ble_subscribe, ble_unsubscribe, ble_write_char");
+  this->register_service(&PhilipsShaver::on_set_throttle,
+                          "ble_set_throttle", {"throttle_ms"});
+  ESP_LOGI(TAG, "Services registered: ble_read_char, ble_subscribe, ble_unsubscribe, ble_write_char, ble_set_throttle");
 }
 
 void PhilipsShaver::loop() {}
@@ -407,6 +409,12 @@ void PhilipsShaver::on_write_characteristic(std::string service_uuid,
   if (status != ESP_OK) {
     ESP_LOGW(TAG, "Write request failed: %d", status);
   }
+}
+
+void PhilipsShaver::on_set_throttle(std::string throttle_ms) {
+  uint32_t ms = std::stoul(throttle_ms);
+  this->notify_throttle_ms_ = ms;
+  ESP_LOGI(TAG, "Notification throttle set to %u ms", ms);
 }
 
 void PhilipsShaver::resubscribe_all_() {

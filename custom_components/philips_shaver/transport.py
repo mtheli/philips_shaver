@@ -65,6 +65,9 @@ class ShaverTransport(abc.ABC):
     async def unsubscribe_all(self) -> None:
         """Unsubscribe from all active notification subscriptions."""
 
+    async def set_notify_throttle(self, ms: int) -> None:
+        """Set the notification throttle on the bridge (no-op for direct BLE)."""
+
     @abc.abstractmethod
     def set_disconnect_callback(self, cb: Callable[[], None]) -> None:
         """Register a callback invoked when the connection drops."""
@@ -396,6 +399,17 @@ class EspBridgeTransport(ShaverTransport):
     async def unsubscribe_all(self) -> None:
         for char_uuid in list(self._notify_callbacks.keys()):
             await self.unsubscribe(char_uuid)
+
+    async def set_notify_throttle(self, ms: int) -> None:
+        """Send throttle setting to ESP32 bridge."""
+        if not self._connected:
+            return
+        await self._hass.services.async_call(
+            "esphome",
+            self._svc_name("ble_set_throttle"),
+            {"throttle_ms": str(ms)},
+        )
+        _LOGGER.info("Notification throttle set to %d ms on ESP bridge", ms)
 
     def set_disconnect_callback(self, cb: Callable[[], None]) -> None:
         self._disconnect_cb = cb

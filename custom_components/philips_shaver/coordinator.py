@@ -62,7 +62,9 @@ from .const import (
     TRANSPORT_ESP_BRIDGE,
     CONF_POLL_INTERVAL,
     CONF_ENABLE_LIVE_UPDATES,
+    CONF_NOTIFY_THROTTLE,
     DEFAULT_ENABLE_LIVE_UPDATES,
+    DEFAULT_NOTIFY_THROTTLE,
     DEFAULT_POLL_INTERVAL,
     POLL_READ_CHARS,
     LIVE_READ_CHARS,
@@ -228,10 +230,12 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data via polling fallback."""
 
-        # 1. Live connection active → skip polling
+        # 1. Live connection active → skip polling but keep last_seen fresh
         if self.transport.is_connected:
             _LOGGER.debug("Live connection active – polling skipped")
-            return self.data or {}
+            data = self.data or {}
+            data["last_seen"] = datetime.now()
+            return data
 
         if self.data is None:
             self.data = {}
@@ -404,6 +408,12 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                     _LOGGER.info("Establishing live connection to %s...", self.address)
                     await self.transport.connect()
+
+                    # Send configured throttle to ESP bridge
+                    throttle_ms = self.entry.options.get(
+                        CONF_NOTIFY_THROTTLE, DEFAULT_NOTIFY_THROTTLE
+                    )
+                    await self.transport.set_notify_throttle(throttle_ms)
 
                     # Reset backoff on successful connection
                     backoff = 5
