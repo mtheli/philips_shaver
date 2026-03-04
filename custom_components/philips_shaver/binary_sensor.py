@@ -6,6 +6,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback as hass_callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -25,6 +26,7 @@ async def async_setup_entry(
     entities = [
         PhilipsChargingBinarySensor(coordinator, entry),
         PhilipsTravelLockBinarySensor(coordinator, entry),
+        PhilipsBleConnectedBinarySensor(coordinator, entry),
     ]
 
     async_add_entities(entities)
@@ -69,3 +71,26 @@ class PhilipsTravelLockBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
     @property
     def icon(self) -> str:
         return "mdi:lock" if self.is_on else "mdi:lock-open-variant"
+
+
+class PhilipsBleConnectedBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
+    """Binary sensor showing whether the BLE connection to the shaver is active."""
+
+    _attr_translation_key = "ble_connected"
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._device_id}_ble_connected"
+
+    @property
+    def available(self) -> bool:
+        """Always available — it reports the connection state itself."""
+        return True
+
+    @property
+    def is_on(self) -> bool:
+        return self.coordinator.transport.is_connected

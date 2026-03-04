@@ -10,7 +10,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, CHAR_SHAVING_MODE, SHAVING_MODES
+from .const import (
+    DOMAIN,
+    CHAR_SHAVING_MODE,
+    SHAVING_MODES,
+    CHAR_LIGHTRING_COLOR_BRIGHTNESS,
+    LIGHTRING_BRIGHTNESS_MODES,
+)
 from .entity import PhilipsShaverEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -23,7 +29,12 @@ async def async_setup_entry(
 ) -> None:
     """Set up the Philips Shaver select platform."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    async_add_entities([PhilipsShavingModeSelect(coordinator, entry)])
+    entities = [PhilipsShavingModeSelect(coordinator, entry)]
+
+    if coordinator.capabilities.light_ring:
+        entities.append(PhilipsLightRingBrightnessSelect(coordinator, entry))
+
+    async_add_entities(entities)
 
 
 class PhilipsShavingModeSelect(PhilipsShaverEntity, SelectEntity):
@@ -94,3 +105,55 @@ class PhilipsShavingModeSelect(PhilipsShaverEntity, SelectEntity):
             5: "mdi:battery-heart-outline",  # battery_saving
         }
         return ICONS.get(mode_id, "mdi:face-man")
+
+
+class PhilipsLightRingBrightnessSelect(PhilipsShaverEntity, SelectEntity):
+    """Select entity for the light ring brightness (High, Medium, Low)."""
+
+    _attr_translation_key = "lightring_brightness"
+    _attr_options = ["high", "medium", "low"]
+    _attr_icon = "mdi:brightness-6"
+
+    def __init__(self, coordinator: Any, entry: ConfigEntry) -> None:
+        """Initialize the select entity."""
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._device_id}_lightring_brightness_select"
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the current brightness from coordinator data."""
+        return self.coordinator.data.get("lightring_brightness")
+
+    async def async_select_option(self, option: str) -> None:
+        """Send the selected brightness to the shaver."""
+        if not self.coordinator.transport.is_connected:
+            _LOGGER.warning(
+                "Shaver not connected – cannot set brightness to %s", option
+            )
+            return
+
+        write_mapping = {
+            "high": 0xFF,
+            "medium": 0xCD,
+            "low": 0x9B,
+        }
+
+        val = write_mapping.get(option)
+        if val is None:
+            return
+
+        try:
+            await self.coordinator.transport.write_char(
+                CHAR_LIGHTRING_COLOR_BRIGHTNESS, bytes([val])
+            )
+            _LOGGER.info("Light ring brightness set to %s (0x%02x)", option, val)
+        except Exception as e:
+            _LOGGER.error("Failed to write brightness %s: %s", option, e)
+            return
+
+        new_data = self.coordinator.data.copy()
+        new_data["lightring_brightness_value"] = val
+        new_data["lightring_brightness"] = option
+        new_data["last_seen"] = datetime.now()
+
+        self.coordinator.async_set_updated_data(new_data)

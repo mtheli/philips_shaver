@@ -34,10 +34,12 @@ from .const import (
     CHAR_HISTORY_RPM,
     CHAR_HISTORY_SYNC_STATUS,
     CHAR_HISTORY_TIMESTAMP,
+    CHAR_LIGHTRING_COLOR_BRIGHTNESS,
     CHAR_LIGHTRING_COLOR_HIGH,
     CHAR_LIGHTRING_COLOR_LOW,
     CHAR_LIGHTRING_COLOR_MOTION,
     CHAR_LIGHTRING_COLOR_OK,
+    LIGHTRING_BRIGHTNESS_MODES,
     CHAR_MODEL_NUMBER,
     CHAR_MOTOR_CURRENT,
     CHAR_MOTOR_CURRENT_MAX,
@@ -350,6 +352,12 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 if color := parse_color(raw):
                     new_data[key] = color
 
+        # Light ring brightness
+        if raw := results.get(CHAR_LIGHTRING_COLOR_BRIGHTNESS):
+            val = raw[0]
+            new_data["lightring_brightness_value"] = val
+            new_data["lightring_brightness"] = LIGHTRING_BRIGHTNESS_MODES.get(val, "high")
+
         # Shaving mode
         if raw := results.get(CHAR_SHAVING_MODE):
             mode_value = int.from_bytes(raw, "little")
@@ -403,6 +411,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                     def _on_disconnect():
                         _LOGGER.info("Live connection lost (remote disconnect)")
+                        self.async_set_updated_data(self.data)
 
                     self.transport.set_disconnect_callback(_on_disconnect)
 

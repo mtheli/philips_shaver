@@ -101,6 +101,14 @@
           "foam": "Schaum",
           "battery_saving": "Akkuschonend"
         }
+      },
+      "lightring_brightness": {
+        "name": "Lichtring Helligkeit",
+        "state": {
+          "high": "Hoch",
+          "medium": "Mittel",
+          "low": "Niedrig"
+        }
       }
     },
     "sensor": {
@@ -236,6 +244,13 @@
         "state": {
           "on": "Gesperrt",
           "off": "Entsperrt"
+        }
+      },
+      "ble_connected": {
+        "name": "BLE Verbunden",
+        "state": {
+          "on": "Verbunden",
+          "off": "Getrennt"
         }
       }
     }

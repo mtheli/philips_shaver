@@ -12,14 +12,16 @@ import logging
 from typing import Callable
 
 from homeassistant.core import HomeAssistant, Event, callback
+from homeassistant.exceptions import HomeAssistantError
 
 from .const import CHAR_SERVICE_MAP
 from .exceptions import TransportError
 
 _LOGGER = logging.getLogger(__name__)
 
-# ESPHome event name fired by the ESP32 bridge component
+# ESPHome event names fired by the ESP32 bridge component
 ESP_EVENT_NAME = "esphome.philips_shaver_ble_data"
+ESP_STATUS_EVENT_NAME = "esphome.philips_shaver_ble_status"
 ESP_READ_TIMEOUT = 5.0
 
 
@@ -218,8 +220,10 @@ class EspBridgeTransport(ShaverTransport):
         self._address = address
         self._device_name = esphome_device_name  # e.g. "atom_lite"
         self._connected = False
+        self._shaver_connected = False
         self._disconnect_cb: Callable[[], None] | None = None
         self._event_unsub: Callable | None = None
+        self._status_unsub: Callable | None = None
         self._pending_reads: dict[str, asyncio.Future[bytes | None]] = {}
         self._notify_callbacks: dict[str, Callable[[str, bytes], None]] = {}
         self._detected_mac: str | None = None
@@ -259,7 +263,10 @@ class EspBridgeTransport(ShaverTransport):
         if not self._connected:
             return False
         # Verify ESPHome device is still available (service disappears when ESP goes offline)
-        return self._hass.services.has_service("esphome", self._svc_name("ble_read_char"))
+        if not self._hass.services.has_service("esphome", self._svc_name("ble_read_char")):
+            return False
+        # Check ESP↔Shaver BLE connection (tracked via ble_status events)
+        return self._shaver_connected
 
     async def connect(self) -> None:
         """Start listening for ESP32 bridge events."""
@@ -307,14 +314,41 @@ class EspBridgeTransport(ShaverTransport):
         self._event_unsub = self._hass.bus.async_listen(
             ESP_EVENT_NAME, _handle_event
         )
+
+        # Listen for ESP↔Shaver BLE status events (connected/disconnected/ready)
+        @callback
+        def _handle_status_event(event: Event) -> None:
+            status = event.data.get("status", "")
+            if status in ("connected", "ready"):
+                if not self._shaver_connected:
+                    self._shaver_connected = True
+                    _LOGGER.info("ESP↔Shaver BLE: %s", status)
+            elif status == "disconnected":
+                if self._shaver_connected:
+                    self._shaver_connected = False
+                    _LOGGER.warning("ESP↔Shaver BLE: disconnected")
+                    self._cancel_pending_reads()
+                    if self._disconnect_cb:
+                        self._disconnect_cb()
+
+        self._status_unsub = self._hass.bus.async_listen(
+            ESP_STATUS_EVENT_NAME, _handle_status_event
+        )
+
         self._connected = True
-        _LOGGER.info("EspBridgeTransport: event listener registered")
+        # Assume shaver is connected initially (ESP sends "ready" event after connect)
+        self._shaver_connected = True
+        _LOGGER.info("EspBridgeTransport: event listeners registered")
 
     async def disconnect(self) -> None:
         if self._event_unsub:
             self._event_unsub()
             self._event_unsub = None
+        if self._status_unsub:
+            self._status_unsub()
+            self._status_unsub = None
         self._connected = False
+        self._shaver_connected = False
         self._pending_reads.clear()
         self._notify_callbacks.clear()
 
@@ -327,11 +361,16 @@ class EspBridgeTransport(ShaverTransport):
         future: asyncio.Future[bytes | None] = self._hass.loop.create_future()
         self._pending_reads[char_uuid] = future
 
-        await self._hass.services.async_call(
-            "esphome",
-            self._svc_name("ble_read_char"),
-            {"service_uuid": service_uuid, "char_uuid": char_uuid},
-        )
+        try:
+            await self._hass.services.async_call(
+                "esphome",
+                self._svc_name("ble_read_char"),
+                {"service_uuid": service_uuid, "char_uuid": char_uuid},
+            )
+        except HomeAssistantError as err:
+            self._pending_reads.pop(char_uuid, None)
+            _LOGGER.debug("ESP read_char failed for %s: %s", char_uuid, err)
+            return None
 
         try:
             return await asyncio.wait_for(future, timeout=ESP_READ_TIMEOUT)
@@ -356,15 +395,18 @@ class EspBridgeTransport(ShaverTransport):
 
         service_uuid = self._get_service_uuid(char_uuid)
 
-        await self._hass.services.async_call(
-            "esphome",
-            self._svc_name("ble_write_char"),
-            {
-                "service_uuid": service_uuid,
-                "char_uuid": char_uuid,
-                "data": data.hex(),
-            },
-        )
+        try:
+            await self._hass.services.async_call(
+                "esphome",
+                self._svc_name("ble_write_char"),
+                {
+                    "service_uuid": service_uuid,
+                    "char_uuid": char_uuid,
+                    "data": data.hex(),
+                },
+            )
+        except HomeAssistantError as err:
+            raise TransportError(f"ESP write_char failed: {err}") from err
 
     async def subscribe(
         self, char_uuid: str, cb: Callable[[str, bytes], None]
@@ -375,11 +417,15 @@ class EspBridgeTransport(ShaverTransport):
         service_uuid = self._get_service_uuid(char_uuid)
         self._notify_callbacks[char_uuid] = cb
 
-        await self._hass.services.async_call(
-            "esphome",
-            self._svc_name("ble_subscribe"),
-            {"service_uuid": service_uuid, "char_uuid": char_uuid},
-        )
+        try:
+            await self._hass.services.async_call(
+                "esphome",
+                self._svc_name("ble_subscribe"),
+                {"service_uuid": service_uuid, "char_uuid": char_uuid},
+            )
+        except HomeAssistantError as err:
+            self._notify_callbacks.pop(char_uuid, None)
+            raise TransportError(f"ESP subscribe failed: {err}") from err
 
     async def unsubscribe(self, char_uuid: str) -> None:
         self._notify_callbacks.pop(char_uuid, None)
@@ -404,12 +450,15 @@ class EspBridgeTransport(ShaverTransport):
         """Send throttle setting to ESP32 bridge."""
         if not self._connected:
             return
-        await self._hass.services.async_call(
-            "esphome",
-            self._svc_name("ble_set_throttle"),
-            {"throttle_ms": str(ms)},
-        )
-        _LOGGER.info("Notification throttle set to %d ms on ESP bridge", ms)
+        try:
+            await self._hass.services.async_call(
+                "esphome",
+                self._svc_name("ble_set_throttle"),
+                {"throttle_ms": str(ms)},
+            )
+            _LOGGER.info("Notification throttle set to %d ms on ESP bridge", ms)
+        except HomeAssistantError as err:
+            _LOGGER.warning("Failed to set throttle on ESP bridge: %s", err)
 
     def set_disconnect_callback(self, cb: Callable[[], None]) -> None:
         self._disconnect_cb = cb
