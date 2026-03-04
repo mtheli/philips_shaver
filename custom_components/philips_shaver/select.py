@@ -27,7 +27,7 @@ async def async_setup_entry(
 
 
 class PhilipsShavingModeSelect(PhilipsShaverEntity, SelectEntity):
-    """Steuerung des Rasiermodus (Sanft, Normal, Intensiv, Persönlich, Schaum)."""
+    """Select entity for the shaving mode (Sensitive, Regular, Intense, Custom, Foam)."""
 
     _attr_translation_key = "shaving_mode"
     _attr_options = ["sensitive", "regular", "intense", "custom", "foam", "battery_saving"]
@@ -39,10 +39,10 @@ class PhilipsShavingModeSelect(PhilipsShaverEntity, SelectEntity):
 
     @property
     def current_option(self) -> str | None:
-        """Gibt den aktuell im Coordinator gespeicherten Modus zurück."""
+        """Return the current shaving mode from coordinator data."""
         mode_id = self.coordinator.data.get("shaving_mode_value")
 
-        # Mapping basierend auf der Sensor-Logik
+        # Map mode ID to option string
         return SHAVING_MODES.get(mode_id)
 
     async def async_select_option(self, option: str) -> None:
@@ -73,7 +73,7 @@ class PhilipsShavingModeSelect(PhilipsShaverEntity, SelectEntity):
             _LOGGER.error("Failed to write shaving mode %s: %s", option, e)
             return
 
-        # 4. Coordinator sofort lokal aktualisieren
+        # Update coordinator data immediately
         new_data = self.coordinator.data.copy()
         new_data["shaving_mode_value"] = val
         new_data["shaving_mode"] = option
@@ -83,7 +83,7 @@ class PhilipsShavingModeSelect(PhilipsShaverEntity, SelectEntity):
 
     @property
     def icon(self) -> str:
-        """Nutzt die dynamische Icon-Logik deiner Sensor-Klasse."""
+        """Return a dynamic icon based on the current shaving mode."""
         mode_id = self.coordinator.data.get("shaving_mode_value")
         ICONS = {
             0: "mdi:feather",  # sensitive

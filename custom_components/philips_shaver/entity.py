@@ -39,7 +39,7 @@ class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
         else:
             self._device_id = entry.data["address"]
 
-        # Device-Info wird beim ersten Mal gesetzt
+        # Set initial device info
         device_info = dr.DeviceInfo(
             identifiers={(DOMAIN, self._device_id)},
             manufacturer="Philips",
@@ -52,7 +52,7 @@ class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        # Nur wenn sich relevante Device-Daten geändert haben → Device aktualisieren
+        # Only update device registry when relevant device data has changed
         data = self.coordinator.data
 
         model_changed = (

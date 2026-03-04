@@ -111,7 +111,7 @@ class PhilipsColorConfigLight(PhilipsShaverEntity, LightEntity):
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Wird automatisch bei jedem Coordinator-Update aufgerufen."""
+        """Called automatically on every coordinator update."""
         key_map = {
             CHAR_LIGHTRING_COLOR_LOW: "color_low",
             CHAR_LIGHTRING_COLOR_OK: "color_ok",
@@ -175,7 +175,7 @@ class PhilipsColorConfigLight(PhilipsShaverEntity, LightEntity):
             _LOGGER.error("Failed to write color %s: %s", self._attr_translation_key, e)
             return
 
-        # Erfolgreich geschrieben → sofort im Coordinator aktualisieren
+        # Update coordinator data immediately after successful write
         key_map = {
             CHAR_LIGHTRING_COLOR_LOW: "color_low",
             CHAR_LIGHTRING_COLOR_OK: "color_ok",
@@ -190,7 +190,7 @@ class PhilipsColorConfigLight(PhilipsShaverEntity, LightEntity):
 
         self.coordinator.async_set_updated_data(new_data)
 
-        # Lokalen Cache aktualisieren (für rgb_color-Property
+        # Update local cache for rgb_color property
         self._rgb = (r, g, b)
 
     # ------------------------------------------------------------------
