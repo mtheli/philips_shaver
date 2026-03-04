@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 
 from .coordinator import PhilipsShaverCoordinator
-from .const import DOMAIN, CONF_TRANSPORT_TYPE, TRANSPORT_ESP_BRIDGE, CONF_ESP_DEVICE_NAME
+from .const import DOMAIN, CONF_ADDRESS, CONF_TRANSPORT_TYPE, TRANSPORT_ESP_BRIDGE, CONF_ESP_DEVICE_NAME
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,6 +47,11 @@ class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
         )
         if not self._is_esp_bridge:
             device_info["connections"] = {(dr.CONNECTION_BLUETOOTH, self._device_id)}
+        else:
+            # Add BLE connection if shaver MAC is known (auto-detected or migrated)
+            shaver_mac = entry.data.get(CONF_ADDRESS)
+            if shaver_mac:
+                device_info["connections"] = {(dr.CONNECTION_BLUETOOTH, shaver_mac)}
         self._attr_device_info = device_info
 
     @callback

@@ -15,6 +15,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.const import UnitOfTime, PERCENTAGE
 from homeassistant.components.bluetooth import async_last_service_info
 from .coordinator import PhilipsShaverCoordinator
@@ -50,7 +51,6 @@ async def async_setup_entry(
         PhilipsMotorRpmMaxSensor(coordinator, entry),
         PhilipsMotorRpmMinSensor(coordinator, entry),
         PhilipsHandleLoadTypeSensor(coordinator, entry),
-        PhilipsMotionTypeSensor(coordinator, entry),
         PhilipsModelNumberSensor(coordinator, entry),
         PhilipsShavingModeSensor(coordinator, entry),
         PhilipsTotalAgeSensor(coordinator, entry),
@@ -65,13 +65,21 @@ async def async_setup_entry(
             "Shaver does not support pressure feedback – skipping pressure sensors"
         )
 
-    # check for cleaning mode capability
-    if coordinator.capabilities.cleaning_mode:
+    # check for cleaning capability (cleaning_mode or unit_cleaning)
+    if coordinator.capabilities.cleaning_mode or coordinator.capabilities.unit_cleaning:
         entities.append(PhilipsCleaningProgressSensor(coordinator, entry))
         entities.append(PhilipsCleaningCyclesSensor(coordinator, entry))
     else:
         _LOGGER.info(
             "Shaver does not support cleaning mode – skipping cleaning sensors"
+        )
+
+    # check for motion capability
+    if coordinator.capabilities.motion:
+        entities.append(PhilipsMotionTypeSensor(coordinator, entry))
+    else:
+        _LOGGER.info(
+            "Shaver does not support motion sensing – skipping motion sensor"
         )
 
     # RSSI sensor only for direct BLE (not available via ESP bridge)
@@ -113,7 +121,7 @@ async def _update_live_entity_visibility(
 # =============================================================================
 # Batterie
 # =============================================================================
-class PhilipsBatterySensor(PhilipsShaverEntity, SensorEntity):
+class PhilipsBatterySensor(PhilipsShaverEntity, RestoreEntity, SensorEntity):
     _attr_translation_key = "battery"
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_device_class = SensorDeviceClass.BATTERY
@@ -124,6 +132,21 @@ class PhilipsBatterySensor(PhilipsShaverEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._device_id}_battery"
+
+    async def async_added_to_hass(self) -> None:
+        """Restore battery level from previous state on HA restart."""
+        await super().async_added_to_hass()
+
+        if self.coordinator.data.get("battery") is not None:
+            return  # Already have fresh data
+
+        last_state = await self.async_get_last_state()
+        if last_state and last_state.state not in (None, "unknown", "unavailable"):
+            try:
+                self.coordinator.data["battery"] = int(last_state.state)
+                _LOGGER.info("Restored battery level: %s%%", last_state.state)
+            except (ValueError, TypeError):
+                pass
 
     @property
     def native_value(self) -> int | None:
@@ -357,7 +380,7 @@ class PhilipsDeviceActivitySensor(PhilipsShaverEntity, SensorEntity):
 # =============================================================================
 # Last Seen
 # =============================================================================
-class PhilipsLastSeenSensor(PhilipsShaverEntity, SensorEntity):
+class PhilipsLastSeenSensor(PhilipsShaverEntity, RestoreEntity, SensorEntity):
     _attr_translation_key = "last_seen"
     _attr_native_unit_of_measurement = UnitOfTime.MINUTES
     _attr_device_class = SensorDeviceClass.DURATION
@@ -370,6 +393,30 @@ class PhilipsLastSeenSensor(PhilipsShaverEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._device_id}_last_seen"
+
+    async def async_added_to_hass(self) -> None:
+        """Restore last_seen timestamp from previous state on HA restart."""
+        await super().async_added_to_hass()
+
+        if self.coordinator.data.get("last_seen"):
+            return  # Already have fresh data
+
+        last_state = await self.async_get_last_state()
+        if last_state and (iso := last_state.attributes.get("last_seen_iso")):
+            try:
+                restored = datetime.fromisoformat(iso)
+                self.coordinator.data["last_seen"] = restored
+                _LOGGER.info("Restored last_seen: %s", restored.isoformat())
+            except (ValueError, TypeError):
+                pass
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str] | None:
+        """Persist the actual timestamp for restore on restart."""
+        last_seen = self.coordinator.data.get("last_seen")
+        if last_seen:
+            return {"last_seen_iso": last_seen.isoformat()}
+        return None
 
     @property
     def native_value(self) -> int | None:
@@ -642,8 +689,8 @@ class PhilipsHandleLoadTypeSensor(PhilipsShaverEntity, SensorEntity):
 class PhilipsMotionTypeSensor(PhilipsShaverEntity, SensorEntity):
     """Motion type sensor with threshold-based categorization.
 
-    The BLE characteristic returns a dynamic intensity value (0-255).
-    The app categorizes it using thresholds (BR2 model):
+    The BLE characteristic (0x0305) returns a uint8 motion quality score.
+    APA-type shavers (i9000/XP9201) use threshold-based mapping:
       0     = no_motion
       1-49  = large_stroke  ("Try smaller circles")
       >= 50 = small_circle  ("Keep going!")

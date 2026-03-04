@@ -46,6 +46,10 @@
         "title": "Erkanntes Gerät bestätigen",
         "description": "Möchten Sie den erkannten Philips Shaver \"{name}\" zu Home Assistant hinzufügen?"
       },
+      "bluetooth_confirm_esp": {
+        "title": "Erkanntes Gerät bestätigen",
+        "description": "Möchten Sie den erkannten Philips Shaver \"{name}\" zu Home Assistant hinzufügen?\n\n⚠️ **Hinweis:** Für diese Integration ist bereits eine ESP32-Bridge konfiguriert. Eine zusätzliche direkte Bluetooth-Verbindung kann zu Konflikten führen. Fahren Sie nur fort, wenn Sie auf direktes Bluetooth wechseln möchten."
+      },
       "show_capabilities": {
         "title": "Hardware-Fähigkeiten erkannt",
         "description": "Erfolgreich mit **{name}** verbunden.\n\n**Hardware-Fähigkeiten:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legende:**\n✅ Service gefunden & unterstützt\n❌ Erwarteter Service fehlt\n❔ Unbekannter Service vom Gerät\n\nKlicken Sie auf Absenden, um die Einrichtung abzuschließen."

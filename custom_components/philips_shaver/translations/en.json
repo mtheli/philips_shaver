@@ -46,6 +46,10 @@
         "title": "Confirm detected device",
         "description": "Do you want to add the detected Philips Shaver \"{name}\" to Home Assistant?"
       },
+      "bluetooth_confirm_esp": {
+        "title": "Confirm detected device",
+        "description": "Do you want to add the detected Philips Shaver \"{name}\" to Home Assistant?\n\n⚠️ **Note:** An ESP32 bridge is already configured for this integration. Adding a direct Bluetooth connection may cause conflicts. Only proceed if you want to switch from the ESP bridge to direct Bluetooth."
+      },
       "show_capabilities": {
         "title": "Hardware Capabilities detected",
         "description": "Successfully connected to **{name}**.\n\n**Hardware Capabilities:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legend:**\n✅ Service found & supported\n❌ Expected service missing\n❔ Unknown service from device\n\nClick Submit to finish the setup."

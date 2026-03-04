@@ -55,8 +55,11 @@ from .const import (
     CHAR_SHAVING_MODE,
     CHAR_SHAVING_MODE_SETTINGS,
     CHAR_CUSTOM_SHAVING_MODE_SETTINGS,
+    CONF_ADDRESS,
     CONF_CAPABILITIES,
     CONF_ESP_DEVICE_NAME,
+    CONF_TRANSPORT_TYPE,
+    TRANSPORT_ESP_BRIDGE,
     CONF_POLL_INTERVAL,
     CONF_ENABLE_LIVE_UPDATES,
     DEFAULT_ENABLE_LIVE_UPDATES,
@@ -379,6 +382,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Always update – important for "available"
         new_data["last_seen"] = datetime.now()
+
         return new_data
 
     async def _start_live_monitoring(self) -> None:
@@ -452,7 +456,8 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Outside the lock: wait until disconnect
             try:
                 while self.transport.is_connected:
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(5)
+
             except asyncio.CancelledError:
                 _LOGGER.error("Live connection was cancelled")
                 raise  # the task was cancelled from outside
@@ -462,7 +467,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._live_setup_done = False
                 await self.transport.unsubscribe_all()
                 _LOGGER.info("Live connection ended – polling will resume")
-                await asyncio.sleep(5)  # short pause before reconnect
+                await asyncio.sleep(5)
 
     def _make_live_callback(self):
         """Create a single notification callback for all subscribed characteristics."""

@@ -204,13 +204,18 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         self._abort_if_unique_id_configured()
 
         self.discovery_info = discovery_info
-
         return await self.async_step_bluetooth_confirm()
 
     async def async_step_bluetooth_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Confirm discovery and fetch capabilities."""
+        return await self._async_bluetooth_confirm(user_input, "bluetooth_confirm")
+
+    async def _async_bluetooth_confirm(
+        self, user_input: dict[str, Any] | None, step_id: str
+    ) -> ConfigFlowResult:
+        """Shared handler for bluetooth confirmation steps."""
         assert self.discovery_info is not None
         errors: dict[str, str] = {}
 
@@ -242,7 +247,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         }
 
         return self.async_show_form(
-            step_id="bluetooth_confirm",
+            step_id=step_id,
             description_placeholders={
                 "name": self.discovery_info.name or self.discovery_info.address,
             },
@@ -336,6 +341,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             return {
                 "services": found_services,
                 "capabilities": cap_int,
+                "shaver_mac": transport.detected_mac,
             }
 
         except TransportError as err:
@@ -368,16 +374,24 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             esp_device_name = user_input["esp_device_name"].strip().replace("-", "_")
 
-            await self.async_set_unique_id(f"esp_{esp_device_name}")
-            self._abort_if_unique_id_configured()
-
             try:
                 capabilities = await self._async_fetch_capabilities_esp(
                     esp_device_name, esp_device_name
                 )
 
+                shaver_mac = capabilities.get("shaver_mac")
+                # Use shaver MAC as unique_id (same as BLE discovery)
+                # so _abort_if_unique_id_configured() catches duplicates
+                if shaver_mac:
+                    await self.async_set_unique_id(
+                        shaver_mac.upper(), raise_on_progress=False
+                    )
+                else:
+                    await self.async_set_unique_id(f"esp_{esp_device_name}")
+                self._abort_if_unique_id_configured()
+
                 self.fetched_data = capabilities
-                self.fetched_address = None
+                self.fetched_address = shaver_mac
                 self.fetched_name = esp_device_name
                 self.fetched_transport_type = TRANSPORT_ESP_BRIDGE
                 self.fetched_esp_device_name = esp_device_name
@@ -435,6 +449,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             if self.fetched_transport_type == TRANSPORT_ESP_BRIDGE:
                 entry_data[CONF_TRANSPORT_TYPE] = TRANSPORT_ESP_BRIDGE
                 entry_data[CONF_ESP_DEVICE_NAME] = self.fetched_esp_device_name
+                if self.fetched_address:
+                    entry_data[CONF_ADDRESS] = self.fetched_address
             else:
                 entry_data[CONF_ADDRESS] = self.fetched_address
 

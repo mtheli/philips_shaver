@@ -219,6 +219,7 @@ class EspBridgeTransport(ShaverTransport):
         self._event_unsub: Callable | None = None
         self._pending_reads: dict[str, asyncio.Future[bytes | None]] = {}
         self._notify_callbacks: dict[str, Callable[[str, bytes], None]] = {}
+        self._detected_mac: str | None = None
 
     def _svc_name(self, action: str) -> str:
         """Full ESPHome service name, e.g. 'atom_lite_ble_read_char'."""
@@ -246,8 +247,16 @@ class EspBridgeTransport(ShaverTransport):
         _LOGGER.debug("Cancelled %d pending reads", count)
 
     @property
+    def detected_mac(self) -> str | None:
+        """Return the shaver's BLE MAC address detected from events."""
+        return self._detected_mac
+
+    @property
     def is_connected(self) -> bool:
-        return self._connected
+        if not self._connected:
+            return False
+        # Verify ESPHome device is still available (service disappears when ESP goes offline)
+        return self._hass.services.has_service("esphome", self._svc_name("ble_read_char"))
 
     async def connect(self) -> None:
         """Start listening for ESP32 bridge events."""
@@ -259,6 +268,7 @@ class EspBridgeTransport(ShaverTransport):
             )
 
         if self._event_unsub:
+            self._connected = True
             return
 
         @callback
@@ -268,6 +278,12 @@ class EspBridgeTransport(ShaverTransport):
             payload_hex = data.get("payload", "")
             if not uuid or not payload_hex:
                 return
+
+            # Capture shaver MAC from event (sent by ESPHome component)
+            mac = data.get("mac", "")
+            if mac and not self._detected_mac:
+                self._detected_mac = mac
+                _LOGGER.debug("Detected shaver MAC: %s", mac)
 
             try:
                 payload = bytes.fromhex(payload_hex)
