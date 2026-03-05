@@ -93,6 +93,22 @@ class PhilipsShavingModeSelect(PhilipsShaverEntity, SelectEntity):
         self.coordinator.async_set_updated_data(new_data)
 
     @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Expose raw mode value and active shaving settings."""
+        mode_id = self.coordinator.data.get("shaving_mode_value")
+        attrs: dict[str, Any] = {"raw_value": mode_id}
+
+        if mode_id == 3:
+            settings = self.coordinator.data.get("custom_shaving_settings")
+        else:
+            settings = self.coordinator.data.get("shaving_settings")
+
+        if settings:
+            attrs.update(settings)
+
+        return attrs
+
+    @property
     def icon(self) -> str:
         """Return a dynamic icon based on the current shaving mode."""
         mode_id = self.coordinator.data.get("shaving_mode_value")

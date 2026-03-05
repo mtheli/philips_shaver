@@ -52,7 +52,6 @@ async def async_setup_entry(
         PhilipsMotorRpmMinSensor(coordinator, entry),
         PhilipsHandleLoadTypeSensor(coordinator, entry),
         PhilipsModelNumberSensor(coordinator, entry),
-        PhilipsShavingModeSensor(coordinator, entry),
         PhilipsTotalAgeSensor(coordinator, entry),
     ]
 
@@ -212,6 +211,7 @@ class PhilipsShaverAmountOfOperationalTurnsSensor(PhilipsShaverEntity, SensorEnt
 class PhilipsFirmwareSensor(PhilipsShaverEntity, SensorEntity):
     _attr_translation_key = "firmware"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
     _attr_icon = "mdi:chip"
 
     def __init__(
@@ -576,6 +576,7 @@ class PhilipsMotorCurrentMaxSensor(PhilipsShaverEntity, SensorEntity):
     _attr_translation_key = "motor_current_max"
     _attr_native_unit_of_measurement = "mA"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
     _attr_icon = "mdi:shield-check"
 
     def __init__(
@@ -597,6 +598,7 @@ class PhilipsMotorRpmMaxSensor(PhilipsShaverEntity, SensorEntity):
     _attr_translation_key = "motor_rpm_max"
     _attr_native_unit_of_measurement = "RPM"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
     _attr_icon = "mdi:speedometer"
 
     def __init__(
@@ -614,6 +616,7 @@ class PhilipsMotorRpmMinSensor(PhilipsShaverEntity, SensorEntity):
     _attr_translation_key = "motor_rpm_min"
     _attr_native_unit_of_measurement = "RPM"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
     _attr_icon = "mdi:speedometer-slow"
 
     def __init__(
@@ -699,7 +702,6 @@ class PhilipsMotionTypeSensor(PhilipsShaverEntity, SensorEntity):
     _attr_translation_key = "motion_type"
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = ["no_motion", "small_circle", "large_stroke"]
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:gesture-swipe"
 
     def __init__(
@@ -743,6 +745,7 @@ class PhilipsMotionTypeSensor(PhilipsShaverEntity, SensorEntity):
 class PhilipsModelNumberSensor(PhilipsShaverEntity, SensorEntity):
     _attr_translation_key = "model_number"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
     _attr_icon = "mdi:information-outline"
 
     def __init__(
@@ -754,69 +757,6 @@ class PhilipsModelNumberSensor(PhilipsShaverEntity, SensorEntity):
     @property
     def native_value(self) -> str | None:
         return self.coordinator.data.get("model_number")
-
-
-# =============================================================================
-# Shaving Mode
-# =============================================================================
-class PhilipsShavingModeSensor(PhilipsShaverEntity, SensorEntity):
-    _attr_translation_key = "shaving_mode"
-    _attr_icon = "mdi:shaver"
-    _attr_device_class = SensorDeviceClass.ENUM
-    _attr_options = [
-        "sensitive",
-        "regular",
-        "intense",
-        "custom",
-        "foam",
-        "battery_saving",
-        "unknown",
-    ]
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-
-    def __init__(
-        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
-    ) -> None:
-        super().__init__(coordinator, entry)
-        self._attr_unique_id = f"{self._device_id}_shaving_mode"
-
-    @property
-    def native_value(self) -> str | None:
-        return self.coordinator.data.get("shaving_mode")
-
-    @property
-    def extra_state_attributes(self) -> dict | None:
-        # raw value of the mode
-        mode_id = self.coordinator.data.get("shaving_mode_value")
-        attrs = {"raw_value": mode_id}
-
-        # determine the currently used mode
-        if mode_id == 3:
-            # if the mode is custom, use the values of the custom package (0330)
-            settings = self.coordinator.data.get("custom_shaving_settings")
-        else:
-            # all other modes, use the standard settings (0332)
-            settings = self.coordinator.data.get("shaving_settings")
-
-        # add settings if available
-        if settings:
-            attrs.update(settings)
-
-        return attrs
-
-    @property
-    def icon(self) -> str:
-        # raw value of the mode
-        mode_id = self.coordinator.data.get("shaving_mode_value")
-        ICONS = {
-            0: "mdi:feather",  # sensitive
-            1: "mdi:face-man",  # regular
-            2: "mdi:lightning-bolt",  # intense
-            3: "mdi:tune",  # custom
-            4: "mdi:spray",  # foam
-            5: "mdi:battery-heart-outline",  # battery_saving
-        }
-        return ICONS.get(mode_id, "mdi:face-man")  # type: ignore
 
 
 # =============================================================================

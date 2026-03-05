@@ -174,10 +174,10 @@
         "name": "Motorstrom (max)"
       },
       "motor_rpm_max": {
-        "name": "Motor Drehzahl Max"
+        "name": "Motordrehzahl (max)"
       },
       "motor_rpm_min": {
-        "name": "Motor Drehzahl Min"
+        "name": "Motordrehzahl (min)"
       },
       "model_number": {
         "name": "Modellnummer"
