@@ -5,10 +5,11 @@ from esphome.const import CONF_ID
 
 DEPENDENCIES = ["ble_client", "esp32_ble_tracker", "api"]
 AUTO_LOAD = ["binary_sensor"]
-MULTI_CONF = False
+MULTI_CONF = True
 
 CONF_CONNECTED_SENSOR = "connected"
 CONF_NOTIFY_THROTTLE = "notify_throttle_ms"
+CONF_DEVICE_ID = "device_id"
 
 philips_shaver_ns = cg.esphome_ns.namespace("philips_shaver")
 PhilipsShaver = philips_shaver_ns.class_(
@@ -21,6 +22,7 @@ CONFIG_SCHEMA = (
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(PhilipsShaver),
+            cv.Optional(CONF_DEVICE_ID, default=""): cv.string,
             cv.Optional(CONF_NOTIFY_THROTTLE, default=500): cv.positive_int,
             cv.Optional(CONF_CONNECTED_SENSOR): binary_sensor.binary_sensor_schema(
                 device_class="connectivity",
@@ -37,6 +39,7 @@ async def to_code(config):
     await cg.register_component(var, config)
     await ble_client.register_ble_node(var, config)
 
+    cg.add(var.set_device_id(config[CONF_DEVICE_ID]))
     cg.add(var.set_notify_throttle(config[CONF_NOTIFY_THROTTLE]))
 
     if CONF_CONNECTED_SENSOR in config:

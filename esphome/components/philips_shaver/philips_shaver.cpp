@@ -49,16 +49,16 @@ void PhilipsShaver::setup() {
   ESP_LOGI(TAG, "SMP security configured for LE Secure Connections");
 
   this->register_service(&PhilipsShaver::on_read_characteristic,
-                          "ble_read_char", {"service_uuid", "char_uuid"});
+                          this->svc_name_("ble_read_char"), {"service_uuid", "char_uuid"});
   this->register_service(&PhilipsShaver::on_subscribe,
-                          "ble_subscribe", {"service_uuid", "char_uuid"});
+                          this->svc_name_("ble_subscribe"), {"service_uuid", "char_uuid"});
   this->register_service(&PhilipsShaver::on_unsubscribe,
-                          "ble_unsubscribe", {"service_uuid", "char_uuid"});
+                          this->svc_name_("ble_unsubscribe"), {"service_uuid", "char_uuid"});
   this->register_service(&PhilipsShaver::on_write_characteristic,
-                          "ble_write_char", {"service_uuid", "char_uuid", "data"});
+                          this->svc_name_("ble_write_char"), {"service_uuid", "char_uuid", "data"});
   this->register_service(&PhilipsShaver::on_set_throttle,
-                          "ble_set_throttle", {"throttle_ms"});
-  ESP_LOGI(TAG, "Services registered: ble_read_char, ble_subscribe, ble_unsubscribe, ble_write_char, ble_set_throttle");
+                          this->svc_name_("ble_set_throttle"), {"throttle_ms"});
+  ESP_LOGI(TAG, "Services registered (suffix: '%s')", this->device_id_.c_str());
 }
 
 void PhilipsShaver::loop() {
@@ -70,6 +70,7 @@ void PhilipsShaver::loop() {
         {
             {"status", "heartbeat"},
             {"ble_connected", this->connected_ ? "true" : "false"},
+            {"mac", this->get_shaver_mac_()},
         });
   }
 }
@@ -82,8 +83,16 @@ std::string PhilipsShaver::get_shaver_mac_() {
   return std::string(mac);
 }
 
+std::string PhilipsShaver::svc_name_(const std::string &action) {
+  if (this->device_id_.empty())
+    return action;
+  return action + "_" + this->device_id_;
+}
+
 void PhilipsShaver::dump_config() {
   ESP_LOGCONFIG(TAG, "Philips Shaver BLE Bridge");
+  if (!this->device_id_.empty())
+    ESP_LOGCONFIG(TAG, "  Device ID: %s", this->device_id_.c_str());
 }
 
 void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,

@@ -45,9 +45,13 @@ class PhilipsShaver : public ble_client::BLEClientNode,
     this->connected_sensor_ = sensor;
   }
   void set_notify_throttle(uint32_t ms) { this->notify_throttle_ms_ = ms; }
+  void set_device_id(const std::string &id) { this->device_id_ = id; }
 
  protected:
   std::string get_shaver_mac_();
+  std::string svc_name_(const std::string &action);
+
+  std::string device_id_;
 
   binary_sensor::BinarySensor *connected_sensor_{nullptr};
   bool connected_{false};
