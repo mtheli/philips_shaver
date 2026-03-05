@@ -401,6 +401,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Persistent live connection with notifications – exclusive and intelligent."""
         backoff = 5
         max_backoff = 300
+        esp_ready = asyncio.Event()
 
         while True:
             async with self._connection_lock:
@@ -409,27 +410,24 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         await asyncio.sleep(5)
                         continue
 
-                    def _on_disconnect():
-                        _LOGGER.info("Live connection lost (remote disconnect)")
+                    def _on_state_change():
+                        if self.transport.is_connected:
+                            _LOGGER.info("Transport state: connected")
+                        else:
+                            _LOGGER.info("Transport state: disconnected")
                         self.async_set_updated_data(self.data)
+                        esp_ready.set()  # wake up backoff sleep
 
-                    self.transport.set_disconnect_callback(_on_disconnect)
+                    self.transport.set_disconnect_callback(_on_state_change)
 
                     _LOGGER.info("Establishing live connection to %s...", self.address)
                     await self.transport.connect()
 
-                    # Send configured throttle to ESP bridge
-                    throttle_ms = self.entry.options.get(
-                        CONF_NOTIFY_THROTTLE, DEFAULT_NOTIFY_THROTTLE
-                    )
-                    await self.transport.set_notify_throttle(throttle_ms)
-
-                    # Reset backoff on successful connection
-                    backoff = 5
-
                     # Initial read of all live chars
                     results = {}
                     for uuid in self._live_chars:
+                        if not self.transport.is_connected:
+                            break
                         try:
                             value = await self.transport.read_char(uuid)
                             results[uuid] = value
@@ -444,6 +442,15 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             "No characteristics could be read – bridge may not be ready"
                         )
 
+                    # Reset backoff only after successful reads
+                    backoff = 5
+
+                    # Send configured throttle to ESP bridge (only after confirmed working)
+                    throttle_ms = self.entry.options.get(
+                        CONF_NOTIFY_THROTTLE, DEFAULT_NOTIFY_THROTTLE
+                    )
+                    await self.transport.set_notify_throttle(throttle_ms)
+
                     new_data = self._process_results(results)
                     self.async_set_updated_data(new_data)
 
@@ -456,8 +463,12 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     _LOGGER.debug(
                         "Transport error: %s – retrying in %ds", err, backoff
                     )
-                    await asyncio.sleep(backoff)
-                    backoff = min(backoff * 2, max_backoff)
+                    esp_ready.clear()
+                    try:
+                        await asyncio.wait_for(esp_ready.wait(), timeout=backoff)
+                        backoff = 5  # ESP came online — reset backoff
+                    except asyncio.TimeoutError:
+                        backoff = min(backoff * 2, max_backoff)
                     continue
 
                 except Exception as err:
@@ -468,8 +479,12 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         await self.transport.disconnect()
                     except Exception:
                         pass
-                    await asyncio.sleep(backoff)
-                    backoff = min(backoff * 2, max_backoff)
+                    esp_ready.clear()
+                    try:
+                        await asyncio.wait_for(esp_ready.wait(), timeout=backoff)
+                        backoff = 5
+                    except asyncio.TimeoutError:
+                        backoff = min(backoff * 2, max_backoff)
                     continue
 
             # Outside the lock: wait until disconnect

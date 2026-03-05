@@ -19,6 +19,7 @@ from .const import CHAR_SERVICE_MAP
 from .exceptions import TransportError
 
 _LOGGER = logging.getLogger(__name__)
+TRACE = 5  # below DEBUG(10), for per-event tracing
 
 # ESPHome event names fired by the ESP32 bridge component
 ESP_EVENT_NAME = "esphome.philips_shaver_ble_data"
@@ -232,9 +233,9 @@ class EspBridgeTransport(ShaverTransport):
         self._hass = hass
         self._address = address
         self._device_name = esphome_device_name  # e.g. "atom_lite"
-        self._connected = False
-        self._shaver_connected = False
-        self._esp_alive = False
+        self._setup_done = False  # event listeners registered
+        self._shaver_connected = False  # ESP↔Shaver BLE link active
+        self._esp_alive = False  # heartbeat received from ESP
         self._last_heartbeat: float = 0.0
         self._disconnect_cb: Callable[[], None] | None = None
         self._event_unsub: Callable | None = None
@@ -277,7 +278,7 @@ class EspBridgeTransport(ShaverTransport):
     @property
     def is_bridge_alive(self) -> bool:
         """Return True if the ESP bridge is reachable (heartbeat within timeout)."""
-        if not self._connected:
+        if not self._setup_done:
             return False
         if not self._hass.services.has_service("esphome", self._svc_name("ble_read_char")):
             return False
@@ -302,19 +303,26 @@ class EspBridgeTransport(ShaverTransport):
             )
 
         if self._event_unsub:
-            self._connected = True
+            self._setup_done = True
             return
 
         @callback
         def _handle_event(event: Event) -> None:
             data = event.data
+            _LOGGER.log(TRACE, "BLE data event: uuid=%s, pending=%s",
+                        data.get("uuid", "?"), list(self._pending_reads.keys()))
+
+            mac = data.get("mac", "")
+
+            # Filter: only process events from our shaver (once MAC is known)
+            if mac and self._detected_mac and mac.upper() != self._detected_mac.upper():
+                return
+
             uuid = data.get("uuid", "")
             payload_hex = data.get("payload", "")
             if not uuid or not payload_hex:
                 return
 
-            # Capture shaver MAC from event (sent by ESPHome component)
-            mac = data.get("mac", "")
             if mac and not self._detected_mac:
                 self._detected_mac = mac
                 _LOGGER.debug("Detected shaver MAC: %s", mac)
@@ -330,6 +338,11 @@ class EspBridgeTransport(ShaverTransport):
                 future = self._pending_reads.pop(uuid)
                 if not future.done():
                     future.set_result(payload)
+                    _LOGGER.log(TRACE, "Resolved pending read for %s", uuid)
+                else:
+                    _LOGGER.debug("Future already done for %s", uuid)
+            else:
+                _LOGGER.log(TRACE, "No pending read for %s", uuid)
 
             # Fire notification callback
             if uuid in self._notify_callbacks:
@@ -342,6 +355,12 @@ class EspBridgeTransport(ShaverTransport):
         # Listen for ESP↔Shaver BLE status events (connected/disconnected/ready/heartbeat)
         @callback
         def _handle_status_event(event: Event) -> None:
+            mac = event.data.get("mac", "")
+
+            # Filter: only process status events from our shaver (once MAC is known)
+            if mac and self._detected_mac and mac.upper() != self._detected_mac.upper():
+                return
+
             status = event.data.get("status", "")
 
             # Every status event (including heartbeat) proves ESP is alive
@@ -386,7 +405,7 @@ class EspBridgeTransport(ShaverTransport):
         # Periodic heartbeat timeout check
         @callback
         def _check_heartbeat(now=None) -> None:
-            if not self._connected:
+            if not self._setup_done:
                 return
             if self._last_heartbeat == 0:
                 return  # no heartbeat received yet
@@ -407,12 +426,11 @@ class EspBridgeTransport(ShaverTransport):
             self._hass, _check_heartbeat, timedelta(seconds=15)
         )
 
-        self._connected = True
-        # Assume ESP + shaver connected initially (first heartbeat confirms)
-        self._esp_alive = True
-        self._shaver_connected = True
-        self._last_heartbeat = time.monotonic()
-        _LOGGER.info("EspBridgeTransport: event listeners registered")
+        self._setup_done = True
+        # Start pessimistic — first heartbeat or status event confirms ESP is alive
+        _LOGGER.info("EspBridgeTransport: event listeners registered, waiting for ESP heartbeat")
+        if self._disconnect_cb:
+            self._disconnect_cb()  # force entity update with initial (pessimistic) state
 
     async def disconnect(self) -> None:
         if self._event_unsub:
@@ -424,14 +442,14 @@ class EspBridgeTransport(ShaverTransport):
         if self._heartbeat_check_unsub:
             self._heartbeat_check_unsub()
             self._heartbeat_check_unsub = None
-        self._connected = False
+        self._setup_done = False
         self._shaver_connected = False
         self._esp_alive = False
         self._pending_reads.clear()
         self._notify_callbacks.clear()
 
     async def read_char(self, char_uuid: str) -> bytes | None:
-        if not self._connected:
+        if not self._setup_done:
             return None
 
         service_uuid = self._get_service_uuid(char_uuid)
@@ -444,31 +462,41 @@ class EspBridgeTransport(ShaverTransport):
                 "esphome",
                 self._svc_name("ble_read_char"),
                 {"service_uuid": service_uuid, "char_uuid": char_uuid},
+                blocking=True,
             )
         except HomeAssistantError as err:
             self._pending_reads.pop(char_uuid, None)
             _LOGGER.debug("ESP read_char failed for %s: %s", char_uuid, err)
+            # Mark bridge as not alive so read_chars skips remaining reads
+            self._esp_alive = False
             return None
 
         try:
             return await asyncio.wait_for(future, timeout=ESP_READ_TIMEOUT)
         except asyncio.TimeoutError:
-            _LOGGER.warning("ESP32 read timeout for %s — cancelling all pending reads", char_uuid)
+            _LOGGER.warning("ESP read timeout for %s — bridge not responding", char_uuid)
             self._pending_reads.pop(char_uuid, None)
             self._cancel_pending_reads()
+            self._esp_alive = False
+            self._shaver_connected = False
+            if self._disconnect_cb:
+                self._disconnect_cb()
             return None
 
     async def read_chars(self, char_uuids: list[str]) -> dict[str, bytes | None]:
         """Read multiple characteristics sequentially (ESP32 handles one at a time)."""
-        if not self._connected:
+        if not self._setup_done:
             await self.connect()
         results: dict[str, bytes | None] = {}
         for uuid in char_uuids:
+            if not self.is_connected:
+                results[uuid] = None
+                continue
             results[uuid] = await self.read_char(uuid)
         return results
 
     async def write_char(self, char_uuid: str, data: bytes) -> None:
-        if not self._connected:
+        if not self._setup_done:
             raise TransportError("Not connected")
 
         service_uuid = self._get_service_uuid(char_uuid)
@@ -482,6 +510,7 @@ class EspBridgeTransport(ShaverTransport):
                     "char_uuid": char_uuid,
                     "data": data.hex(),
                 },
+                blocking=True,
             )
         except HomeAssistantError as err:
             raise TransportError(f"ESP write_char failed: {err}") from err
@@ -489,7 +518,7 @@ class EspBridgeTransport(ShaverTransport):
     async def subscribe(
         self, char_uuid: str, cb: Callable[[str, bytes], None]
     ) -> None:
-        if not self._connected:
+        if not self._setup_done:
             raise TransportError("Not connected")
 
         service_uuid = self._get_service_uuid(char_uuid)
@@ -500,6 +529,7 @@ class EspBridgeTransport(ShaverTransport):
                 "esphome",
                 self._svc_name("ble_subscribe"),
                 {"service_uuid": service_uuid, "char_uuid": char_uuid},
+                blocking=True,
             )
         except HomeAssistantError as err:
             self._notify_callbacks.pop(char_uuid, None)
@@ -507,7 +537,7 @@ class EspBridgeTransport(ShaverTransport):
 
     async def unsubscribe(self, char_uuid: str) -> None:
         self._notify_callbacks.pop(char_uuid, None)
-        if not self._connected:
+        if not self._setup_done:
             return
 
         service_uuid = self._get_service_uuid(char_uuid)
@@ -516,6 +546,7 @@ class EspBridgeTransport(ShaverTransport):
                 "esphome",
                 self._svc_name("ble_unsubscribe"),
                 {"service_uuid": service_uuid, "char_uuid": char_uuid},
+                blocking=True,
             )
         except Exception:
             pass
@@ -526,17 +557,18 @@ class EspBridgeTransport(ShaverTransport):
 
     async def set_notify_throttle(self, ms: int) -> None:
         """Send throttle setting to ESP32 bridge."""
-        if not self._connected:
+        if not self.is_connected:
             return
         try:
             await self._hass.services.async_call(
                 "esphome",
                 self._svc_name("ble_set_throttle"),
                 {"throttle_ms": str(ms)},
+                blocking=True,
             )
             _LOGGER.info("Notification throttle set to %d ms on ESP bridge", ms)
         except HomeAssistantError as err:
-            _LOGGER.warning("Failed to set throttle on ESP bridge: %s", err)
+            _LOGGER.debug("Failed to set throttle on ESP bridge: %s", err)
 
     def set_disconnect_callback(self, cb: Callable[[], None]) -> None:
         self._disconnect_cb = cb
