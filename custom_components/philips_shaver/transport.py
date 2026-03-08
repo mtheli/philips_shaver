@@ -10,10 +10,16 @@ import abc
 import asyncio
 import logging
 import time
+from datetime import timedelta
 from typing import Callable
 
-from homeassistant.core import HomeAssistant, Event, callback
+from bleak import BleakClient
+from bleak_retry_connector import establish_connection as bleak_establish
+
+from homeassistant.components.bluetooth import async_last_service_info
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.event import async_track_time_interval
 
 from .const import CHAR_SERVICE_MAP
 from .exceptions import TransportError
@@ -92,11 +98,6 @@ class ShaverTransport(abc.ABC):
 # ---------------------------------------------------------------------------
 # BleakTransport — wraps existing direct BLE code
 # ---------------------------------------------------------------------------
-
-from bleak import BleakClient
-from bleak_retry_connector import establish_connection as bleak_establish
-from homeassistant.components.bluetooth import async_last_service_info
-
 
 class BleakTransport(ShaverTransport):
     """Direct BLE transport using bleak."""
@@ -418,9 +419,6 @@ class EspBridgeTransport(ShaverTransport):
                 self._cancel_pending_reads()
                 if self._disconnect_cb:
                     self._disconnect_cb()
-
-        from homeassistant.helpers.event import async_track_time_interval
-        from datetime import timedelta
 
         self._heartbeat_check_unsub = async_track_time_interval(
             self._hass, _check_heartbeat, timedelta(seconds=15)

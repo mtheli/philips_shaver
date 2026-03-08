@@ -16,7 +16,7 @@ from homeassistant.components.bluetooth import (
     async_register_callback,
 )
 
-from .transport import ShaverTransport
+from .transport import BleakTransport, ShaverTransport
 from .exceptions import TransportError
 from .const import (
     CHAR_AMOUNT_OF_CHARGES,
@@ -193,6 +193,9 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._live_task = self.hass.loop.create_task(self._start_live_monitoring())
         else:
             _LOGGER.info("Live updates disabled – polling only")
+
+        if isinstance(self.transport, BleakTransport) and _LOGGER.isEnabledFor(logging.DEBUG):
+            await self._async_start_advertisement_logging()
 
     async def _async_start_advertisement_logging(self) -> None:
         """Log every advertisement from the shaver (useful for debugging)."""
