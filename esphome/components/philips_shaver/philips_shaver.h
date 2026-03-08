@@ -70,6 +70,7 @@ class PhilipsShaver : public ble_client::BLEClientNode,
   // Subscriptions that should be restored after reconnect (service_uuid, char_uuid)
   std::vector<std::pair<std::string, std::string>> desired_subscriptions_;
 
+  void apply_smp_params_();
   void resubscribe_all_();
 
   // Notification throttle: min interval between events per characteristic

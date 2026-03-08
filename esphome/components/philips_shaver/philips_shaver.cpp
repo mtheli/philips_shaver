@@ -19,7 +19,7 @@ static espbt::ESPBTUUID parse_uuid(const std::string &uuid_str) {
   return espbt::ESPBTUUID::from_raw(uuid_str);
 }
 
-void PhilipsShaver::setup() {
+void PhilipsShaver::apply_smp_params_() {
   // --- BLE Security (SMP) configuration ---
   //
   // The Philips shaver requires LE Secure Connections for pairing.
@@ -52,7 +52,11 @@ void PhilipsShaver::setup() {
   esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size, sizeof(key_size));
   esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(init_key));
   esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(rsp_key));
-  ESP_LOGI(TAG, "SMP security configured for LE Secure Connections");
+  ESP_LOGI(TAG, "SMP security params applied (io_cap=DisplayYesNo, auth=0x2D)");
+}
+
+void PhilipsShaver::setup() {
+  this->apply_smp_params_();
 
   this->register_service(&PhilipsShaver::on_read_characteristic,
                           this->svc_name_("ble_read_char"), {"service_uuid", "char_uuid"});
@@ -153,6 +157,9 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
     }
 
     case ESP_GATTC_SEARCH_CMPL_EVT: {
+      // Re-apply SMP params right before pairing (YAML on_connect runs next).
+      // ESPHome's core BLE component may override our setup() io_cap setting.
+      this->apply_smp_params_();
       ESP_LOGI(TAG, "Service discovery complete");
       if (!this->desired_subscriptions_.empty()) {
         ESP_LOGI(TAG, "Restoring %d notification subscription(s)...",
