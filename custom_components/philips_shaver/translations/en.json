@@ -260,6 +260,11 @@
           "off": "Offline"
         }
       }
+    },
+    "button": {
+      "blade_replacement": {
+        "name": "Blade Replacement"
+      }
     }
   }
 }

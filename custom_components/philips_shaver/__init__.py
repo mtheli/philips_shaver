@@ -21,7 +21,7 @@ from .transport import BleakTransport, EspBridgeTransport
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.SENSOR, Platform.LIGHT, Platform.SELECT, Platform.BINARY_SENSOR]
+PLATFORMS = [Platform.SENSOR, Platform.LIGHT, Platform.SELECT, Platform.BINARY_SENSOR, Platform.BUTTON]
 
 SERVICE_FETCH_HISTORY = "fetch_history"
 
