@@ -36,11 +36,9 @@ void PhilipsShaver::setup() {
   // ESP_BLE_SEC_ENCRYPT_MITM to initiate pairing using these params.
   //
   // Note: io_cap is set to NoInputNoOutput instead of the original btmon
-  // capture value (DisplayYesNo). This forces "Just Works" pairing for all
-  // shaver models. Some models (e.g. XP9400) also report DisplayYesNo,
-  // which triggers Numeric Comparison — a pairing method ESPHome cannot
-  // handle (NC_REQ event is ignored), causing reads to fail with
-  // INSUF_AUTHENTICATION (status 5). Using NoInputNoOutput avoids this.
+  // capture value (DisplayYesNo). Some models (e.g. XP9400) also report
+  // DisplayYesNo, which can trigger Numeric Comparison pairing. We handle
+  // this via gap_event_handler() which auto-confirms NC requests.
   uint8_t auth_req = 0x2D;  // Bond(1) | MITM(4) | SC(8) | CT2(0x20)
   esp_ble_io_cap_t io_cap = ESP_IO_CAP_NONE;  // NoInputNoOutput → forces Just Works
   uint8_t key_size = 16;
@@ -492,6 +490,15 @@ void PhilipsShaver::on_get_info() {
 
   ESP_LOGI(TAG, "Info: v%s uptime=%ss heap=%s subs=%s paired=%s",
            PHILIPS_SHAVER_VERSION, uptime_str, heap_str, subs_str, paired.c_str());
+}
+
+void PhilipsShaver::gap_event_handler(esp_gap_ble_cb_event_t event,
+                                       esp_ble_gap_cb_param_t *param) {
+  if (event == ESP_GAP_BLE_NC_REQ_EVT) {
+    ESP_LOGI(TAG, "Numeric Comparison request — auto-confirming (passkey: %lu)",
+             param->ble_security.key_notif.passkey);
+    esp_ble_confirm_reply(param->ble_security.key_notif.bd_addr, true);
+  }
 }
 
 void PhilipsShaver::resubscribe_all_() {

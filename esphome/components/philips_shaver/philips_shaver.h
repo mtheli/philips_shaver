@@ -14,7 +14,7 @@
 namespace esphome {
 namespace philips_shaver {
 
-static const char *const PHILIPS_SHAVER_VERSION = "1.1.0";
+static const char *const PHILIPS_SHAVER_VERSION = "1.2.0";
 
 class PhilipsShaver : public ble_client::BLEClientNode,
                       public Component,
@@ -30,6 +30,9 @@ class PhilipsShaver : public ble_client::BLEClientNode,
   void gattc_event_handler(esp_gattc_cb_event_t event,
                             esp_gatt_if_t gattc_if,
                             esp_ble_gattc_cb_param_t *param) override;
+
+  void gap_event_handler(esp_gap_ble_cb_event_t event,
+                          esp_ble_gap_cb_param_t *param) override;
 
   void on_read_characteristic(std::string service_uuid,
                                std::string characteristic_uuid);
