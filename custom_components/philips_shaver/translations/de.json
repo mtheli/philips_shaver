@@ -119,6 +119,9 @@
       "battery": {
         "name": "Batterie"
       },
+      "remaining_shaves": {
+        "name": "Verbleibende Rasuren"
+      },
       "amount_of_charges": {
         "name": "Ladezyklen"
       },
@@ -167,6 +170,9 @@
       },
       "cleaning_cycles": {
         "name": "Reinigungszyklen"
+      },
+      "cleaning_cycles_remaining": {
+        "name": "Reinigungskartusche verbleibend"
       },
       "motor_rpm": {
         "name": "Motordrehzahl"
@@ -268,6 +274,9 @@
     "button": {
       "blade_replacement": {
         "name": "Scherkopfwechsel bestätigen"
+      },
+      "cartridge_reset": {
+        "name": "Reinigungskartusche zurücksetzen"
       }
     },
     "switch": {

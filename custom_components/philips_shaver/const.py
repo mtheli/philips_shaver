@@ -285,6 +285,12 @@ CHAR_APP_HANDLE_SETTINGS = "8d560319-3cb9-4387-a7e8-b79d826a7025"
 APP_SETTINGS_FULL_COACHING = 1 << 4   # bit 4: light ring on (fullCoachingMode)
 APP_SETTINGS_MAX_PRESSURE = 1 << 5    # bit 5: pressure-only coaching
 
+# Cleaning cartridge constants (from Philips companion app evaporation algorithm)
+CARTRIDGE_CAPACITY = 30.0
+EVAPORATION_RATE = 0.04  # cycles lost per day due to fluid evaporation
+CLEANING_CONSTANTS = {0: 0.96, 1: 0.96, 2: 1.17, 3: 1.38, 4: 1.58, 5: 1.79, 6: 1.99}
+CLEANING_CONSTANT_DEFAULT = 2.20  # for avg >= 7 days between cleanings
+
 LIGHTRING_BRIGHTNESS_MODES = {
     0xFF: "high",
     0xCD: "medium",

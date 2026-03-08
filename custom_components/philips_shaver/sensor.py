@@ -20,7 +20,11 @@ from homeassistant.const import UnitOfTime, PERCENTAGE
 from homeassistant.components.bluetooth import async_last_service_info
 from .coordinator import PhilipsShaverCoordinator
 
-from .const import DOMAIN, CONF_ENABLE_LIVE_UPDATES, DEFAULT_ENABLE_LIVE_UPDATES, CONF_TRANSPORT_TYPE, TRANSPORT_ESP_BRIDGE
+from .const import (
+    DOMAIN, CONF_ENABLE_LIVE_UPDATES, DEFAULT_ENABLE_LIVE_UPDATES,
+    CONF_TRANSPORT_TYPE, TRANSPORT_ESP_BRIDGE,
+    CARTRIDGE_CAPACITY, EVAPORATION_RATE, CLEANING_CONSTANTS, CLEANING_CONSTANT_DEFAULT,
+)
 from .entity import PhilipsShaverEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -36,6 +40,7 @@ async def async_setup_entry(
 
     entities: list[PhilipsShaverEntity] = [
         PhilipsBatterySensor(coordinator, entry),
+        PhilipsRemainingShavesSensor(coordinator, entry),
         PhilipsAmountOfChargesSensor(coordinator, entry),
         PhilipsShaverAmountOfOperationalTurnsSensor(coordinator, entry),
         PhilipsFirmwareSensor(coordinator, entry),
@@ -68,6 +73,9 @@ async def async_setup_entry(
     if coordinator.capabilities.cleaning_mode or coordinator.capabilities.unit_cleaning:
         entities.append(PhilipsCleaningProgressSensor(coordinator, entry))
         entities.append(PhilipsCleaningCyclesSensor(coordinator, entry))
+        remaining_sensor = PhilipsRemainingCleaningCyclesSensor(coordinator, entry)
+        entities.append(remaining_sensor)
+        hass.data[DOMAIN][entry.entry_id]["remaining_cycles_sensor"] = remaining_sensor
     else:
         _LOGGER.info(
             "Shaver does not support cleaning mode – skipping cleaning sensors"
@@ -159,6 +167,33 @@ class PhilipsBatterySensor(PhilipsShaverEntity, RestoreEntity, SensorEntity):
         except (ValueError, TypeError):
             return None
 
+
+# Max shaving minutes and avg shave duration from Philips companion app
+BATTERY_MAX_SHAVING_MINUTES = 50
+BATTERY_AVG_SHAVE_MINUTES = 3.3
+
+
+class PhilipsRemainingShavesSensor(PhilipsShaverEntity, SensorEntity):
+    """Estimated remaining shaves based on battery level."""
+
+    _attr_translation_key = "remaining_shaves"
+    _attr_native_unit_of_measurement = "shaves"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:face-man-shimmer"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._device_id}_remaining_shaves"
+
+    @property
+    def native_value(self) -> int | None:
+        battery = self.coordinator.data.get("battery")
+        if battery is None:
+            return None
+        minutes = (battery / 100.0) * BATTERY_MAX_SHAVING_MINUTES
+        return int(minutes / BATTERY_AVG_SHAVE_MINUTES)
 
 
 # =============================================================================
@@ -499,6 +534,132 @@ class PhilipsCleaningCyclesSensor(PhilipsShaverEntity, SensorEntity):
     def native_value(self) -> int | None:
         return self.coordinator.data.get("cleaning_cycles")
 
+
+class PhilipsRemainingCleaningCyclesSensor(
+    PhilipsShaverEntity, RestoreEntity, SensorEntity
+):
+    """Remaining cleaning cycles with evaporation algorithm."""
+
+    _attr_translation_key = "cleaning_cycles_remaining"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_suggested_display_precision = 0
+    _attr_icon = "mdi:spray-bottle"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._device_id}_cleaning_cycles_remaining"
+        self._stored_remaining: float = CARTRIDGE_CAPACITY
+        self._sync_cleaning_count: int | None = None
+        self._sync_timestamp: datetime | None = None
+
+    async def async_added_to_hass(self) -> None:
+        """Restore persisted state on HA restart."""
+        await super().async_added_to_hass()
+
+        last_state = await self.async_get_last_state()
+        if last_state and last_state.state not in (None, "unknown", "unavailable"):
+            try:
+                self._stored_remaining = float(last_state.state)
+            except (ValueError, TypeError):
+                pass
+            attrs = last_state.attributes or {}
+            if "sync_cleaning_count" in attrs:
+                try:
+                    self._sync_cleaning_count = int(attrs["sync_cleaning_count"])
+                except (ValueError, TypeError):
+                    pass
+            if "sync_timestamp" in attrs:
+                try:
+                    self._sync_timestamp = datetime.fromisoformat(
+                        attrs["sync_timestamp"]
+                    )
+                except (ValueError, TypeError):
+                    pass
+
+    @property
+    def native_value(self) -> float | None:
+        if self._sync_timestamp is None:
+            return None
+        # Apply real-time evaporation since last sync
+        days_since = (
+            (datetime.now() - self._sync_timestamp).total_seconds() / 86400
+        )
+        evaporation = days_since * EVAPORATION_RATE
+        return max(0.0, min(CARTRIDGE_CAPACITY, self._stored_remaining - evaporation))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        attrs: dict[str, Any] = {}
+        if self._sync_cleaning_count is not None:
+            attrs["sync_cleaning_count"] = self._sync_cleaning_count
+        if self._sync_timestamp is not None:
+            attrs["sync_timestamp"] = self._sync_timestamp.isoformat()
+        attrs["stored_remaining"] = round(self._stored_remaining, 2)
+        return attrs if attrs else None
+
+    def _handle_coordinator_update(self) -> None:
+        """Recalculate when cleaning_cycles changes."""
+        current_cycles = self.coordinator.data.get("cleaning_cycles")
+        if current_cycles is not None:
+            if self._sync_cleaning_count is None:
+                # First sync: initialize baseline
+                self._sync_cleaning_count = current_cycles
+                self._sync_timestamp = datetime.now()
+            elif current_cycles != self._sync_cleaning_count:
+                self._recalculate(current_cycles)
+        super()._handle_coordinator_update()
+
+    def _recalculate(self, current_cycles: int) -> None:
+        """Apply the evaporation algorithm to compute remaining cycles."""
+        now = datetime.now()
+        days_since_sync = (
+            (now - self._sync_timestamp).total_seconds() / 86400
+            if self._sync_timestamp
+            else 0.0
+        )
+
+        cycles_since_sync = current_cycles - self._sync_cleaning_count
+        # Edge case: counter wrapped or reset
+        if self._sync_cleaning_count > current_cycles and current_cycles > 0:
+            cycles_since_sync = 1
+        cycles_since_sync = max(0, cycles_since_sync)
+
+        # Average days per cleaning cycle → cleaning constant lookup
+        if cycles_since_sync > 0:
+            avg_days = round(days_since_sync / cycles_since_sync)
+        else:
+            avg_days = 0
+
+        cleaning_constant = CLEANING_CONSTANTS.get(
+            min(avg_days, 6) if avg_days < 7 else 6, CLEANING_CONSTANT_DEFAULT
+        )
+        if avg_days >= 7:
+            cleaning_constant = CLEANING_CONSTANT_DEFAULT
+
+        evaporation_loss = days_since_sync * EVAPORATION_RATE
+        cleaning_loss = cleaning_constant * cycles_since_sync
+
+        remaining = max(
+            0.0,
+            min(CARTRIDGE_CAPACITY, self._stored_remaining - evaporation_loss - cleaning_loss),
+        )
+
+        # Advance sync point
+        self._stored_remaining = remaining
+        self._sync_cleaning_count = current_cycles
+        self._sync_timestamp = now
+
+    def reset_cartridge(self) -> None:
+        """Reset remaining cycles to full cartridge capacity."""
+        self._stored_remaining = CARTRIDGE_CAPACITY
+        current = self.coordinator.data.get("cleaning_cycles")
+        if current is not None:
+            self._sync_cleaning_count = current
+        self._sync_timestamp = datetime.now()
+        self.async_write_ha_state()
 
 
 # =============================================================================

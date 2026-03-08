@@ -119,6 +119,9 @@
       "battery": {
         "name": "Battery"
       },
+      "remaining_shaves": {
+        "name": "Remaining Shaves"
+      },
       "amount_of_charges": {
         "name": "Charge Cycles"
       },
@@ -167,6 +170,9 @@
       },
       "cleaning_cycles": {
         "name": "Cleaning Cycles"
+      },
+      "cleaning_cycles_remaining": {
+        "name": "Cleaning Cartridge Remaining"
       },
       "motor_rpm": {
         "name": "Motor Speed"
@@ -268,6 +274,9 @@
     "button": {
       "blade_replacement": {
         "name": "Blade Replacement"
+      },
+      "cartridge_reset": {
+        "name": "Reset Cleaning Cartridge"
       }
     },
     "switch": {
