@@ -108,8 +108,11 @@ pairing succeeded. If you don't see this, check the troubleshooting section belo
 2. Click **+ Add Integration** and search for **Philips Shaver**
 3. Select **ESP32 Bridge (ESPHome)**
 4. Choose your ESP device from the dropdown (e.g. "Atom Lite BLE Bridge (atom-lite)")
-5. The integration will read the shaver's capabilities via the ESP32 bridge
-6. Click **Submit** to finish — the shaver appears as a sub-device of the ESP32
+5. The **Bridge Status** page shows the bridge health: component version, BLE connection
+   state, pairing status, and shaver MAC address — verify everything looks good and click **Submit**
+6. The integration reads the shaver's hardware capabilities and GATT services via the bridge
+7. Review the detected capabilities and click **Submit** to finish — the shaver appears as a
+   sub-device of the ESP32
 
 ## Troubleshooting
 
@@ -153,7 +156,9 @@ pairing succeeded. If you don't see this, check the troubleshooting section belo
 - **ESP32 → HA**: fires `esphome.philips_shaver_ble_data` events with characteristic
   UUID and hex payload
 - **HA → ESP32**: calls ESPHome services (`ble_read_char`, `ble_subscribe`,
-  `ble_write_char`, `ble_unsubscribe`) with service and characteristic UUIDs
+  `ble_write_char`, `ble_unsubscribe`, `ble_get_info`) with service and characteristic UUIDs
+- **Diagnostics**: `ble_get_info` returns bridge version, uptime, free heap, pairing status,
+  and active subscription count — used during config flow and for troubleshooting
 
 ## Tested Hardware
 

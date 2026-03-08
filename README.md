@@ -24,10 +24,13 @@ This integration creates a new device for your shaver and provides the following
 ### Main Controls & Status
 | Entity | Type | Description |
 | :--- | :--- | :--- |
-| **Activity** | Sensor | Current detailed status (`Off`, `Shaving`, `Charging`, `Cleaning`). |
+| **Activity** | Sensor | Current detailed status (`Off`, `Shaving`, `Charging`, `Cleaning`, `Locked`). |
 | **Shaving Mode** | Select | Change the shaving intensity (e.g., `Sensitive`, `Normal`, `Intense`, `Custom`, `Foam`). |
 | **Battery Level** | Sensor | The current battery charge level (`%`). |
 | **Travel Lock** | Binary Sensor | Indicates if the travel lock is active. |
+| **Charging** | Binary Sensor | Indicates if the shaver is currently charging. |
+| **Handle Load Type** | Sensor | Detected head attachment (`Shaving Heads`, `Trimmer`, `Styler`, `Brush`, etc.). |
+| **Motion** | Sensor | Live motion feedback (`No Motion`, `Small Circles`, `Large Strokes`). |
 
 ### Pressure, Motor & Coaching (S7000/S9000)
 | Entity | Type | Description |
@@ -35,6 +38,7 @@ This integration creates a new device for your shaver and provides the following
 | **Pressure Value** | Sensor | Live pressure data from the sensor. |
 | **Pressure State** | Sensor | Categorized feedback (`Too Low`, `Optimal`, `Too High`). |
 | **Pressure Light Ring** | Light | Configure the LED ring colors for various pressure states. |
+| **Light Ring Brightness** | Select | Adjust the pressure light ring brightness (`High`, `Medium`, `Low`). |
 | **Motor Speed** | Sensor | Current motor speed in RPM (e.g., ~2200 RPM). |
 | **Motor Current** | Sensor | Current motor power consumption in mA. |
 
@@ -44,16 +48,22 @@ This integration creates a new device for your shaver and provides the following
 | **Last Session Duration** | Sensor | Duration of the last shaving session in seconds. |
 | **Total Operating Time** | Sensor | Lifetime usage of the shaver. |
 | **Days Since Last Used** | Sensor | Days elapsed since the last use. |
+| **Charge Cycles** | Sensor | Total number of charge cycles. |
+| **Number of Uses** | Sensor | Total number of operational uses. |
 | **Head Remaining** | Sensor | The remaining life of the shaver head (`%`). |
+| **Blade Replacement** | Button | Confirm a blade replacement — resets the head remaining counter to 100%. |
 | **Cleaning Progress** | Sensor | Progress of the cleaning cycle in `%` (if applicable). |
-
+| **Cleaning Cycles** | Sensor | Total number of cleaning cycles. |
 
 ### Diagnostics
 | Entity | Type | Description |
 | :--- | :--- | :--- |
 | **Last Seen** | Sensor | Time in minutes since the device was last reachable. |
-| **RSSI** | Sensor | Bluetooth signal strength (`dBm`). |
-| **Firmware** | Sensor | Installed firmware version. |
+| **RSSI** | Sensor | Bluetooth signal strength (`dBm`, direct BLE only). |
+| **Shaver BLE** | Binary Sensor | BLE connection status to the shaver. |
+| **ESP Bridge** | Binary Sensor | ESP32 bridge online status (ESP bridge only). |
+| **Firmware** | Sensor | Installed firmware version (disabled by default). |
+| **Model Number** | Sensor | Device model number (disabled by default). |
 
 ---
 
