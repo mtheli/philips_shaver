@@ -95,7 +95,7 @@ std::string PhilipsShaver::svc_name_(const std::string &action) {
 }
 
 void PhilipsShaver::dump_config() {
-  ESP_LOGCONFIG(TAG, "Philips Shaver BLE Bridge");
+  ESP_LOGCONFIG(TAG, "Philips Shaver BLE Bridge v%s", PHILIPS_SHAVER_VERSION);
   if (!this->device_id_.empty())
     ESP_LOGCONFIG(TAG, "  Device ID: %s", this->device_id_.c_str());
 }
