@@ -130,6 +130,13 @@ class PhilipsLightRingBrightnessSelect(PhilipsShaverEntity, SelectEntity):
     _attr_options = ["high", "medium", "low"]
     _attr_icon = "mdi:brightness-6"
 
+    @property
+    def available(self) -> bool:
+        """Unavailable when light ring is disabled via app handle settings."""
+        if not self.coordinator.data.get("lightring_enabled", True):
+            return False
+        return super().available
+
     def __init__(self, coordinator: Any, entry: ConfigEntry) -> None:
         """Initialize the select entity."""
         super().__init__(coordinator, entry)

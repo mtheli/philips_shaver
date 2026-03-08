@@ -247,6 +247,44 @@ CHAR_LIGHTRING_COLOR_MOTION = "8d56031c-3cb9-4387-a7e8-b79d826a7025"
 """
 CHAR_LIGHTRING_COLOR_BRIGHTNESS = "8d560331-3cb9-4387-a7e8-b79d826a7025"
 
+"""
+    SMART_SHAVER_CHARACTERISTIC_APP_HANDLE_SETTINGS
+    UUID: 8d560319-3cb9-4387-a7e8-b79d826a7025
+    Properties: NOTIFY, READ, WRITE
+    Service: Smart Shaver Handle Service (0x0300)
+
+    Coaching & feedback settings bitfield.
+    Format: 4 bytes little-endian uint32 (APOLLO/PHOENIX), 1 byte (legacy APA).
+    Contains 11 boolean flags packed as a binary integer (MSB-first in app).
+
+    Bit layout (byte[0], bits 0-7):
+      Bit 0: notificationSuppression    — suppress app notifications
+      Bit 1: realtimeGuidanceSoundOn    — sound alerts during shaving
+      Bit 2: postShaveFeedbackSoundOn   — tone after shaving session
+      Bit 3: postShaveFeedbackHapticOn  — haptic pulse after shaving
+      Bit 4: fullCoachingMode           — light ring on/off (all guidance)
+      Bit 5: maxPressureCoachingMode    — pressure-only coaching (no light ring)
+      Bit 6: autoUnitDetection          — auto-detect metric/imperial
+      Bit 7: starRatingVerdict          — post-session star rating
+
+    Bit layout (byte[1], bits 8-10):
+      Bit 8:  fullMotionCoachingMode    — full motion guidance
+      Bit 9:  maxMotionCoachingMode     — max motion coaching only
+      Bit 10: unknown                   — possibly battery saving mode
+
+    Bytes 1-3 (bits 11-31): unused, must be 0.
+
+    App behavior for light ring toggle:
+      ON:  set bit 4 (fullCoachingMode), clear bit 5 (maxPressureCoachingMode)
+      OFF: clear bit 4, clear bit 5
+      All other bits preserved (read-modify-write).
+
+    Source: Reverse-engineered from Philips companion app
+"""
+CHAR_APP_HANDLE_SETTINGS = "8d560319-3cb9-4387-a7e8-b79d826a7025"
+APP_SETTINGS_FULL_COACHING = 1 << 4   # bit 4: light ring on (fullCoachingMode)
+APP_SETTINGS_MAX_PRESSURE = 1 << 5    # bit 5: pressure-only coaching
+
 LIGHTRING_BRIGHTNESS_MODES = {
     0xFF: "high",
     0xCD: "medium",
@@ -431,6 +469,7 @@ POLL_READ_CHARS = [
     CHAR_TOTAL_AGE,
     CHAR_HANDLE_LOAD_TYPE,
     CHAR_MOTION_TYPE,
+    CHAR_APP_HANDLE_SETTINGS,
 ]
 
 # Characteristics for initial reading of live thread (same as poll)
@@ -512,4 +551,5 @@ CHAR_SERVICE_MAP: dict[str, str] = {
     CHAR_SHAVING_MODE: SVC_CONTROL,
     CHAR_SHAVING_MODE_SETTINGS: SVC_CONTROL,
     CHAR_CUSTOM_SHAVING_MODE_SETTINGS: SVC_CONTROL,
+    CHAR_APP_HANDLE_SETTINGS: SVC_CONTROL,
 }

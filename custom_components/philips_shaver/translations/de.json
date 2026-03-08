@@ -269,6 +269,11 @@
       "blade_replacement": {
         "name": "Scherkopfwechsel bestätigen"
       }
+    },
+    "switch": {
+      "lightring_enabled": {
+        "name": "Lichtring"
+      }
     }
   }
 }

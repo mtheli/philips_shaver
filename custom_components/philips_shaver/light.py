@@ -85,6 +85,13 @@ class PhilipsColorConfigLight(PhilipsShaverEntity, LightEntity):
     _attr_should_poll = False
     _attr_assumed_state = False
 
+    @property
+    def available(self) -> bool:
+        """Unavailable when light ring is disabled via app handle settings."""
+        if not self.coordinator.data.get("lightring_enabled", True):
+            return False
+        return super().available
+
     def __init__(
         self,
         coordinator: PhilipsShaverCoordinator,

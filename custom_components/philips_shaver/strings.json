@@ -269,6 +269,11 @@
       "blade_replacement": {
         "name": "Blade Replacement"
       }
+    },
+    "switch": {
+      "lightring_enabled": {
+        "name": "Light Ring"
+      }
     }
   }
 }

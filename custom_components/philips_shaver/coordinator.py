@@ -21,6 +21,9 @@ from .exceptions import TransportError
 from .const import (
     CHAR_AMOUNT_OF_CHARGES,
     CHAR_AMOUNT_OF_OPERATIONAL_TURNS,
+    CHAR_APP_HANDLE_SETTINGS,
+    APP_SETTINGS_FULL_COACHING,
+    APP_SETTINGS_MAX_PRESSURE,
     CHAR_BATTERY_LEVEL,
     CHAR_CLEANING_CYCLES,
     CHAR_CLEANING_PROGRESS,
@@ -99,6 +102,7 @@ NOTIFICATION_CHARS = [
     CHAR_TOTAL_AGE,
     CHAR_HANDLE_LOAD_TYPE,
     CHAR_MOTION_TYPE,
+    CHAR_APP_HANDLE_SETTINGS,
 ]
 
 
@@ -182,6 +186,8 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "color_ok": (255, 0, 0),
             "color_high": (255, 0, 0),
             "color_motion": (255, 0, 0),
+            "lightring_enabled": None,
+            "app_handle_settings_raw": None,
             "last_seen": None,
         }
 
@@ -395,6 +401,12 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if raw := results.get(CHAR_MOTION_TYPE):
             new_data["motion_type_value"] = raw[0]
 
+        # App Handle Settings (0x0319) — coaching/feedback bitfield
+        if raw := results.get(CHAR_APP_HANDLE_SETTINGS):
+            val = int.from_bytes(raw, "little")
+            new_data["lightring_enabled"] = bool(val & APP_SETTINGS_FULL_COACHING)
+            new_data["app_handle_settings_raw"] = raw
+
         # Always update – important for "available"
         new_data["last_seen"] = datetime.now()
 
@@ -546,7 +558,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_fetch_history(self) -> list[dict[str, Any]]:
         """Fetch shaving session history from the device.
 
-        Flow (as per decompiled GroomTribe app):
+        Flow (as per Philips companion app):
         1. Read sync status → number of available sessions
         2. For each session:
            a. Read timestamp (UINT32)
