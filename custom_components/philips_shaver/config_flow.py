@@ -370,6 +370,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 "services": found_services,
                 "capabilities": cap_int,
                 "shaver_mac": transport.detected_mac,
+                "bridge_version": transport.bridge_version,
             }
 
         except TransportError as err:
@@ -498,6 +499,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         cap_val = self.fetched_data.get("capabilities", 0)
         capabilities_text = self._get_capabilities_text(cap_val)
 
+        bridge_version = self.fetched_data.get("bridge_version")
+        bridge_info = f"\nESP Bridge Component: v{bridge_version}" if bridge_version else ""
+
         return self.async_show_form(
             step_id="show_capabilities",
             data_schema=vol.Schema({}),
@@ -505,6 +509,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 "name": str(self.fetched_name),
                 "services": services_text,
                 "capabilities": capabilities_text,
+                "bridge_info": bridge_info,
             },
         )
 

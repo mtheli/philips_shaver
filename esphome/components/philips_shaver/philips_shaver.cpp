@@ -76,6 +76,7 @@ void PhilipsShaver::loop() {
             {"status", "heartbeat"},
             {"ble_connected", this->connected_ ? "true" : "false"},
             {"mac", this->get_shaver_mac_()},
+            {"version", PHILIPS_SHAVER_VERSION},
         });
   }
 }
@@ -160,6 +161,7 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
           {
               {"status", "ready"},
               {"mac", this->get_shaver_mac_()},
+              {"version", PHILIPS_SHAVER_VERSION},
           });
       break;
     }

@@ -54,7 +54,7 @@
       },
       "show_capabilities": {
         "title": "Hardware Capabilities detected",
-        "description": "Successfully connected to **{name}**.\n\n**Hardware Capabilities:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legend:**\n✅ Service found & supported\n❌ Expected service missing\n❔ Unknown service from device\n\nClick Submit to finish the setup."
+        "description": "Successfully connected to **{name}**.{bridge_info}\n\n**Hardware Capabilities:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legend:**\n✅ Service found & supported\n❌ Expected service missing\n❔ Unknown service from device\n\nClick Submit to finish the setup."
       }
     },
     "error": {

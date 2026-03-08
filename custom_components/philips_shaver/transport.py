@@ -245,6 +245,7 @@ class EspBridgeTransport(ShaverTransport):
         self._pending_reads: dict[str, asyncio.Future[bytes | None]] = {}
         self._notify_callbacks: dict[str, Callable[[str, bytes], None]] = {}
         self._detected_mac: str | None = None
+        self._bridge_version: str | None = None
 
     def _svc_name(self, action: str) -> str:
         """Full ESPHome service name, e.g. 'atom_lite_ble_read_char'."""
@@ -275,6 +276,11 @@ class EspBridgeTransport(ShaverTransport):
     def detected_mac(self) -> str | None:
         """Return the shaver's BLE MAC address detected from events."""
         return self._detected_mac
+
+    @property
+    def bridge_version(self) -> str | None:
+        """Return the ESP bridge component version (from status events)."""
+        return self._bridge_version
 
     @property
     def is_bridge_alive(self) -> bool:
@@ -363,6 +369,11 @@ class EspBridgeTransport(ShaverTransport):
                 return
 
             status = event.data.get("status", "")
+
+            # Store bridge component version if present
+            version = event.data.get("version")
+            if version:
+                self._bridge_version = version
 
             # Every status event (including heartbeat) proves ESP is alive
             self._last_heartbeat = time.monotonic()
