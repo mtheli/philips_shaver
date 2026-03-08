@@ -114,6 +114,10 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
   switch (event) {
     case ESP_GATTC_OPEN_EVT: {
       if (param->open.status == ESP_GATT_OK) {
+        // Apply SMP params now, before service discovery and pairing.
+        // Must happen here because BLEClientBase triggers on_connect (→ pair())
+        // in SEARCH_CMPL_EVT before our node handler runs.
+        this->apply_smp_params_();
         ESP_LOGI(TAG, "Connected to shaver (%s)", this->get_shaver_mac_().c_str());
         this->connected_ = true;
         if (this->connected_sensor_ != nullptr)
@@ -157,9 +161,6 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
     }
 
     case ESP_GATTC_SEARCH_CMPL_EVT: {
-      // Re-apply SMP params right before pairing (YAML on_connect runs next).
-      // ESPHome's core BLE component may override our setup() io_cap setting.
-      this->apply_smp_params_();
       ESP_LOGI(TAG, "Service discovery complete");
       if (!this->desired_subscriptions_.empty()) {
         ESP_LOGI(TAG, "Restoring %d notification subscription(s)...",
