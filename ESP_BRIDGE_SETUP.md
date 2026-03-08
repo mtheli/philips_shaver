@@ -10,8 +10,7 @@ Bluetooth access from the HA host.
 - **ESP32 board** — tested with [M5Stack Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite),
   any ESP32 with BLE should work (ESP32-S3, ESP32-C3, etc.)
 - **ESPHome** — installed as Home Assistant add-on or standalone
-- **Philips Shaver** — tested with i9000 / XP9201, other BLE-enabled Philips shavers
-  may work with the same service UUIDs
+- **Philips Shaver** — tested with i9000 / XP9201 and XP9400 (see [Tested Models](README.md#tested-models))
 
 ## Step 1: Find Your Shaver's MAC Address
 
@@ -19,7 +18,7 @@ The shaver advertises via BLE when it is powered on or placed on the charging st
 
 **Option A — Home Assistant Bluetooth:**
 1. Go to **Settings > Devices & Services > Bluetooth**
-2. Look for a device named "Philips XP9201" (or similar)
+2. Look for a device named "Philips XP9201" or "Philips XP9400" (or similar)
 3. Note the MAC address (e.g. `AA:BB:CC:11:22:33`)
 
 **Option B — nRF Connect (Android/iOS):**
@@ -28,7 +27,7 @@ The shaver advertises via BLE when it is powered on or placed on the charging st
 
 **Option C — ESPHome logs:**
 1. Deploy any ESP32 with `esp32_ble_tracker` enabled
-2. Check logs for `Found device ... Name: 'Philips XP9201'`
+2. Check logs for `Found device ... Name: 'Philips XP9201'` (or your model name)
 
 ## Step 2: Create the ESPHome Configuration
 
@@ -99,8 +98,8 @@ After flashing, check the ESPHome device logs for a successful connection sequen
 [D][esp32_ble_client:547]: [0] [XX:XX:XX:XX:XX:XX] auth success type = 1 mode = 9
 ```
 
-The key line is **`auth success type = 1 mode = 9`** — this confirms LE Secure Connections
-pairing succeeded. If you don't see this, check the troubleshooting section below.
+The key line is **`auth success type = 1`** — this confirms LE Secure Connections
+pairing succeeded. The `mode` value depends on your shaver model (9 = Just Works, 13 = Numeric Comparison with MITM). Both are valid. If you don't see this, check the troubleshooting section below.
 
 ## Step 5: Add the Integration in Home Assistant
 
@@ -148,7 +147,7 @@ pairing succeeded. If you don't see this, check the troubleshooting section belo
 ```
 ┌──────────┐   BLE    ┌─────────┐  WiFi/API  ┌─────────────────┐
 │  Shaver  │◄────────►│  ESP32  │◄──────────►│ Home Assistant   │
-│ XP9201   │  paired  │  Bridge │  ESPHome   │ Philips Shaver   │
+│          │  paired  │  Bridge │  ESPHome   │ Philips Shaver   │
 └──────────┘          └─────────┘  services  │ Integration      │
                                               └─────────────────┘
 ```

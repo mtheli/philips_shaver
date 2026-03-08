@@ -4,7 +4,16 @@
 [![GitHub Release](https://img.shields.io/github/v/release/mtheli/philips_shaver)](https://github.com/mtheli/philips_shaver/releases)
 [![License: MIT](https://img.shields.io/github/license/mtheli/philips_shaver)](LICENSE)
 
-This is a custom component for Home Assistant to integrate **Philips Bluetooth-enabled shavers**, specifically tested with the **i9000 / XP9201 series**.
+This is a custom component for Home Assistant to integrate **Philips Bluetooth-enabled shavers**.
+
+### Tested Models
+
+| Model | Connection | Status |
+| :--- | :--- | :--- |
+| **i9000 / XP9201** | Direct BLE, ESP32 Bridge | Developed & tested by maintainer |
+| **XP9400** | ESP32 Bridge | Community-tested ([#3](https://github.com/mtheli/philips_shaver/issues/3)) |
+
+Other BLE-enabled Philips shavers using the same GATT services may also work.
 
 The integration connects to your shaver via **Bluetooth Low Energy (BLE)** to provide status, usage, and advanced telemetry data. It automatically detects the capabilities of your specific model during setup to only show relevant entities.
 
@@ -69,7 +78,7 @@ This integration creates a new device for your shaver and provides the following
 
 ## Prerequisites
 
-* A compatible Philips Shaver (e.g., i9000/XP9201).
+* A compatible Philips Shaver (see [Tested Models](#tested-models) above).
 * **Either** a Home Assistant instance with the **Bluetooth integration** enabled and a working Bluetooth adapter, **or** an ESP32 running the [BLE bridge component](ESP_BRIDGE_SETUP.md).
 * *Exclusive Connection:* The shaver supports only one active connection at a time.
 * *GroomTribe App:* You must unpair/remove the shaver from any other devices (especially smartphones with the manufacturer's [GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) app) before Home Assistant can connect.
