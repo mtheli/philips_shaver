@@ -2,6 +2,7 @@
 #include "esphome/core/log.h"
 #include "esphome/core/helpers.h"
 #include "esp_gap_ble_api.h"
+#include "esp_system.h"
 
 namespace espbt = esphome::esp32_ble_tracker;
 
@@ -63,6 +64,8 @@ void PhilipsShaver::setup() {
                           this->svc_name_("ble_write_char"), {"service_uuid", "char_uuid", "data"});
   this->register_service(&PhilipsShaver::on_set_throttle,
                           this->svc_name_("ble_set_throttle"), {"throttle_ms"});
+  this->register_service(&PhilipsShaver::on_get_info,
+                          this->svc_name_("ble_get_info"), {});
   ESP_LOGI(TAG, "Services registered (suffix: '%s')", this->device_id_.c_str());
 }
 
@@ -442,6 +445,53 @@ void PhilipsShaver::on_set_throttle(std::string throttle_ms) {
   uint32_t ms = std::stoul(throttle_ms);
   this->notify_throttle_ms_ = ms;
   ESP_LOGI(TAG, "Notification throttle set to %u ms", ms);
+}
+
+void PhilipsShaver::on_get_info() {
+  char uptime_str[16];
+  snprintf(uptime_str, sizeof(uptime_str), "%u", millis() / 1000);
+
+  char heap_str[16];
+  snprintf(heap_str, sizeof(heap_str), "%u", (uint32_t) esp_get_free_heap_size());
+
+  char subs_str[8];
+  snprintf(subs_str, sizeof(subs_str), "%u", (uint32_t) this->notify_map_.size());
+
+  char throttle_str[16];
+  snprintf(throttle_str, sizeof(throttle_str), "%u", this->notify_throttle_ms_);
+
+  // Check if shaver MAC is in the bonded device list
+  std::string paired = "false";
+  int bond_num = esp_ble_get_bond_device_num();
+  if (bond_num > 0) {
+    auto *bond_list = new esp_ble_bond_dev_t[bond_num];
+    esp_ble_get_bond_device_list(&bond_num, bond_list);
+    auto *bda = this->parent()->get_remote_bda();
+    for (int i = 0; i < bond_num; i++) {
+      if (memcmp(bond_list[i].bd_addr, bda, 6) == 0) {
+        paired = "true";
+        break;
+      }
+    }
+    delete[] bond_list;
+  }
+
+  this->fire_homeassistant_event(
+      "esphome.philips_shaver_ble_status",
+      {
+          {"status", "info"},
+          {"version", PHILIPS_SHAVER_VERSION},
+          {"ble_connected", this->connected_ ? "true" : "false"},
+          {"mac", this->get_shaver_mac_()},
+          {"uptime_s", std::string(uptime_str)},
+          {"free_heap", std::string(heap_str)},
+          {"subscriptions", std::string(subs_str)},
+          {"notify_throttle_ms", std::string(throttle_str)},
+          {"paired", paired},
+      });
+
+  ESP_LOGI(TAG, "Info: v%s uptime=%ss heap=%s subs=%s paired=%s",
+           PHILIPS_SHAVER_VERSION, uptime_str, heap_str, subs_str, paired.c_str());
 }
 
 void PhilipsShaver::resubscribe_all_() {

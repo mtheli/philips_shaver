@@ -42,6 +42,7 @@ class PhilipsShaver : public ble_client::BLEClientNode,
                                 std::string hex_data);
 
   void on_set_throttle(std::string throttle_ms);
+  void on_get_info();
 
   void set_connected_sensor(binary_sensor::BinarySensor *sensor) {
     this->connected_sensor_ = sensor;
