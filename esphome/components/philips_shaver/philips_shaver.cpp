@@ -34,9 +34,14 @@ void PhilipsShaver::setup() {
   // The on_connect lambda in the YAML calls esp_ble_set_encryption() with
   // ESP_BLE_SEC_ENCRYPT_MITM to initiate pairing using these params.
   //
-  // Note: This overrides ESPHome's io_capability YAML setting.
+  // Note: io_cap is set to NoInputNoOutput instead of the original btmon
+  // capture value (DisplayYesNo). This forces "Just Works" pairing for all
+  // shaver models. Some models (e.g. XP9400) also report DisplayYesNo,
+  // which triggers Numeric Comparison — a pairing method ESPHome cannot
+  // handle (NC_REQ event is ignored), causing reads to fail with
+  // INSUF_AUTHENTICATION (status 5). Using NoInputNoOutput avoids this.
   uint8_t auth_req = 0x2D;  // Bond(1) | MITM(4) | SC(8) | CT2(0x20)
-  esp_ble_io_cap_t io_cap = ESP_IO_CAP_IO;  // DisplayYesNo (0x01)
+  esp_ble_io_cap_t io_cap = ESP_IO_CAP_NONE;  // NoInputNoOutput → forces Just Works
   uint8_t key_size = 16;
   uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
   uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
