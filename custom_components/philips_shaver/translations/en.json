@@ -52,9 +52,13 @@
         "title": "Confirm detected device",
         "description": "Do you want to add the detected Philips Shaver \"{name}\" to Home Assistant?\n\n⚠️ **Note:** An ESP32 bridge is already configured for this integration. Adding a direct Bluetooth connection may cause conflicts. Only proceed if you want to switch from the ESP bridge to direct Bluetooth."
       },
+      "esp_bridge_status": {
+        "title": "ESP32 Bridge Status",
+        "description": "✅ Bridge **{device_name}** is reachable.\n\n{status}\n\nClick Submit to read shaver capabilities."
+      },
       "show_capabilities": {
         "title": "Hardware Capabilities detected",
-        "description": "Successfully connected to **{name}**.{bridge_info}\n\n**Hardware Capabilities:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legend:**\n✅ Service found & supported\n❌ Expected service missing\n❔ Unknown service from device\n\nClick Submit to finish the setup."
+        "description": "Successfully connected to **{name}**.{device_info}{bridge_info}\n\n**Hardware Capabilities:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legend:**\n✅ Service found & supported\n❌ Expected service missing\n❔ Unknown service from device\n\nClick Submit to finish the setup."
       }
     },
     "error": {

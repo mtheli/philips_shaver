@@ -246,6 +246,7 @@ class EspBridgeTransport(ShaverTransport):
         self._notify_callbacks: dict[str, Callable[[str, bytes], None]] = {}
         self._detected_mac: str | None = None
         self._bridge_version: str | None = None
+        self._pending_info: asyncio.Future[dict[str, str]] | None = None
 
     def _svc_name(self, action: str) -> str:
         """Full ESPHome service name, e.g. 'atom_lite_ble_read_char'."""
@@ -409,6 +410,9 @@ class EspBridgeTransport(ShaverTransport):
                     self._cancel_pending_reads()
                     if self._disconnect_cb:
                         self._disconnect_cb()
+            elif status == "info":
+                if self._pending_info and not self._pending_info.done():
+                    self._pending_info.set_result(dict(event.data))
 
         self._status_unsub = self._hass.bus.async_listen(
             ESP_STATUS_EVENT_NAME, _handle_status_event
@@ -578,6 +582,32 @@ class EspBridgeTransport(ShaverTransport):
             _LOGGER.info("Notification throttle set to %d ms on ESP bridge", ms)
         except HomeAssistantError as err:
             _LOGGER.debug("Failed to set throttle on ESP bridge: %s", err)
+
+    async def get_bridge_info(self) -> dict[str, str] | None:
+        """Request diagnostic info from ESP bridge via ble_get_info service."""
+        if not self._setup_done:
+            return None
+
+        self._pending_info = self._hass.loop.create_future()
+
+        try:
+            await self._hass.services.async_call(
+                "esphome",
+                self._svc_name("ble_get_info"),
+                {},
+                blocking=True,
+            )
+        except HomeAssistantError as err:
+            _LOGGER.debug("ESP get_bridge_info failed: %s", err)
+            self._pending_info = None
+            return None
+
+        try:
+            return await asyncio.wait_for(self._pending_info, timeout=5.0)
+        except asyncio.TimeoutError:
+            _LOGGER.warning("ESP get_bridge_info timeout")
+            self._pending_info = None
+            return None
 
     def set_disconnect_callback(self, cb: Callable[[], None]) -> None:
         self._disconnect_cb = cb
