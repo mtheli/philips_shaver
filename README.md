@@ -26,6 +26,16 @@ Two connection methods are supported:
 
 ---
 
+## Lovelace Card
+
+A dedicated dashboard card is available: **[Philips Shaver Card](https://github.com/mtheli/philips_shaver_card)**
+
+![Philips Shaver Card](./images/card_shaving.png)
+
+The card automatically switches between standby, shaving, charging, and cleaning modes with live pressure gauge, battery status, and session stats.
+
+---
+
 ## Features
 
 This integration creates a new device for your shaver and provides the following entities based on your device's hardware:
