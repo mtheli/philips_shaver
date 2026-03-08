@@ -35,12 +35,14 @@ void PhilipsShaver::setup() {
   // The on_connect lambda in the YAML calls esp_ble_set_encryption() with
   // ESP_BLE_SEC_ENCRYPT_MITM to initiate pairing using these params.
   //
-  // Note: io_cap is set to NoInputNoOutput instead of the original btmon
-  // capture value (DisplayYesNo). Some models (e.g. XP9400) also report
-  // DisplayYesNo, which can trigger Numeric Comparison pairing. We handle
-  // this via gap_event_handler() which auto-confirms NC requests.
+  // Note: io_cap must be DisplayYesNo to enable Numeric Comparison (NC)
+  // pairing when the shaver also reports DisplayYesNo (e.g. XP9400).
+  // Without NC, auth completes without MITM, causing INSUF_AUTHENTICATION
+  // (status 5) on models that require authenticated encryption.
+  // NC requests are auto-confirmed via gap_event_handler().
+  // Models with NoInputNoOutput (e.g. XP9201) still use Just Works.
   uint8_t auth_req = 0x2D;  // Bond(1) | MITM(4) | SC(8) | CT2(0x20)
-  esp_ble_io_cap_t io_cap = ESP_IO_CAP_NONE;  // NoInputNoOutput → forces Just Works
+  esp_ble_io_cap_t io_cap = ESP_IO_CAP_IO;  // DisplayYesNo → enables NC when needed
   uint8_t key_size = 16;
   uint8_t init_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
   uint8_t rsp_key = ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK;
