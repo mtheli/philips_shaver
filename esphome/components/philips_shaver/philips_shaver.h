@@ -14,7 +14,7 @@
 namespace esphome {
 namespace philips_shaver {
 
-static const char *const PHILIPS_SHAVER_VERSION = "1.2.0";
+static const char *const PHILIPS_SHAVER_VERSION = "1.3.0";
 
 class PhilipsShaver : public ble_client::BLEClientNode,
                       public Component,
@@ -80,6 +80,9 @@ class PhilipsShaver : public ble_client::BLEClientNode,
   // Heartbeat: periodic status event to HA
   static const uint32_t HEARTBEAT_INTERVAL_MS = 15000;
   uint32_t last_heartbeat_ms_{0};
+
+  // Track HA API connection to re-fire "ready" after OTA reboot
+  bool last_api_connected_{false};
 };
 
 }  // namespace philips_shaver

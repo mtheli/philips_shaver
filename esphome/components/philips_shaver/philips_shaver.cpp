@@ -86,6 +86,22 @@ void PhilipsShaver::loop() {
             {"version", PHILIPS_SHAVER_VERSION},
         });
   }
+
+  // Detect HA API (re)connect and re-fire "ready" so HA can set up subscriptions.
+  // After OTA reboot, BLE connects before the API stream is up (~11s),
+  // so the original "ready" event from SEARCH_CMPL is lost.
+  bool api_now = this->is_connected();
+  if (api_now && !this->last_api_connected_ && this->connected_) {
+    ESP_LOGI(TAG, "API client connected while BLE active — re-firing ready event");
+    this->fire_homeassistant_event(
+        "esphome.philips_shaver_ble_status",
+        {
+            {"status", "ready"},
+            {"mac", this->get_shaver_mac_()},
+            {"version", PHILIPS_SHAVER_VERSION},
+        });
+  }
+  this->last_api_connected_ = api_now;
 }
 
 std::string PhilipsShaver::get_shaver_mac_() {
