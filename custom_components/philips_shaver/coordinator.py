@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.config_entries import ConfigEntry
 
@@ -19,6 +20,8 @@ from homeassistant.components.bluetooth import (
 from .transport import BleakTransport, EspBridgeTransport, ShaverTransport
 from .exceptions import TransportError
 from .const import (
+    DOMAIN,
+    MIN_BRIDGE_VERSION,
     CHAR_AMOUNT_OF_CHARGES,
     CHAR_AMOUNT_OF_OPERATIONAL_TURNS,
     CHAR_APP_HANDLE_SETTINGS,
@@ -474,6 +477,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self._live_setup_done = True
                     if isinstance(self.transport, EspBridgeTransport):
                         self.transport.acknowledge_resubscribe()
+                        self._check_bridge_version()
                     _LOGGER.info("Live monitoring active – polling paused")
 
                 except TransportError as err:
@@ -662,6 +666,40 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_set_updated_data(self.data)
 
         return sessions
+
+    def _check_bridge_version(self) -> None:
+        """Create or clear a HA repair issue if the ESP bridge firmware is outdated."""
+        assert isinstance(self.transport, EspBridgeTransport)
+        version = self.transport.bridge_version
+        if not version:
+            return
+        from packaging.version import Version
+        try:
+            outdated = Version(version) < Version(MIN_BRIDGE_VERSION)
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Cannot parse bridge version '%s'", version)
+            return
+        if outdated:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                "esp_bridge_outdated",
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="esp_bridge_outdated",
+                translation_placeholders={
+                    "version": version,
+                    "min_version": MIN_BRIDGE_VERSION,
+                },
+            )
+            _LOGGER.warning(
+                "ESP bridge v%s is outdated (minimum: v%s) — "
+                "rebuild and flash your ESPHome device",
+                version,
+                MIN_BRIDGE_VERSION,
+            )
+        else:
+            ir.async_delete_issue(self.hass, DOMAIN, "esp_bridge_outdated")
 
     async def async_shutdown(self) -> None:
         """Called on unload – clean up everything."""

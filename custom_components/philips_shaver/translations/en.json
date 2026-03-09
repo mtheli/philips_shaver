@@ -1,4 +1,10 @@
 {
+  "issues": {
+    "esp_bridge_outdated": {
+      "title": "ESP bridge firmware update required",
+      "description": "Your ESP bridge is running **v{version}**, but **v{min_version}** or newer is required for full functionality.\n\nRebuild and flash your ESPHome device to get the latest firmware.\n\nSee the [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/ESP_BRIDGE_SETUP.md) for details."
+    }
+  },
   "options": {
     "step": {
       "init": {

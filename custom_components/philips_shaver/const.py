@@ -496,6 +496,9 @@ TRANSPORT_ESP_BRIDGE = "esp_bridge"
 
 CONF_ESP_DEVICE_NAME = "esp_device_name"
 
+# Minimum ESP bridge component version required for full functionality
+MIN_BRIDGE_VERSION = "1.3.0"
+
 MIN_POLL_INTERVAL = 30
 MAX_POLL_INTERVAL = 300
 
