@@ -5,7 +5,7 @@ PHILIPS_SERVICE_UUIDS = [
     "8d560100-3cb9-4387-a7e8-b79d826a7025",  # Device Properties (model, serial number)
     "8d560200-3cb9-4387-a7e8-b79d826a7025",  # History Service (battery raw, firmware, age)
     "8d560300-3cb9-4387-a7e8-b79d826a7025",  # Control Service (mode, light ring)
-    "8d560600-3cb9-4387-a7e8-b79d826a7025",  # Cleaning Service
+    "8d560600-3cb9-4387-a7e8-b79d826a7025",  # Serial/Diagnostic Service
     # Standard Bluetooth services (required for standard characteristics)
     "0000180f-0000-1000-8000-00805f9b34fb",  # Battery Service (0x180F)
     "0000180a-0000-1000-8000-00805f9b34fb",  # Device Information Service (0x180A)

@@ -978,7 +978,7 @@ class PhilipsShaverPressureStateSensor(PhilipsShaverEntity, SensorEntity):
 
         low = settings.get("pressure_limit_low", 1500)
         high = settings.get("pressure_limit_high", 4000)
-        base = settings.get("pressure_base", 500)
+        base = settings.get("pressure_base_value", 500)
 
         if pressure < base:
             return "no_contact"
