@@ -12,6 +12,7 @@ This is a custom component for Home Assistant to integrate **Philips Bluetooth-e
 | :--- | :--- | :--- |
 | **i9000 / XP9201** | Direct BLE, ESP32 Bridge | Developed & tested by maintainer |
 | **XP9400** | ESP32 Bridge | Community-tested ([#3](https://github.com/mtheli/philips_shaver/issues/3)) |
+| **S7887** | ESP32 Bridge | Community-tested ([forum](https://community.home-assistant.io/t/philips-bluetooth-shaver-monitoring/858822/8)) |
 
 Other BLE-enabled Philips shavers using the same GATT services may also work.
 
