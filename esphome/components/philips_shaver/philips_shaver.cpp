@@ -134,6 +134,8 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
         // Must happen here because BLEClientBase triggers on_connect (→ pair())
         // in SEARCH_CMPL_EVT before our node handler runs.
         this->apply_smp_params_();
+        this->auth_completed_ = false;
+        this->connect_time_ms_ = millis();
         ESP_LOGI(TAG, "Connected to shaver (%s)", this->get_shaver_mac_().c_str());
         this->connected_ = true;
         if (this->connected_sensor_ != nullptr)
@@ -151,6 +153,25 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
     }
 
     case ESP_GATTC_DISCONNECT_EVT: {
+      // Detect stale bond: if we keep disconnecting quickly without auth,
+      // the stored bond keys are likely invalid (e.g. after OTA or shaver BT reset).
+      // Clear the bond after repeated failures so the next connect starts fresh pairing.
+      if (this->auth_completed_ ||
+          (millis() - this->connect_time_ms_) > RAPID_DISCONNECT_THRESHOLD_MS) {
+        this->rapid_disconnect_count_ = 0;
+      } else {
+        this->rapid_disconnect_count_++;
+        ESP_LOGD(TAG, "Rapid disconnect without auth (%d/%d)",
+                 this->rapid_disconnect_count_, MAX_RAPID_DISCONNECTS);
+        if (this->rapid_disconnect_count_ >= MAX_RAPID_DISCONNECTS) {
+          ESP_LOGW(TAG, "Detected %d rapid disconnects without auth — "
+                   "clearing stale bond for fresh pairing",
+                   this->rapid_disconnect_count_);
+          esp_ble_remove_bond_device(this->parent()->get_remote_bda());
+          this->rapid_disconnect_count_ = 0;
+        }
+      }
+
       ESP_LOGW(TAG, "Disconnected from shaver (reason=0x%02X). "
                "%d subscription(s) will be restored on reconnect.",
                param->disconnect.reason,
@@ -520,10 +541,25 @@ void PhilipsShaver::on_get_info() {
 
 void PhilipsShaver::gap_event_handler(esp_gap_ble_cb_event_t event,
                                        esp_ble_gap_cb_param_t *param) {
-  if (event == ESP_GAP_BLE_NC_REQ_EVT) {
-    ESP_LOGI(TAG, "Numeric Comparison request — auto-confirming (passkey: %lu)",
-             param->ble_security.key_notif.passkey);
-    esp_ble_confirm_reply(param->ble_security.key_notif.bd_addr, true);
+  switch (event) {
+    case ESP_GAP_BLE_NC_REQ_EVT:
+      ESP_LOGI(TAG, "Numeric Comparison request — auto-confirming (passkey: %lu)",
+               param->ble_security.key_notif.passkey);
+      esp_ble_confirm_reply(param->ble_security.key_notif.bd_addr, true);
+      break;
+
+    case ESP_GAP_BLE_AUTH_CMPL_EVT:
+      this->auth_completed_ = true;
+      this->rapid_disconnect_count_ = 0;
+      if (!param->ble_security.auth_cmpl.success) {
+        ESP_LOGW(TAG, "Auth failed (reason=%d) — removing bond for fresh pair",
+                 param->ble_security.auth_cmpl.fail_reason);
+        esp_ble_remove_bond_device(param->ble_security.auth_cmpl.bd_addr);
+      }
+      break;
+
+    default:
+      break;
   }
 }
 

@@ -14,7 +14,7 @@
 namespace esphome {
 namespace philips_shaver {
 
-static const char *const PHILIPS_SHAVER_VERSION = "1.3.0";
+static const char *const PHILIPS_SHAVER_VERSION = "1.3.1";
 
 class PhilipsShaver : public ble_client::BLEClientNode,
                       public Component,
@@ -72,6 +72,13 @@ class PhilipsShaver : public ble_client::BLEClientNode,
 
   void apply_smp_params_();
   void resubscribe_all_();
+
+  // Auth tracking for stale bond detection
+  bool auth_completed_{false};
+  uint32_t connect_time_ms_{0};
+  uint8_t rapid_disconnect_count_{0};
+  static const uint8_t MAX_RAPID_DISCONNECTS = 3;
+  static const uint32_t RAPID_DISCONNECT_THRESHOLD_MS = 5000;
 
   // Notification throttle: min interval between events per characteristic
   uint32_t notify_throttle_ms_{500};
