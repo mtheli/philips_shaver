@@ -81,8 +81,6 @@ class PhilipsShaver : public ble_client::BLEClientNode,
   static const uint32_t HEARTBEAT_INTERVAL_MS = 15000;
   uint32_t last_heartbeat_ms_{0};
 
-  // Track HA API connection to re-fire "ready" after OTA reboot
-  bool last_api_connected_{false};
 };
 
 }  // namespace philips_shaver
