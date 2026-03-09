@@ -49,6 +49,7 @@ This integration creates a new device for your shaver and provides the following
 | **Battery Level** | Sensor | The current battery charge level (`%`). |
 | **Travel Lock** | Binary Sensor | Indicates if the travel lock is active. |
 | **Charging** | Binary Sensor | Indicates if the shaver is currently charging. |
+| **Light Ring** | Switch | Enable or disable the pressure coaching light ring. |
 | **Handle Load Type** | Sensor | Detected head attachment (`Shaving Heads`, `Trimmer`, `Styler`, `Brush`, etc.). |
 | **Motion** | Sensor | Live motion feedback (`No Motion`, `Small Circles`, `Large Strokes`). |
 
@@ -69,11 +70,14 @@ This integration creates a new device for your shaver and provides the following
 | **Total Operating Time** | Sensor | Lifetime usage of the shaver. |
 | **Days Since Last Used** | Sensor | Days elapsed since the last use. |
 | **Charge Cycles** | Sensor | Total number of charge cycles. |
+| **Remaining Shaves** | Sensor | Estimated number of shaves remaining based on battery level and usage history. |
 | **Number of Uses** | Sensor | Total number of operational uses. |
 | **Head Remaining** | Sensor | The remaining life of the shaver head (`%`). |
 | **Blade Replacement** | Button | Confirm a blade replacement — resets the head remaining counter to 100%. |
 | **Cleaning Progress** | Sensor | Progress of the cleaning cycle in `%` (if applicable). |
 | **Cleaning Cycles** | Sensor | Total number of cleaning cycles. |
+| **Cleaning Cartridge Remaining** | Sensor | Estimated remaining cleaning cartridge uses (accounts for fluid evaporation). |
+| **Reset Cleaning Cartridge** | Button | Reset the cleaning cartridge counter after inserting a new cartridge. |
 
 ### Diagnostics
 | Entity | Type | Description |
@@ -82,6 +86,7 @@ This integration creates a new device for your shaver and provides the following
 | **RSSI** | Sensor | Bluetooth signal strength (`dBm`, direct BLE only). |
 | **Shaver BLE** | Binary Sensor | BLE connection status to the shaver. |
 | **ESP Bridge** | Binary Sensor | ESP32 bridge online status (ESP bridge only). |
+| **Bridge Version** | Sensor | ESP bridge firmware version (ESP bridge only). |
 | **Firmware** | Sensor | Installed firmware version (disabled by default). |
 | **Model Number** | Sensor | Device model number (disabled by default). |
 
