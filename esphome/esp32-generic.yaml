@@ -41,6 +41,7 @@ captive_portal:
 esp32_ble:
   io_capability: none
   max_notifications: 30
+  max_connections: 4           # bluetooth_proxy needs 3 + ble_client needs 1
 
 esp32_ble_tracker:
   scan_parameters:
@@ -75,6 +76,7 @@ external_components:
       ref: main
       path: esphome/components
     components: [philips_shaver]
+    refresh: 0s                  # always fetch latest code on build
 
 philips_shaver:
   ble_client_id: philips_shaver_ble

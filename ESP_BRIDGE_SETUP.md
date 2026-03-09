@@ -71,7 +71,10 @@ Copy the template to your ESPHome configuration directory and customize:
   we subscribe to 17+ characteristics
 - **API flags**: `custom_services: true` and `homeassistant_services: true` — required
   for the bridge component to register its services
-- **external_components**: the component is loaded directly from this GitHub repository
+- **`max_connections: 4`** under `esp32_ble:` — needed when `bluetooth_proxy` is active
+  (proxy uses 3 slots + `ble_client` needs 1; the default of 3 is not enough)
+- **external_components**: the component is loaded directly from this GitHub repository.
+  The `refresh: 0s` setting ensures the latest code is fetched on every build
 
 ## Step 3: Flash the ESP32
 
@@ -135,6 +138,17 @@ pairing succeeded. The `mode` value depends on your shaver model (9 = Just Works
 - The ESP32 must be connected and paired with the shaver (check Step 4)
 - Ensure the shaver is powered on and in range of the ESP32
 - Check ESPHome logs for connection errors or disconnect events
+
+### No data after OTA update
+
+After an OTA flash, the ESP32 reboots and reconnects to the shaver via BLE before
+Home Assistant re-establishes the API stream (~5-10 seconds). The bridge automatically
+re-fires the "ready" event every 15 seconds until HA subscribes to notifications.
+If data still doesn't flow:
+
+- **Reload the integration** in HA (Settings > Devices & Services > Philips Shaver > ⋮ > Reload)
+- Check ESPHome logs for `BLE connected, no subscriptions — re-firing ready`
+- Check HA logs for `ESP bridge rebooted — forcing re-setup`
 
 ### ESP32 disconnects frequently
 
