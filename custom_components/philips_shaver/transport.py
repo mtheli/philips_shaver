@@ -247,6 +247,7 @@ class EspBridgeTransport(ShaverTransport):
         self._detected_mac: str | None = None
         self._bridge_version: str | None = None
         self._pending_info: asyncio.Future[dict[str, str]] | None = None
+        self._needs_resubscribe = False
 
     def _svc_name(self, action: str) -> str:
         """Full ESPHome service name, e.g. 'atom_lite_ble_read_char'."""
@@ -300,6 +301,15 @@ class EspBridgeTransport(ShaverTransport):
     @property
     def is_connected(self) -> bool:
         return self.is_bridge_alive and self._shaver_connected
+
+    @property
+    def needs_resubscribe(self) -> bool:
+        """True when the ESP bridge rebooted and subscriptions need re-setup."""
+        return self._needs_resubscribe
+
+    def acknowledge_resubscribe(self) -> None:
+        """Clear the resubscribe flag after coordinator has re-established subscriptions."""
+        self._needs_resubscribe = False
 
     async def connect(self) -> None:
         """Start listening for ESP32 bridge events."""
@@ -401,8 +411,11 @@ class EspBridgeTransport(ShaverTransport):
                 if not self._shaver_connected:
                     self._shaver_connected = True
                     _LOGGER.info("ESP↔Shaver BLE: %s", status)
-                    if self._disconnect_cb:
-                        self._disconnect_cb()  # trigger entity update
+                if status == "ready":
+                    self._needs_resubscribe = True
+                    _LOGGER.info("ESP ready — subscriptions need (re-)setup")
+                if self._disconnect_cb:
+                    self._disconnect_cb()  # trigger entity update
             elif status == "disconnected":
                 if self._shaver_connected:
                     self._shaver_connected = False

@@ -16,7 +16,7 @@ from homeassistant.components.bluetooth import (
     async_register_callback,
 )
 
-from .transport import BleakTransport, ShaverTransport
+from .transport import BleakTransport, EspBridgeTransport, ShaverTransport
 from .exceptions import TransportError
 from .const import (
     CHAR_AMOUNT_OF_CHARGES,
@@ -472,6 +472,8 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     # === Start notifications ===
                     await self._start_all_notifications()
                     self._live_setup_done = True
+                    if isinstance(self.transport, EspBridgeTransport):
+                        self.transport.acknowledge_resubscribe()
                     _LOGGER.info("Live monitoring active – polling paused")
 
                 except TransportError as err:
@@ -502,10 +504,21 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         backoff = min(backoff * 2, max_backoff)
                     continue
 
-            # Outside the lock: wait until disconnect
+            # Outside the lock: wait until disconnect (or ESP reboot)
             try:
                 while self.transport.is_connected:
-                    await asyncio.sleep(5)
+                    if (
+                        isinstance(self.transport, EspBridgeTransport)
+                        and self.transport.needs_resubscribe
+                    ):
+                        self.transport.acknowledge_resubscribe()
+                        _LOGGER.info("ESP bridge rebooted — forcing re-setup")
+                        break
+                    esp_ready.clear()
+                    try:
+                        await asyncio.wait_for(esp_ready.wait(), timeout=5)
+                    except asyncio.TimeoutError:
+                        pass
 
             except asyncio.CancelledError:
                 _LOGGER.error("Live connection was cancelled")
