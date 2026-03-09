@@ -7,7 +7,7 @@ import logging
 from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.config_entries import ConfigEntry
 
@@ -700,6 +700,15 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
         else:
             ir.async_delete_issue(self.hass, DOMAIN, "esp_bridge_outdated")
+
+        # Update sw_version on the bridge sub-device
+        device_id = self.entry.data.get(CONF_ESP_DEVICE_NAME, "")
+        dev_reg = dr.async_get(self.hass)
+        bridge_device = dev_reg.async_get_device(
+            identifiers={(DOMAIN, f"{device_id}_bridge")}
+        )
+        if bridge_device:
+            dev_reg.async_update_device(bridge_device.id, sw_version=version)
 
     async def async_shutdown(self) -> None:
         """Called on unload – clean up everything."""

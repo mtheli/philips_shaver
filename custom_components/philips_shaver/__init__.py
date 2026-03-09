@@ -61,6 +61,13 @@ def _async_link_via_esp_device(hass: HomeAssistant, entry: ConfigEntry) -> None:
         dev_reg.async_update_device(shaver_device.id, via_device_id=esp_device.id)
         _LOGGER.info("Linked shaver device to ESP bridge '%s'", esp_device_name)
 
+    # Also link the bridge sub-device to the ESPHome device
+    bridge_device = dev_reg.async_get_device(
+        identifiers={(DOMAIN, f"{esp_device_name}_bridge")}
+    )
+    if bridge_device:
+        dev_reg.async_update_device(bridge_device.id, via_device_id=esp_device.id)
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Philips Shaver from a config entry."""

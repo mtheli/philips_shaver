@@ -115,3 +115,29 @@ class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
             return (datetime.now() - last_seen).total_seconds() < 600
 
         return False
+
+
+class PhilipsBridgeEntity(PhilipsShaverEntity):
+    """Base for entities on the ESP Bridge sub-device."""
+
+    def __init__(
+        self,
+        coordinator: PhilipsShaverCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        super().__init__(coordinator, entry)
+        # Override device_info to register on the bridge sub-device.
+        # Linking to the ESPHome parent device is done in __init__.py.
+        self._attr_device_info = dr.DeviceInfo(
+            identifiers={(DOMAIN, f"{self._device_id}_bridge")},
+            name="ESP Bridge",
+            manufacturer="Espressif",
+        )
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        self.async_write_ha_state()

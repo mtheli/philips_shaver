@@ -25,7 +25,7 @@ from .const import (
     CONF_TRANSPORT_TYPE, TRANSPORT_ESP_BRIDGE,
     CARTRIDGE_CAPACITY, EVAPORATION_RATE, CLEANING_CONSTANTS, CLEANING_CONSTANT_DEFAULT,
 )
-from .entity import PhilipsShaverEntity
+from .entity import PhilipsBridgeEntity, PhilipsShaverEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -90,8 +90,13 @@ async def async_setup_entry(
         )
 
     # RSSI sensor only for direct BLE (not available via ESP bridge)
-    if entry.data.get(CONF_TRANSPORT_TYPE) != TRANSPORT_ESP_BRIDGE:
+    is_esp = entry.data.get(CONF_TRANSPORT_TYPE) == TRANSPORT_ESP_BRIDGE
+    if not is_esp:
         entities.append(PhilipsRssiSensor(coordinator, entry))
+
+    # Bridge version sensor on the ESP Bridge sub-device
+    if is_esp:
+        entities.append(PhilipsBridgeVersionSensor(coordinator, entry))
 
     async_add_entities(entities)
 
@@ -1031,3 +1036,21 @@ class PhilipsTotalAgeSensor(PhilipsShaverEntity, SensorEntity):
         minutes = (seconds % 3600) // 60
 
         return {"formatted_age": f"{days}d {hours}h {minutes}m", "raw_seconds": seconds}
+
+
+class PhilipsBridgeVersionSensor(PhilipsBridgeEntity, SensorEntity):
+    """Sensor showing the ESP bridge component version."""
+
+    _attr_translation_key = "bridge_version"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:chip"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._device_id}_bridge_version"
+
+    @property
+    def native_value(self) -> str | None:
+        return self.coordinator.transport.bridge_version

@@ -122,6 +122,9 @@
       }
     },
     "sensor": {
+      "bridge_version": {
+        "name": "Bridge Version"
+      },
       "battery": {
         "name": "Battery"
       },
