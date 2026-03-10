@@ -24,6 +24,26 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = [Platform.SENSOR, Platform.LIGHT, Platform.SELECT, Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SWITCH]
 
 SERVICE_FETCH_HISTORY = "fetch_history"
+SERVICE_READ_CHARACTERISTIC = "read_characteristic"
+SERVICE_READ_CHARACTERISTIC_RAW = "read_characteristic_raw"
+
+UUID_TEMPLATE = "8d56%s-3cb9-4387-a7e8-b79d826a7025"
+
+
+def _expand_char_uuid(raw_uuid: str) -> str:
+    """Expand short form (0x0319 or 0319) to full Philips UUID."""
+    short = raw_uuid.strip().lower().replace("0x", "")
+    if len(short) == 4 and "-" not in raw_uuid:
+        return UUID_TEMPLATE % short
+    return raw_uuid.strip().lower()
+
+
+def _get_coordinator(hass: HomeAssistant, entry_id: str | None):
+    """Resolve coordinator from entry_id or use first available."""
+    if entry_id and entry_id in hass.data[DOMAIN]:
+        return hass.data[DOMAIN][entry_id]["coordinator"]
+    first = next(iter(hass.data[DOMAIN].values()), None)
+    return first["coordinator"] if first else None
 
 
 def _async_link_via_esp_device(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -125,6 +145,85 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             supports_response=SupportsResponse.ONLY,
         )
 
+    # Register read_characteristic debug services (only once)
+    _char_schema = vol.Schema({
+        vol.Required("characteristic_uuid"): vol.Any(str, [str]),
+        vol.Optional("entry_id"): str,
+    })
+
+    async def _read_uuids(coord, raw_input) -> tuple[str, dict[str, dict]]:
+        """Read one or more characteristics. Returns (global_status, {uuid: {value, bytes, _raw}})."""
+        if isinstance(raw_input, list):
+            uuids = [_expand_char_uuid(u) for u in raw_input]
+        else:
+            uuids = [_expand_char_uuid(u) for u in raw_input.split(",")]
+
+        if not coord.transport.is_connected:
+            return "not_connected", {u: {"value": None, "bytes": 0} for u in uuids}
+
+        results = {}
+        for char_uuid in uuids:
+            try:
+                raw = await coord.transport.read_char(char_uuid)
+            except Exception as e:
+                _LOGGER.error("Failed to read characteristic %s: %s", char_uuid, e)
+                results[char_uuid] = {"value": None, "bytes": 0, "error": str(e)}
+                continue
+            if raw is None:
+                results[char_uuid] = {"value": None, "bytes": 0}
+            else:
+                results[char_uuid] = {"value": raw.hex(), "bytes": len(raw), "_raw": raw}
+        return "ok", results
+
+    if not hass.services.has_service(DOMAIN, SERVICE_READ_CHARACTERISTIC_RAW):
+        async def handle_read_characteristic_raw(call: ServiceCall) -> ServiceResponse:
+            """Read GATT characteristics by UUID and return raw hex values."""
+            coord = _get_coordinator(hass, call.data.get("entry_id"))
+            if not coord:
+                return {"status": "no_device", "results": {}}
+
+            status, results = await _read_uuids(coord, call.data["characteristic_uuid"])
+
+            clean = {uuid: {k: v for k, v in r.items() if k != "_raw"} for uuid, r in results.items()}
+            return {"status": status, "results": clean}
+
+        hass.services.async_register(
+            DOMAIN, SERVICE_READ_CHARACTERISTIC_RAW, handle_read_characteristic_raw,
+            schema=_char_schema, supports_response=SupportsResponse.ONLY,
+        )
+
+    if not hass.services.has_service(DOMAIN, SERVICE_READ_CHARACTERISTIC):
+        async def handle_read_characteristic(call: ServiceCall) -> ServiceResponse:
+            """Read GATT characteristics and return parsed values (same as internal data dict)."""
+            coord = _get_coordinator(hass, call.data.get("entry_id"))
+            if not coord:
+                return {"status": "no_device", "results": {}, "parsed": {}}
+
+            status, results = await _read_uuids(coord, call.data["characteristic_uuid"])
+
+            # Parse requested characteristics in isolation (empty base)
+            to_parse = {uuid: r["_raw"] for uuid, r in results.items() if "_raw" in r}
+            parsed = {}
+            if to_parse:
+                saved_data = coord.data
+                try:
+                    coord.data = {}
+                    parsed_data = coord._process_results(to_parse)
+                finally:
+                    coord.data = saved_data
+                for key, val in parsed_data.items():
+                    if key == "last_seen" or key.endswith("_raw"):
+                        continue
+                    parsed[key] = val
+
+            clean = {uuid: {k: v for k, v in r.items() if k != "_raw"} for uuid, r in results.items()}
+            return {"status": status, "results": clean, "parsed": parsed}
+
+        hass.services.async_register(
+            DOMAIN, SERVICE_READ_CHARACTERISTIC, handle_read_characteristic,
+            schema=_char_schema, supports_response=SupportsResponse.ONLY,
+        )
+
     device_id = entry.data.get("address") or entry.data.get(CONF_ESP_DEVICE_NAME)
     _LOGGER.info("Philips Shaver integration loaded – device: %s", device_id)
     return True
@@ -143,6 +242,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Remove services if no more entries
     if not hass.data[DOMAIN]:
         hass.services.async_remove(DOMAIN, SERVICE_FETCH_HISTORY)
+        hass.services.async_remove(DOMAIN, SERVICE_READ_CHARACTERISTIC)
+        hass.services.async_remove(DOMAIN, SERVICE_READ_CHARACTERISTIC_RAW)
 
     _LOGGER.info("Unloading philips shaver integration finished")
     return True

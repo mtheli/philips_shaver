@@ -338,6 +338,16 @@ class EspBridgeTransport(ShaverTransport):
 
             uuid = data.get("uuid", "")
             payload_hex = data.get("payload", "")
+            error = data.get("error", "")
+
+            # Handle error events from ESP (not_found, not_connected, gatt_err_*)
+            if error and uuid and uuid in self._pending_reads:
+                future = self._pending_reads.pop(uuid)
+                if not future.done():
+                    future.set_result(None)
+                _LOGGER.debug("ESP read error for %s: %s", uuid, error)
+                return
+
             if not uuid or not payload_hex:
                 return
 

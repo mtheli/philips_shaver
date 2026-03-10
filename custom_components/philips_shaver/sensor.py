@@ -173,7 +173,7 @@ class PhilipsBatterySensor(PhilipsShaverEntity, RestoreEntity, SensorEntity):
             return None
 
 
-# Max shaving minutes and avg shave duration from Philips companion app
+# Max shaving minutes and avg shave duration
 BATTERY_MAX_SHAVING_MINUTES = 50
 BATTERY_AVG_SHAVE_MINUTES = 3.3
 

@@ -310,6 +310,14 @@ void PhilipsShaver::on_read_characteristic(std::string service_uuid,
                                             std::string characteristic_uuid) {
   if (!this->connected_) {
     ESP_LOGW(TAG, "Cannot read: not connected");
+    this->fire_homeassistant_event(
+        "esphome.philips_shaver_ble_data",
+        {
+            {"uuid", characteristic_uuid},
+            {"payload", ""},
+            {"error", "not_connected"},
+            {"mac", this->get_shaver_mac_()},
+        });
     return;
   }
 
@@ -320,6 +328,14 @@ void PhilipsShaver::on_read_characteristic(std::string service_uuid,
   if (chr == nullptr) {
     ESP_LOGW(TAG, "Characteristic %s not found in service %s",
              characteristic_uuid.c_str(), service_uuid.c_str());
+    this->fire_homeassistant_event(
+        "esphome.philips_shaver_ble_data",
+        {
+            {"uuid", characteristic_uuid},
+            {"payload", ""},
+            {"error", "not_found"},
+            {"mac", this->get_shaver_mac_()},
+        });
     return;
   }
 
@@ -338,6 +354,16 @@ void PhilipsShaver::on_read_characteristic(std::string service_uuid,
   if (status != ESP_OK) {
     ESP_LOGW(TAG, "Read request failed: %d", status);
     this->pending_handle_ = 0;
+    char err_str[16];
+    snprintf(err_str, sizeof(err_str), "gatt_err_%d", status);
+    this->fire_homeassistant_event(
+        "esphome.philips_shaver_ble_data",
+        {
+            {"uuid", characteristic_uuid},
+            {"payload", ""},
+            {"error", std::string(err_str)},
+            {"mac", this->get_shaver_mac_()},
+        });
   }
 }
 

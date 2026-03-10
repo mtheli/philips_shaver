@@ -88,7 +88,7 @@ class PhilipsColorConfigLight(PhilipsShaverEntity, LightEntity):
     @property
     def available(self) -> bool:
         """Unavailable when light ring is disabled via app handle settings."""
-        if not self.coordinator.data.get("lightring_enabled", True):
+        if self.coordinator.data.get("lightring_enabled") is False:
             return False
         return super().available
 

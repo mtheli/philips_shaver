@@ -25,10 +25,10 @@ The two modes are mutually exclusive — polling is skipped while a live connect
 
 | Service UUID | Purpose |
 |-------------|---------|
-| `8d560100-3cb9-4387-a7e8-b79d826a7025` | Device Properties — model, serial number, motor, battery cycles |
-| `8d560200-3cb9-4387-a7e8-b79d826a7025` | Unknown Service — battery raw data, firmware, device age |
-| `8d560300-3cb9-4387-a7e8-b79d826a7025` | Control Service — shaving mode, light ring, pressure |
-| `8d560600-3cb9-4387-a7e8-b79d826a7025` | Cleaning Service — cleaning progress and cycles |
+| `8d560100-3cb9-4387-a7e8-b79d826a7025` | Platform Service — device state, motor, battery cycles, cleaning |
+| `8d560200-3cb9-4387-a7e8-b79d826a7025` | History Service — shaving session history (timestamp, duration, RPM) |
+| `8d560300-3cb9-4387-a7e8-b79d826a7025` | Smart Shaver Handle Service — shaving mode, light ring, pressure, coaching |
+| `8d560600-3cb9-4387-a7e8-b79d826a7025` | Serial/Diagnostic Service — present on newer models (XP9400), purpose not yet fully known |
 
 ### Standard Bluetooth Services
 
@@ -53,45 +53,56 @@ The two modes are mutually exclusive — polling is skipped while a live connect
 |---------------|------|------------|-----------|-------------|
 | Battery Level | `00002a19-0000-1000-8000-00805f9b34fb` | NOTIFY, READ | uint8 | Battery percentage (0–100%) |
 
-### Device Properties (Service 8d5601xx)
+### Platform Service (Service 8d5601xx)
 
-| Characteristic | UUID | Properties | Format | Description |
-|---------------|------|------------|--------|-------------|
-| Motor Current | `8d560102-...7025` | NOTIFY, READ | uint16 LE | Current motor power draw (mA) |
-| Motor Current Max | `8d560103-...7025` | READ | uint16 LE | Maximum motor current rating (mA). Example: `0x07D0` = 2000 mA |
-| Motor RPM | `8d560104-...7025` | NOTIFY, READ | uint16 LE | Raw motor speed. Divide by 3.036 for RPM (e.g. ~2200 RPM) |
-| Total Age | `8d560106-...7025` | NOTIFY, READ, WRITE | uint32 LE | Total device operating time (seconds) |
-| Operational Turns | `8d560107-...7025` | NOTIFY, READ | uint16 LE | Number of times the shaver was turned on |
-| Days Since Last Used | `8d560108-...7025` | NOTIFY, READ | uint16 LE | Days elapsed since the last use |
-| Amount of Charges | `8d560109-...7025` | NOTIFY, READ | uint16 LE | Total number of charge cycles |
-| Device State | `8d56010a-...7025` | NOTIFY, READ | uint8 | 1=off, 2=shaving, 3=charging |
-| Travel Lock | `8d56010c-...7025` | NOTIFY, READ | uint8 | 0=unlocked, 1=locked |
-| Shaving Time | `8d56010f-...7025` | NOTIFY, READ | uint16 LE | Last session duration (seconds) |
-| System Notifications | `8d560110-...7025` | NOTIFY, READ, WRITE | 4 bytes | System notification flags. Example: `12 00 00 00` |
-| Head Remaining | `8d560117-...7025` | NOTIFY, READ | uint8 | Shaver head remaining life (0–100%) |
-| Head Remaining Minutes | `8d560118-...7025` | NOTIFY, READ | uint16 LE | Shaver head remaining life (minutes) |
+| Characteristic | Short UUID | Properties | Format | Description |
+|---------------|------------|------------|--------|-------------|
+| Motor Current | `0x0102` | NOTIFY, READ | uint16 LE | Current motor power draw (mA) |
+| Motor Current Max | `0x0103` | READ | uint16 LE | Maximum motor current rating (mA) |
+| Motor RPM | `0x0104` | NOTIFY, READ | uint16 LE | Raw motor speed. Divide by 3.036 for RPM |
+| Motor RPM Max | `0x0105` | READ | uint16 LE | Maximum motor RPM (raw, ÷ 3.036) |
+| Total Age | `0x0106` | NOTIFY, READ, WRITE | uint32 LE | Total device operating time (seconds) |
+| Operational Turns | `0x0107` | NOTIFY, READ | uint16 LE | Number of times the shaver was turned on |
+| Days Since Last Used | `0x0108` | NOTIFY, READ | uint16 LE | Days elapsed since the last use |
+| Amount of Charges | `0x0109` | NOTIFY, READ | uint16 LE | Total number of charge cycles |
+| Device State | `0x010A` | NOTIFY, READ | uint8 | 1=off, 2=shaving, 3=charging |
+| Motor RPM Min | `0x011B` | READ | uint16 LE | Minimum motor RPM (raw, ÷ 3.036) |
+| Travel Lock | `0x010C` | NOTIFY, READ | uint8 | 0=unlocked, 1=locked |
+| Blade Replacement | `0x010E` | READ | uint8 | Blade replacement trigger |
+| Shaving Time | `0x010F` | NOTIFY, READ | uint16 LE | Last session duration (seconds) |
+| System Notifications | `0x0110` | NOTIFY, READ, WRITE | 4 bytes | System notification flags |
+| Head Remaining | `0x0117` | NOTIFY, READ | uint8 | Shaver head remaining life (0–100%) |
+| Head Remaining Minutes | `0x0118` | NOTIFY, READ | uint16 LE | Shaver head remaining life (minutes) |
+| Cleaning Progress | `0x011A` | NOTIFY, READ | uint8 | Cleaning cycle progress (0–100%) |
 
-### Cleaning (Service 8d5601xx / 8d5603xx)
+### History Service (Service 8d5602xx)
 
-| Characteristic | UUID | Properties | Format | Description |
-|---------------|------|------------|--------|-------------|
-| Cleaning Progress | `8d56011a-...7025` | NOTIFY, READ | uint8 | Cleaning cycle progress (0–100%) |
-| Cleaning Cycles | `8d56031a-...7025` | NOTIFY, READ, WRITE | uint16 LE | Number of cleaning cycles performed |
+| Characteristic | Short UUID | Properties | Format | Description |
+|---------------|------------|------------|--------|-------------|
+| History Timestamp | `0x0202` | READ | uint32 LE | Session timestamp (Unix epoch) |
+| History Avg Current | `0x0206` | READ | uint16 LE | Average motor current during session (mA) |
+| History Duration | `0x0207` | READ | uint16 LE | Session duration (seconds) |
+| History RPM | `0x0208` | READ | uint16 LE | Average motor RPM during session (raw, ÷ 3.036) |
+| History Sync Status | `0x0209` | READ, WRITE | uint8 | Controls history playback (see Shaving History section) |
 
-### Control Service (Service 8d5603xx)
+### Smart Shaver Handle Service (Service 8d5603xx)
 
-| Characteristic | UUID | Properties | Format | Description |
-|---------------|------|------------|--------|-------------|
-| Capabilities | `8d560302-...7025` | READ | uint32 LE | Device capability bitfield (see below) |
-| Pressure | `8d56030c-...7025` | NOTIFY, READ | uint16 LE | Live pressure sensor value |
-| Light Ring Low | `8d560311-...7025` | READ, WRITE | 4 bytes RGBA | LED color for low pressure state |
-| Light Ring OK | `8d560312-...7025` | READ, WRITE | 4 bytes RGBA | LED color for optimal pressure state |
-| Light Ring High | `8d560313-...7025` | READ, WRITE | 4 bytes RGBA | LED color for high pressure state |
-| Light Ring Motion | `8d56031c-...7025` | READ, WRITE | 4 bytes RGBA | LED color for motion feedback |
-| Light Ring Brightness | `8d560331-...7025` | READ, WRITE | uint8 | LED ring brightness (0–255) |
-| Shaving Mode | `8d56032a-...7025` | NOTIFY, READ, WRITE | uint8 | Current shaving mode (see below) |
-| Custom Mode Settings | `8d560330-...7025` | READ, WRITE | 10 bytes | Settings for custom mode (see below) |
-| Mode Settings | `8d560332-...7025` | NOTIFY, READ | 10 bytes | Current active mode settings (see below) |
+| Characteristic | Short UUID | Properties | Format | Description |
+|---------------|------------|------------|--------|-------------|
+| Capabilities | `0x0302` | READ | uint32 LE | Device capability bitfield (see below) |
+| Motion Type | `0x0305` | NOTIFY, READ | uint8 | 0=none, 1=small circle, 4=large stroke |
+| Pressure | `0x030C` | NOTIFY, READ | uint16 LE | Live pressure sensor value |
+| Light Ring Low | `0x0311` | READ, WRITE | 4 bytes RGBA | LED color for low pressure state |
+| Light Ring OK | `0x0312` | READ, WRITE | 4 bytes RGBA | LED color for optimal pressure state |
+| Light Ring High | `0x0313` | READ, WRITE | 4 bytes RGBA | LED color for high pressure state |
+| App Handle Settings | `0x0319` | NOTIFY, READ, WRITE | uint32 LE | Coaching/feedback bitfield (bit 4 = light ring on/off) |
+| Cleaning Cycles | `0x031A` | NOTIFY, READ, WRITE | uint16 LE | Number of cleaning cycles performed |
+| Light Ring Motion | `0x031C` | READ, WRITE | 4 bytes RGBA | LED color for motion feedback |
+| Handle Load Type | `0x0322` | NOTIFY, READ | uint16 LE | Attached head (3=trimmer, 4=shaving heads, 5=styler, 6=brush, 7=precision trimmer, 8=beardstyler) |
+| Shaving Mode | `0x032A` | NOTIFY, READ, WRITE | uint16 LE | Current shaving mode (see below) |
+| Custom Mode Settings | `0x0330` | READ, WRITE | 10 bytes | Settings for custom mode (see below) |
+| Light Ring Brightness | `0x0331` | READ, WRITE | uint8 | LED ring brightness (0–255) |
+| Mode Settings | `0x0332` | NOTIFY, READ | 10 bytes | Current active mode settings (see below) |
 
 ## Data Formats
 
@@ -103,7 +114,29 @@ The two modes are mutually exclusive — polling is skipped while a live connect
 | 2 | Shaving |
 | 3 | Charging |
 
-### Shaving Modes (0x8d56032a)
+### App Handle Settings (0x0319)
+
+A uint32 little-endian bitfield controlling coaching and feedback features. The integration uses bit 4 to toggle the light ring:
+
+| Bit | Flag | Description |
+|-----|------|-------------|
+| 4 | fullCoachingMode | Light ring on/off during shaving |
+| 5 | maxPressureCoachingMode | Pressure-only coaching |
+
+Toggle behavior: ON = set bit 4 + clear bit 5, OFF = clear bit 4 + clear bit 5. All other bits are preserved (read-modify-write).
+
+### Handle Load Type (0x0322)
+
+| Value | Attachment |
+|-------|-----------|
+| 3 | Trimmer |
+| 4 | Shaving Heads |
+| 5 | Styler |
+| 6 | Brush |
+| 7 | Precision Trimmer |
+| 8 | Beardstyler |
+
+### Shaving Modes (0x032A) — uint16 LE
 
 | Value | Mode |
 |-------|------|
@@ -190,6 +223,18 @@ The following characteristics support GATT notifications (indicated by the CCCD 
 - Motor RPM, Motor Current, Pressure
 - Head Remaining, Head Remaining Minutes
 - Shaving Time, Mode Settings, Total Age
+
+## Shaving History (Service 0x0200)
+
+The history service stores past shaving sessions on the device. Playback is controlled via the Sync Status characteristic (`0x0209`):
+
+1. Write `0x01` to `0x0209` to start playback
+2. Read `0x0202` (timestamp), `0x0207` (duration), `0x0206` (avg current), `0x0208` (RPM)
+3. Write `0x02` to `0x0209` to advance to the next session
+4. Repeat until `0x0209` reads `0x00` (no more sessions)
+5. Write `0x00` to `0x0209` to reset
+
+Each session provides: Unix timestamp, duration in seconds, average motor current (mA), and average motor RPM (raw, ÷ 3.036).
 
 ## Known Quirks
 

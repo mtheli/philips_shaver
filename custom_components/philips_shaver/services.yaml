@@ -10,3 +10,50 @@ fetch_history:
       required: false
       selector:
         text:
+
+read_characteristic:
+  name: Read Characteristic (Parsed)
+  description: >-
+    Reads one or more BLE GATT characteristics and returns both the raw hex values
+    and the parsed representation (same keys as the internal data dictionary).
+    Accepts short form (e.g. "0x0319") or full UUID.
+  fields:
+    characteristic_uuid:
+      name: Characteristic UUID(s)
+      description: >-
+        One or more characteristic UUIDs. Short form like "0x0319"
+        is automatically expanded to the full Philips UUID.
+      required: true
+      example: "0x0319"
+      selector:
+        text:
+          multiple: true
+    entry_id:
+      name: Config Entry ID
+      description: The config entry ID of the shaver device. If omitted, uses the first available device.
+      required: false
+      selector:
+        text:
+
+read_characteristic_raw:
+  name: Read Characteristic (Raw)
+  description: >-
+    Reads one or more BLE GATT characteristics by UUID and returns the raw hex values only.
+    Accepts short form (e.g. "0x0319") or full UUID.
+  fields:
+    characteristic_uuid:
+      name: Characteristic UUID(s)
+      description: >-
+        One or more characteristic UUIDs. Short form like "0x0319"
+        is automatically expanded to the full Philips UUID.
+      required: true
+      example: "0x0319"
+      selector:
+        text:
+          multiple: true
+    entry_id:
+      name: Config Entry ID
+      description: The config entry ID of the shaver device. If omitted, uses the first available device.
+      required: false
+      selector:
+        text:

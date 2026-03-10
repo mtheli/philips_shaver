@@ -575,7 +575,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_fetch_history(self) -> list[dict[str, Any]]:
         """Fetch shaving session history from the device.
 
-        Flow (as per Philips companion app):
+        Flow:
         1. Read sync status → number of available sessions
         2. For each session:
            a. Read timestamp (UINT32)

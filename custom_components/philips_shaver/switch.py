@@ -80,7 +80,7 @@ class PhilipsLightRingSwitch(PhilipsShaverEntity, SwitchEntity):
 
         val = int.from_bytes(raw, "little")
 
-        # Modify bits (matching Philips companion app behavior)
+        # Modify bits (read-modify-write)
         if enabled:
             val |= APP_SETTINGS_FULL_COACHING   # set bit 4
         else:
