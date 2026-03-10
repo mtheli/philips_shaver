@@ -120,6 +120,13 @@ This integration creates a new device for your shaver and provides the following
 
 ## Configuration
 
+The integration supports two connection methods:
+
+| | Method | Best for |
+| :--- | :--- | :--- |
+| **[Option A](#option-a-direct-bluetooth-pairing)** | **Direct Bluetooth** | HA host is within Bluetooth range of the shaver |
+| **[Option B](#option-b-esp32-ble-bridge)** | **ESP32 BLE Bridge** | Shaver is out of range — an ESP32 relays BLE over WiFi |
+
 ### Option A: Direct Bluetooth (Pairing)
 
 This method requires that the shaver be **paired at the operating system (OS) level** of your Home Assistant host before you can add the integration.
@@ -213,6 +220,8 @@ The integration communicates directly via BLE — no cloud, no app required. All
 The shaver exposes multiple GATT services with individual characteristics for each data point (battery, motor, pressure, light ring, etc.). Data is read directly from these characteristics and live updates are received via GATT notifications.
 
 For a detailed technical description of the BLE protocol including service UUIDs, characteristic reference, data formats, and capability flags, see [PROTOCOL.md](PROTOCOL.md).
+
+For debug service actions (reading arbitrary BLE characteristics via Developer Tools), see [ADVANCED.md](ADVANCED.md).
 
 ## Screenshots
 
