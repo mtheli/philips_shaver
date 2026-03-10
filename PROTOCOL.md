@@ -25,17 +25,17 @@ The two modes are mutually exclusive — polling is skipped while a live connect
 
 | Service UUID | Purpose |
 |-------------|---------|
-| `8d560100-3cb9-4387-a7e8-b79d826a7025` | Platform Service — device state, motor, battery cycles, cleaning |
-| `8d560200-3cb9-4387-a7e8-b79d826a7025` | History Service — shaving session history (timestamp, duration, RPM) |
-| `8d560300-3cb9-4387-a7e8-b79d826a7025` | Smart Shaver Handle Service — shaving mode, light ring, pressure, coaching |
+| `8d560100-3cb9-4387-a7e8-b79d826a7025` | [Platform Service](#platform-service-service-8d5601xx) — device state, motor, battery cycles, cleaning |
+| `8d560200-3cb9-4387-a7e8-b79d826a7025` | [History Service](#history-service-service-8d5602xx) — shaving session history (timestamp, duration, RPM) |
+| `8d560300-3cb9-4387-a7e8-b79d826a7025` | [Smart Shaver Handle Service](#smart-shaver-handle-service-service-8d5603xx) — shaving mode, light ring, pressure, coaching |
 | `8d560600-3cb9-4387-a7e8-b79d826a7025` | Serial/Diagnostic Service — present on newer models (XP9400), purpose not yet fully known |
 
 ### Standard Bluetooth Services
 
 | Service UUID | Purpose |
 |-------------|---------|
-| `0000180f-0000-1000-8000-00805f9b34fb` | Battery Service (0x180F) |
-| `0000180a-0000-1000-8000-00805f9b34fb` | Device Information Service (0x180A) |
+| `0000180f-0000-1000-8000-00805f9b34fb` | [Battery Service](#battery-standard-gatt--service-0x180f) (0x180F) |
+| `0000180a-0000-1000-8000-00805f9b34fb` | [Device Information Service](#device-information-standard-gatt--service-0x180a) (0x180A) |
 
 ## Characteristics Reference
 
@@ -59,13 +59,13 @@ The two modes are mutually exclusive — polling is skipped while a live connect
 |---------------|------------|------------|--------|-------------|
 | Motor Current | `0x0102` | NOTIFY, READ | uint16 LE | Current motor power draw (mA) |
 | Motor Current Max | `0x0103` | READ | uint16 LE | Maximum motor current rating (mA) |
-| Motor RPM | `0x0104` | NOTIFY, READ | uint16 LE | Raw motor speed. Divide by 3.036 for RPM |
+| Motor RPM | `0x0104` | NOTIFY, READ | uint16 LE | Raw motor speed. [Divide by 3.036](#motor-rpm-conversion) for RPM |
 | Motor RPM Max | `0x0105` | READ | uint16 LE | Maximum motor RPM (raw, ÷ 3.036) |
 | Total Age | `0x0106` | NOTIFY, READ, WRITE | uint32 LE | Total device operating time (seconds) |
 | Operational Turns | `0x0107` | NOTIFY, READ | uint16 LE | Number of times the shaver was turned on |
 | Days Since Last Used | `0x0108` | NOTIFY, READ | uint16 LE | Days elapsed since the last use |
 | Amount of Charges | `0x0109` | NOTIFY, READ | uint16 LE | Total number of charge cycles |
-| Device State | `0x010A` | NOTIFY, READ | uint8 | 1=off, 2=shaving, 3=charging |
+| Device State | `0x010A` | NOTIFY, READ | uint8 | [1=off, 2=shaving, 3=charging](#device-state-0x8d56010a) |
 | Motor RPM Min | `0x011B` | READ | uint16 LE | Minimum motor RPM (raw, ÷ 3.036) |
 | Travel Lock | `0x010C` | NOTIFY, READ | uint8 | 0=unlocked, 1=locked |
 | Blade Replacement | `0x010E` | READ | uint8 | Blade replacement trigger |
@@ -83,26 +83,26 @@ The two modes are mutually exclusive — polling is skipped while a live connect
 | History Avg Current | `0x0206` | READ | uint16 LE | Average motor current during session (mA) |
 | History Duration | `0x0207` | READ | uint16 LE | Session duration (seconds) |
 | History RPM | `0x0208` | READ | uint16 LE | Average motor RPM during session (raw, ÷ 3.036) |
-| History Sync Status | `0x0209` | READ, WRITE | uint8 | Controls history playback (see Shaving History section) |
+| History Sync Status | `0x0209` | READ, WRITE | uint8 | Controls [history playback](#shaving-history-service-0x0200) |
 
 ### Smart Shaver Handle Service (Service 8d5603xx)
 
 | Characteristic | Short UUID | Properties | Format | Description |
 |---------------|------------|------------|--------|-------------|
-| Capabilities | `0x0302` | READ | uint32 LE | Device capability bitfield (see below) |
+| Capabilities | `0x0302` | READ | uint32 LE | [Device capability bitfield](#capability-flags-0x8d560302) |
 | Motion Type | `0x0305` | NOTIFY, READ | uint8 | 0=none, 1=small circle, 4=large stroke |
 | Pressure | `0x030C` | NOTIFY, READ | uint16 LE | Live pressure sensor value |
-| Light Ring Low | `0x0311` | READ, WRITE | 4 bytes RGBA | LED color for low pressure state |
+| Light Ring Low | `0x0311` | READ, WRITE | [4 bytes RGBA](#light-ring-colors-0x8d5603110x8d56031c) | LED color for low pressure state |
 | Light Ring OK | `0x0312` | READ, WRITE | 4 bytes RGBA | LED color for optimal pressure state |
 | Light Ring High | `0x0313` | READ, WRITE | 4 bytes RGBA | LED color for high pressure state |
-| App Handle Settings | `0x0319` | NOTIFY, READ, WRITE | uint32 LE | Coaching/feedback bitfield (bit 4 = light ring on/off) |
+| App Handle Settings | `0x0319` | NOTIFY, READ, WRITE | uint32 LE | [Coaching/feedback bitfield](#app-handle-settings-0x0319) (bit 4 = light ring on/off) |
 | Cleaning Cycles | `0x031A` | NOTIFY, READ, WRITE | uint16 LE | Number of cleaning cycles performed |
 | Light Ring Motion | `0x031C` | READ, WRITE | 4 bytes RGBA | LED color for motion feedback |
-| Handle Load Type | `0x0322` | NOTIFY, READ | uint16 LE | Attached head (3=trimmer, 4=shaving heads, 5=styler, 6=brush, 7=precision trimmer, 8=beardstyler) |
-| Shaving Mode | `0x032A` | NOTIFY, READ, WRITE | uint16 LE | Current shaving mode (see below) |
-| Custom Mode Settings | `0x0330` | READ, WRITE | 10 bytes | Settings for custom mode (see below) |
+| Handle Load Type | `0x0322` | NOTIFY, READ | uint16 LE | [Attached head type](#handle-load-type-0x0322) |
+| Shaving Mode | `0x032A` | NOTIFY, READ, WRITE | uint16 LE | [Current shaving mode](#shaving-modes-0x032a--uint16-le) |
+| Custom Mode Settings | `0x0330` | READ, WRITE | 10 bytes | [Settings for custom mode](#shaving-mode-settings-0x8d560332--0x8d560330) |
 | Light Ring Brightness | `0x0331` | READ, WRITE | uint8 | LED ring brightness (0–255) |
-| Mode Settings | `0x0332` | NOTIFY, READ | 10 bytes | Current active mode settings (see below) |
+| Mode Settings | `0x0332` | NOTIFY, READ | 10 bytes | [Current active mode settings](#shaving-mode-settings-0x8d560332--0x8d560330) |
 
 ## Data Formats
 
