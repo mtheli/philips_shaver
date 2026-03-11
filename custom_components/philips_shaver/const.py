@@ -459,8 +459,8 @@ POLL_READ_CHARS = [
     # CHAR_MOTOR_CURRENT,
     CHAR_MOTOR_CURRENT_MAX,
     # CHAR_MOTOR_RPM,
-    # CHAR_MOTOR_RPM_MAX,
-    # CHAR_MOTOR_RPM_MIN,
+    # CHAR_MOTOR_RPM_MAX,   # not present on all models, no known use
+    # CHAR_MOTOR_RPM_MIN,   # not present on all models, no known use
     CHAR_LIGHTRING_COLOR_LOW,
     CHAR_LIGHTRING_COLOR_OK,
     CHAR_LIGHTRING_COLOR_HIGH,

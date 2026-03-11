@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 import voluptuous as vol
 
@@ -170,7 +171,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 results[char_uuid] = {"value": None, "bytes": 0, "error": str(e)}
                 continue
             if raw is None:
-                results[char_uuid] = {"value": None, "bytes": 0}
+                entry: dict[str, Any] = {"value": None, "bytes": 0}
+                error = getattr(coord.transport, "pop_read_error", lambda u: None)(char_uuid)
+                if error:
+                    entry["error"] = error
+                results[char_uuid] = entry
             else:
                 results[char_uuid] = {"value": raw.hex(), "bytes": len(raw), "_raw": raw}
         return "ok", results

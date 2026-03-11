@@ -243,6 +243,7 @@ class EspBridgeTransport(ShaverTransport):
         self._status_unsub: Callable | None = None
         self._heartbeat_check_unsub: Callable | None = None
         self._pending_reads: dict[str, asyncio.Future[bytes | None]] = {}
+        self._last_read_errors: dict[str, str] = {}
         self._notify_callbacks: dict[str, Callable[[str, bytes], None]] = {}
         self._detected_mac: str | None = None
         self._bridge_version: str | None = None
@@ -342,6 +343,7 @@ class EspBridgeTransport(ShaverTransport):
 
             # Handle error events from ESP (not_found, not_connected, gatt_err_*)
             if error and uuid and uuid in self._pending_reads:
+                self._last_read_errors[uuid] = error
                 future = self._pending_reads.pop(uuid)
                 if not future.done():
                     future.set_result(None)
@@ -484,11 +486,16 @@ class EspBridgeTransport(ShaverTransport):
         self._pending_reads.clear()
         self._notify_callbacks.clear()
 
+    def pop_read_error(self, char_uuid: str) -> str | None:
+        """Return and clear the last read error for a characteristic, if any."""
+        return self._last_read_errors.pop(char_uuid, None)
+
     async def read_char(self, char_uuid: str) -> bytes | None:
         if not self._setup_done:
             return None
 
         service_uuid = self._get_service_uuid(char_uuid)
+        self._last_read_errors.pop(char_uuid, None)
 
         future: asyncio.Future[bytes | None] = self._hass.loop.create_future()
         self._pending_reads[char_uuid] = future

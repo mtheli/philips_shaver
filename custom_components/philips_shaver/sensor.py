@@ -53,8 +53,8 @@ async def async_setup_entry(
         PhilipsMotorSpeedSensor(coordinator, entry),
         PhilipsMotorCurrentSensor(coordinator, entry),
         PhilipsMotorCurrentMaxSensor(coordinator, entry),
-        PhilipsMotorRpmMaxSensor(coordinator, entry),
-        PhilipsMotorRpmMinSensor(coordinator, entry),
+        # PhilipsMotorRpmMaxSensor(coordinator, entry),   # not present on all models, no known use
+        # PhilipsMotorRpmMinSensor(coordinator, entry),  # not present on all models, no known use
         PhilipsHandleLoadTypeSensor(coordinator, entry),
         PhilipsModelNumberSensor(coordinator, entry),
         PhilipsTotalAgeSensor(coordinator, entry),
