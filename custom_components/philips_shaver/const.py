@@ -2,10 +2,11 @@ DOMAIN = "philips_shaver"
 
 PHILIPS_SERVICE_UUIDS = [
     # Philips-specific services
-    "8d560100-3cb9-4387-a7e8-b79d826a7025",  # Device Properties (model, serial number)
+    "8d560100-3cb9-4387-a7e8-b79d826a7025",  # Platform Service (model, serial, state)
     "8d560200-3cb9-4387-a7e8-b79d826a7025",  # History Service (battery raw, firmware, age)
     "8d560300-3cb9-4387-a7e8-b79d826a7025",  # Control Service (mode, light ring)
     "8d560600-3cb9-4387-a7e8-b79d826a7025",  # Serial/Diagnostic Service
+    "8d560700-3cb9-4387-a7e8-b79d826a7025",  # Smart Groomer Service (OneBlade)
     # Standard Bluetooth services (required for standard characteristics)
     "0000180f-0000-1000-8000-00805f9b34fb",  # Battery Service (0x180F)
     "0000180a-0000-1000-8000-00805f9b34fb",  # Device Information Service (0x180A)
@@ -32,6 +33,22 @@ CHAR_SERIAL_NUMBER = "00002a25-0000-1000-8000-00805f9b34fb"
 	Value: 300012593881
 """
 CHAR_FIRMWARE_REVISION = "00002a26-0000-1000-8000-00805f9b34fb"
+CHAR_SOFTWARE_REVISION = "00002a28-0000-1000-8000-00805f9b34fb"
+
+# Device Type (Platform Service) — returns "OneBlade" for OneBlade, model number for shavers
+CHAR_DEVICE_TYPE = "8d560119-3cb9-4387-a7e8-b79d826a7025"
+
+# Smart Groomer Service (0x0700) — OneBlade only
+CHAR_GROOMER_CAPABILITIES = "8d560702-3cb9-4387-a7e8-b79d826a7025"
+CHAR_SPEED = "8d560703-3cb9-4387-a7e8-b79d826a7025"
+CHAR_SPEED_ZONE_THRESHOLD = "8d560705-3cb9-4387-a7e8-b79d826a7025"
+CHAR_SPEED_VERDICT = "8d560706-3cb9-4387-a7e8-b79d826a7025"
+
+SPEED_VERDICTS = {
+    0: "optimal",
+    1: "too_fast",
+    2: "none",
+}
 
 # shaving infos
 """
@@ -446,6 +463,7 @@ CHAR_CAPABILITIES = "8d560302-3cb9-4387-a7e8-b79d826a7025"
 POLL_READ_CHARS = [
     CHAR_BATTERY_LEVEL,
     CHAR_FIRMWARE_REVISION,
+    CHAR_SOFTWARE_REVISION,
     CHAR_HEAD_REMAINING,
     CHAR_HEAD_REMAINING_MINUTES,
     CHAR_DAYS_SINCE_LAST_USED,
@@ -476,6 +494,8 @@ POLL_READ_CHARS = [
     CHAR_HANDLE_LOAD_TYPE,
     CHAR_MOTION_TYPE,
     CHAR_APP_HANDLE_SETTINGS,
+    CHAR_SPEED,
+    CHAR_SPEED_ZONE_THRESHOLD,
 ]
 
 # Characteristics for initial reading of live thread (same as poll)
@@ -488,6 +508,8 @@ CONF_ADDRESS = "address"
 CONF_POLL_INTERVAL = "poll_interval"
 CONF_ENABLE_LIVE_UPDATES = "enable_live_updates"
 CONF_CAPABILITIES = "capabilities"
+CONF_SERVICES = "services"
+CONF_DEVICE_TYPE = "device_type"
 
 # Transport configuration
 CONF_TRANSPORT_TYPE = "transport_type"
@@ -495,6 +517,7 @@ TRANSPORT_BLEAK = "bleak"
 TRANSPORT_ESP_BRIDGE = "esp_bridge"
 
 CONF_ESP_DEVICE_NAME = "esp_device_name"
+CONF_ESP_DEVICE_ID = "esp_device_id"
 
 # Minimum ESP bridge component version required for full functionality
 MIN_BRIDGE_VERSION = "1.4.0"
@@ -513,6 +536,8 @@ SVC_DEVICE_INFO = "0000180a-0000-1000-8000-00805f9b34fb"
 SVC_PLATFORM = "8d560100-3cb9-4387-a7e8-b79d826a7025"
 SVC_HISTORY = "8d560200-3cb9-4387-a7e8-b79d826a7025"
 SVC_CONTROL = "8d560300-3cb9-4387-a7e8-b79d826a7025"
+SVC_SERIAL = "8d560600-3cb9-4387-a7e8-b79d826a7025"
+SVC_GROOMER = "8d560700-3cb9-4387-a7e8-b79d826a7025"
 
 # Characteristic UUID → parent service UUID (required by ESP32 bridge)
 CHAR_SERVICE_MAP: dict[str, str] = {
@@ -522,6 +547,7 @@ CHAR_SERVICE_MAP: dict[str, str] = {
     CHAR_MODEL_NUMBER: SVC_DEVICE_INFO,
     CHAR_SERIAL_NUMBER: SVC_DEVICE_INFO,
     CHAR_FIRMWARE_REVISION: SVC_DEVICE_INFO,
+    CHAR_SOFTWARE_REVISION: SVC_DEVICE_INFO,
     # Platform Service (0x0100)
     CHAR_DEVICE_STATE: SVC_PLATFORM,
     CHAR_MOTOR_CURRENT: SVC_PLATFORM,
@@ -561,4 +587,11 @@ CHAR_SERVICE_MAP: dict[str, str] = {
     CHAR_SHAVING_MODE_SETTINGS: SVC_CONTROL,
     CHAR_CUSTOM_SHAVING_MODE_SETTINGS: SVC_CONTROL,
     CHAR_APP_HANDLE_SETTINGS: SVC_CONTROL,
+    # Platform Service extras
+    CHAR_DEVICE_TYPE: SVC_PLATFORM,
+    # Smart Groomer Service (0x0700) — OneBlade only
+    CHAR_GROOMER_CAPABILITIES: SVC_GROOMER,
+    CHAR_SPEED: SVC_GROOMER,
+    CHAR_SPEED_ZONE_THRESHOLD: SVC_GROOMER,
+    CHAR_SPEED_VERDICT: SVC_GROOMER,
 }

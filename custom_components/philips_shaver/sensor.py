@@ -22,7 +22,8 @@ from .coordinator import PhilipsShaverCoordinator
 
 from .const import (
     DOMAIN, CONF_ENABLE_LIVE_UPDATES, DEFAULT_ENABLE_LIVE_UPDATES,
-    CONF_TRANSPORT_TYPE, TRANSPORT_ESP_BRIDGE,
+    CONF_TRANSPORT_TYPE, TRANSPORT_ESP_BRIDGE, CONF_SERVICES,
+    SVC_CONTROL, SVC_GROOMER,
     CARTRIDGE_CAPACITY, EVAPORATION_RATE, CLEANING_CONSTANTS, CLEANING_CONSTANT_DEFAULT,
 )
 from .entity import PhilipsBridgeEntity, PhilipsShaverEntity
@@ -55,10 +56,14 @@ async def async_setup_entry(
         PhilipsMotorCurrentMaxSensor(coordinator, entry),
         # PhilipsMotorRpmMaxSensor(coordinator, entry),   # not present on all models, no known use
         # PhilipsMotorRpmMinSensor(coordinator, entry),  # not present on all models, no known use
-        PhilipsHandleLoadTypeSensor(coordinator, entry),
         PhilipsModelNumberSensor(coordinator, entry),
         PhilipsTotalAgeSensor(coordinator, entry),
     ]
+
+    # Handle Load Type requires Control Service (0x0300)
+    has_control = SVC_CONTROL in coordinator.available_services
+    if has_control:
+        entities.append(PhilipsHandleLoadTypeSensor(coordinator, entry))
 
     # check for pressure capability
     if coordinator.capabilities.pressure:
@@ -80,6 +85,12 @@ async def async_setup_entry(
         _LOGGER.info(
             "Shaver does not support cleaning mode – skipping cleaning sensors"
         )
+
+    # Speed sensors require Smart Groomer Service (0x0700) — OneBlade only
+    has_groomer = SVC_GROOMER in coordinator.available_services
+    if has_groomer:
+        entities.append(PhilipsSpeedSensor(coordinator, entry))
+        entities.append(PhilipsSpeedVerdictSensor(coordinator, entry))
 
     # check for motion capability
     if coordinator.capabilities.motion:
@@ -173,9 +184,17 @@ class PhilipsBatterySensor(PhilipsShaverEntity, RestoreEntity, SensorEntity):
             return None
 
 
-# Max shaving minutes and avg shave duration
+# Shaver battery constants (standard algorithm)
 BATTERY_MAX_SHAVING_MINUTES = 50
 BATTERY_AVG_SHAVE_MINUTES = 3.3
+
+# OneBlade battery constants (from manufacturer app)
+ONEBLADE_CURRENT_COEFF = -0.165
+ONEBLADE_CURRENT_OFFSET = 265.8
+ONEBLADE_EFFICIENCY = 0.9
+# Fallback values when no history data is available
+ONEBLADE_DEFAULT_AVG_CURRENT = 200.0  # mA
+ONEBLADE_DEFAULT_AVG_DURATION = 180.0  # seconds (3 minutes)
 
 
 class PhilipsRemainingShavesSensor(PhilipsShaverEntity, SensorEntity):
@@ -191,14 +210,56 @@ class PhilipsRemainingShavesSensor(PhilipsShaverEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._device_id}_remaining_shaves"
+        self._is_oneblade = SVC_GROOMER in {
+            s.lower() for s in entry.data.get(CONF_SERVICES, [])
+        }
 
     @property
     def native_value(self) -> int | None:
         battery = self.coordinator.data.get("battery")
         if battery is None:
             return None
+
+        if self._is_oneblade:
+            return self._calc_oneblade(battery)
+        return self._calc_shaver(battery)
+
+    @staticmethod
+    def _calc_shaver(battery: int) -> int:
+        """Standard shaver: linear estimate from battery percentage."""
         minutes = (battery / 100.0) * BATTERY_MAX_SHAVING_MINUTES
         return int(minutes / BATTERY_AVG_SHAVE_MINUTES)
+
+    def _calc_oneblade(self, battery: int) -> int:
+        """OneBlade: motor-current-based estimate from manufacturer app."""
+        avg_current = ONEBLADE_DEFAULT_AVG_CURRENT
+        avg_duration = ONEBLADE_DEFAULT_AVG_DURATION
+
+        # Use history data if available
+        sessions = self.coordinator.data.get("history_sessions")
+        if sessions:
+            currents = [s["avg_current_ma"] for s in sessions if s.get("avg_current_ma")]
+            durations = [s["duration_seconds"] for s in sessions if s.get("duration_seconds")]
+            if currents:
+                avg_current = sum(currents) / len(currents)
+            if durations:
+                avg_duration = sum(durations) / len(durations)
+
+        if avg_current <= 0:
+            return 0
+
+        minutes_remaining = (
+            (ONEBLADE_CURRENT_COEFF * avg_current + ONEBLADE_CURRENT_OFFSET)
+            * ONEBLADE_EFFICIENCY
+            / avg_current
+            * 60.0
+            * battery
+            / 100.0
+        )
+        shave_minutes = avg_duration / 60.0
+        if shave_minutes <= 0:
+            return 0
+        return max(0, int(minutes_remaining / shave_minutes))
 
 
 # =============================================================================
@@ -1036,6 +1097,55 @@ class PhilipsTotalAgeSensor(PhilipsShaverEntity, SensorEntity):
         minutes = (seconds % 3600) // 60
 
         return {"formatted_age": f"{days}d {hours}h {minutes}m", "raw_seconds": seconds}
+
+
+# =============================================================================
+# Speed (OneBlade — Smart Groomer Service)
+# =============================================================================
+class PhilipsSpeedSensor(PhilipsShaverEntity, SensorEntity):
+    """OneBlade movement speed (uint16 LE from 0x0703)."""
+
+    _attr_translation_key = "speed"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_icon = "mdi:speedometer"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._device_id}_speed"
+
+    @property
+    def native_value(self) -> int | None:
+        return self.coordinator.data.get("speed")
+
+
+class PhilipsSpeedVerdictSensor(PhilipsShaverEntity, SensorEntity):
+    """OneBlade speed coaching verdict (computed from speed + thresholds)."""
+
+    _attr_translation_key = "speed_verdict"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["optimal", "too_fast", "none"]
+    _attr_icon = "mdi:speedometer"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._device_id}_speed_verdict"
+
+    @property
+    def native_value(self) -> str | None:
+        return self.coordinator.data.get("speed_verdict")
+
+    @property
+    def icon(self) -> str:
+        verdict = self.native_value
+        if verdict == "optimal":
+            return "mdi:check-circle"
+        if verdict == "too_fast":
+            return "mdi:alert-circle"
+        return "mdi:speedometer"
 
 
 class PhilipsBridgeVersionSensor(PhilipsBridgeEntity, SensorEntity):

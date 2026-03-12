@@ -12,6 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     DOMAIN,
+    SVC_CONTROL,
     CHAR_SHAVING_MODE,
     SHAVING_MODES,
     CHAR_LIGHTRING_COLOR_BRIGHTNESS,
@@ -29,7 +30,11 @@ async def async_setup_entry(
 ) -> None:
     """Set up the Philips Shaver select platform."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    entities = [PhilipsShavingModeSelect(coordinator, entry)]
+    has_control = SVC_CONTROL in coordinator.available_services
+    entities = []
+
+    if has_control:
+        entities.append(PhilipsShavingModeSelect(coordinator, entry))
 
     if coordinator.capabilities.light_ring:
         entities.append(PhilipsLightRingBrightnessSelect(coordinator, entry))

@@ -33,9 +33,9 @@ class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
             entry.data.get(CONF_TRANSPORT_TYPE) == TRANSPORT_ESP_BRIDGE
         )
 
-        # Device identifier: MAC for BLE, esp_device_name for ESP bridge
+        # Device identifier: shaver MAC (preferred) or esp_device_name fallback
         if self._is_esp_bridge:
-            self._device_id = entry.data[CONF_ESP_DEVICE_NAME]
+            self._device_id = entry.data.get(CONF_ADDRESS) or entry.data[CONF_ESP_DEVICE_NAME]
         else:
             self._device_id = entry.data["address"]
 

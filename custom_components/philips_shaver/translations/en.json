@@ -52,11 +52,18 @@
       },
       "bluetooth_confirm": {
         "title": "Confirm detected device",
-        "description": "Do you want to add the detected Philips Shaver \"{name}\" to Home Assistant?"
+        "description": "Do you want to add the detected Philips Shaver \"{name}\" to Home Assistant?\n\nClicking Submit will connect to the device to verify pairing and read hardware capabilities. This may take a few seconds."
       },
       "bluetooth_confirm_esp": {
         "title": "Confirm detected device",
-        "description": "Do you want to add the detected Philips Shaver \"{name}\" to Home Assistant?\n\n⚠️ **Note:** An ESP32 bridge is already configured for this integration. Adding a direct Bluetooth connection may cause conflicts. Only proceed if you want to switch from the ESP bridge to direct Bluetooth."
+        "description": "Do you want to add the detected Philips Shaver \"{name}\" to Home Assistant?\n\nClicking Submit will connect to the device to verify pairing and read hardware capabilities. This may take a few seconds.\n\n⚠️ **Note:** An ESP32 bridge is already configured for this integration. Adding a direct Bluetooth connection may cause conflicts. Only proceed if you want to switch from the ESP bridge to direct Bluetooth."
+      },
+      "esp_select_device": {
+        "title": "Select BLE Device",
+        "description": "This ESP bridge has multiple Philips devices connected. Select the device you want to add to Home Assistant.",
+        "data": {
+          "esp_device_id": "BLE Device"
+        }
       },
       "esp_bridge_status": {
         "title": "ESP32 Bridge Status",
@@ -72,7 +79,7 @@
       "no_esphome_devices": "No ESPHome devices found. Please set up an ESPHome device with the BLE bridge component first. See the [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/ESP_BRIDGE_SETUP.md) for instructions.",
       "cannot_connect": "Failed to connect to the shaver. Please ensure it is powered on, in range, and not connected to another device (e.g. your phone).",
       "device_not_found": "Device not found. Please ensure it is powered on and in range.",
-      "not_paired": "The shaver is not paired with this system. Please pair it first using `bluetoothctl pair <MAC>` via SSH. See the README for detailed instructions.",
+      "not_paired": "The shaver is not paired with this system. Please pair it first via SSH (see README for instructions).",
       "unknown": "Unexpected error. Please check the logs."
     },
     "abort": {

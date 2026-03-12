@@ -16,6 +16,7 @@ from .const import (
     CONF_TRANSPORT_TYPE,
     TRANSPORT_ESP_BRIDGE,
     CONF_ESP_DEVICE_NAME,
+    CONF_ESP_DEVICE_ID,
 )
 from .coordinator import PhilipsShaverCoordinator
 from .transport import BleakTransport, EspBridgeTransport
@@ -28,14 +29,22 @@ SERVICE_FETCH_HISTORY = "fetch_history"
 SERVICE_READ_CHARACTERISTIC = "read_characteristic"
 SERVICE_READ_CHARACTERISTIC_RAW = "read_characteristic_raw"
 
-UUID_TEMPLATE = "8d56%s-3cb9-4387-a7e8-b79d826a7025"
+UUID_TEMPLATE_PHILIPS = "8d56%s-3cb9-4387-a7e8-b79d826a7025"
+UUID_TEMPLATE_BLE_STANDARD = "0000%s-0000-1000-8000-00805f9b34fb"
 
 
 def _expand_char_uuid(raw_uuid: str) -> str:
-    """Expand short form (0x0319 or 0319) to full Philips UUID."""
+    """Expand short form (0x0319 or 0319) to full UUID.
+
+    Philips-specific chars live in 0x0100–0x07FF range.
+    Standard BLE chars (0x2A00+) use the Bluetooth Base UUID.
+    """
     short = raw_uuid.strip().lower().replace("0x", "")
     if len(short) == 4 and "-" not in raw_uuid:
-        return UUID_TEMPLATE % short
+        code = int(short, 16)
+        if code >= 0x2000:
+            return UUID_TEMPLATE_BLE_STANDARD % short
+        return UUID_TEMPLATE_PHILIPS % short
     return raw_uuid.strip().lower()
 
 
@@ -96,7 +105,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     transport_type = entry.data.get(CONF_TRANSPORT_TYPE)
     if transport_type == TRANSPORT_ESP_BRIDGE:
         esp_device_name = entry.data[CONF_ESP_DEVICE_NAME]
-        transport = EspBridgeTransport(hass, esp_device_name, esp_device_name)
+        esp_device_id = entry.data.get(CONF_ESP_DEVICE_ID, "")
+        transport = EspBridgeTransport(hass, esp_device_name, esp_device_name, esp_device_id)
     else:
         address = entry.data["address"]
         transport = BleakTransport(hass, address)
@@ -178,7 +188,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 results[char_uuid] = entry
             else:
                 results[char_uuid] = {"value": raw.hex(), "bytes": len(raw), "_raw": raw}
-        return "ok", results
+        has_errors = any("error" in r for r in results.values())
+        has_data = any(r.get("value") is not None for r in results.values())
+        if has_errors:
+            status = "partial" if has_data else "error"
+        else:
+            status = "ok"
+        return status, results
 
     if not hass.services.has_service(DOMAIN, SERVICE_READ_CHARACTERISTIC_RAW):
         async def handle_read_characteristic_raw(call: ServiceCall) -> ServiceResponse:

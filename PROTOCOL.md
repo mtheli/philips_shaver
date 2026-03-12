@@ -1,6 +1,6 @@
 # Philips Shaver – BLE Protocol Reference
 
-This document describes the Bluetooth Low Energy (BLE) protocol used by Philips Bluetooth-enabled shavers (tested with the i9000 / XP9201 series). All communication is fully local — no cloud service or Philips account required.
+This document describes the Bluetooth Low Energy (BLE) protocol used by Philips Bluetooth-enabled personal care devices. Tested with the i9000 / XP9201 (shaver) and OneBlade 360 / QP4530 (groomer). All communication is fully local — no cloud service or Philips account required.
 
 The protocol was reverse-engineered from the shaver's BLE interface.
 
@@ -29,6 +29,7 @@ The two modes are mutually exclusive — polling is skipped while a live connect
 | `8d560200-3cb9-4387-a7e8-b79d826a7025` | [History Service](#history-service-service-8d5602xx) — shaving session history (timestamp, duration, RPM) |
 | `8d560300-3cb9-4387-a7e8-b79d826a7025` | [Smart Shaver Handle Service](#smart-shaver-handle-service-service-8d5603xx) — shaving mode, light ring, pressure, coaching |
 | `8d560600-3cb9-4387-a7e8-b79d826a7025` | Serial/Diagnostic Service — present on newer models (XP9400), purpose not yet fully known |
+| `8d560700-3cb9-4387-a7e8-b79d826a7025` | [Smart Groomer Service](#smart-groomer-service-service-8d5607xx) — OneBlade only: speed coaching, zone thresholds, history |
 
 ### Standard Bluetooth Services
 
@@ -46,6 +47,7 @@ The two modes are mutually exclusive — polling is skipped while a live connect
 | Model Number | `00002a24-0000-1000-8000-00805f9b34fb` | READ | UTF-8 string | e.g. `XP9201` |
 | Serial Number | `00002a25-0000-1000-8000-00805f9b34fb` | READ | UTF-8 string | Device serial number |
 | Firmware Revision | `00002a26-0000-1000-8000-00805f9b34fb` | READ | UTF-8 string | Firmware version string |
+| Software Revision | `00002a28-0000-1000-8000-00805f9b34fb` | READ | UTF-8 string | Software version (fallback when Firmware Revision absent, e.g. OneBlade) |
 
 ### Battery (Standard GATT — Service 0x180F)
 
@@ -73,6 +75,8 @@ The two modes are mutually exclusive — polling is skipped while a live connect
 | System Notifications | `0x0110` | NOTIFY, READ, WRITE | 4 bytes | System notification flags |
 | Head Remaining | `0x0117` | NOTIFY, READ | uint8 | Shaver head remaining life (0–100%) |
 | Head Remaining Minutes | `0x0118` | NOTIFY, READ | uint16 LE | Shaver head remaining life (minutes) |
+| Total Running Motor | `0x0112` | READ | uint16 LE | Total motor runtime (unit unclear) |
+| Device Type | `0x0119` | READ | UTF-8 string | Device type identifier (e.g. "m" for OneBlade QP4530) |
 | Cleaning Progress | `0x011A` | NOTIFY, READ | uint8 | Cleaning cycle progress (0–100%) |
 
 ### History Service (Service 8d5602xx)
@@ -103,6 +107,20 @@ The two modes are mutually exclusive — polling is skipped while a live connect
 | Custom Mode Settings | `0x0330` | READ, WRITE | 10 bytes | [Settings for custom mode](#shaving-mode-settings-0x8d560332--0x8d560330) |
 | Light Ring Brightness | `0x0331` | READ, WRITE | uint8 | LED ring brightness (0–255) |
 | Mode Settings | `0x0332` | NOTIFY, READ | 10 bytes | [Current active mode settings](#shaving-mode-settings-0x8d560332--0x8d560330) |
+
+### Smart Groomer Service (Service 8d5607xx)
+
+Present only on OneBlade devices (e.g. QP4530). Not available on regular shavers.
+
+| Characteristic | Short UUID | Properties | Format | Description |
+|---------------|------------|------------|--------|-------------|
+| Groomer Capabilities | `0x0702` | READ | uint8 | Groomer feature flags (read during setup) |
+| Speed | `0x0703` | NOTIFY, READ | uint16 LE | Live movement speed (0–225 range) |
+| Speed History | `0x0704` | READ | 13-byte blocks (max 260 bytes) | [Speed history records](#speed-history-0x0704) |
+| Speed Zone Threshold | `0x0705` | READ, WRITE | [7 bytes](#speed-zone-thresholds-0x0705) | Speed coaching zone boundaries |
+| Speed Verdict | `0x0706` | NOTIFY, READ | uint8 | Device-computed verdict (0=optimal, 1=too\_fast, 2=none) — **unreliable, not used by integration** |
+
+> **Note:** The manufacturer app ignores the device verdict (0x0706) and computes the verdict locally from the speed value and thresholds. The integration does the same.
 
 ## Data Formats
 
@@ -195,6 +213,40 @@ Example: `BD 18 F4 01 DC 05 A0 0F 3C 00`
 
 The characteristic at `0x8d560330` (Custom Mode Settings) is writable, allowing users to define their own motor speed and pressure thresholds for the "Custom" shaving mode. The characteristic at `0x8d560332` (Mode Settings) is read-only and reflects the currently active mode's parameters.
 
+### Speed Zone Thresholds (0x0705)
+
+7 bytes defining the speed coaching zones for OneBlade devices:
+
+| Offset | Length | Format | Field | Description |
+|--------|--------|--------|-------|-------------|
+| 0 | 2 | uint16 LE | Threshold Slow | Lower speed boundary |
+| 2 | 2 | uint16 LE | Threshold Optimal | Optimal speed boundary |
+| 4 | 2 | uint16 LE | Threshold High | Upper boundary — speed at or above this = too fast |
+| 6 | 1 | uint8 | Post-Feedback % | Speed reduction target after feedback (percentage) |
+
+Example: `00 00 4B 00 96 00 46` → slow=0, optimal=75, high=150, post-feedback=70%.
+
+**Verdict logic** (matching the manufacturer app):
+```
+speed >= threshold_high  → TOO_FAST
+speed > 0                → OPTIMAL
+speed == 0               → NONE
+```
+
+### Speed History (0x0704)
+
+Read-only, up to 260 bytes in 13-byte blocks. Each block is one grooming session:
+
+| Offset | Length | Format | Field |
+|--------|--------|--------|-------|
+| 0 | 3 | uint24 LE | Session timestamp |
+| 3 | 1 | uint8 | Speed verdict (0=optimal, 1=too\_fast, 2=none) |
+| 4 | 2 | uint16 LE | Duration at no speed (seconds) |
+| 6 | 2 | uint16 LE | Duration in slow zone (seconds) |
+| 8 | 2 | uint16 LE | Duration in optimal zone (seconds) |
+| 10 | 2 | uint16 LE | Duration in high zone (seconds) |
+| 12 | 1 | — | Unused |
+
 ## Capability Flags (0x8d560302)
 
 The capabilities characteristic is a uint32 bitfield read during initial setup. It determines which features the shaver hardware supports:
@@ -223,6 +275,7 @@ The following characteristics support GATT notifications (indicated by the CCCD 
 - Motor RPM, Motor Current, Pressure
 - Head Remaining, Head Remaining Minutes
 - Shaving Time, Mode Settings, Total Age
+- Speed (OneBlade only)
 
 ## Shaving History (Service 0x0200)
 
@@ -235,6 +288,52 @@ The history service stores past shaving sessions on the device. Playback is cont
 5. Write `0x00` to `0x0209` to reset
 
 Each session provides: Unix timestamp, duration in seconds, average motor current (mA), and average motor RPM (raw, ÷ 3.036).
+
+## OneBlade Device Profile (QP4530)
+
+The OneBlade 360 uses the same BLE protocol base but differs significantly from regular shavers (e.g. XP9201). Tested with QP4530.
+
+### Service Availability
+
+| Service | OneBlade | Regular Shaver |
+|---------|----------|----------------|
+| Platform Service (0x0100) | ✅ Present (mostly complete) | ✅ Present |
+| History Service (0x0200) | ✅ Present | ✅ Present |
+| Control Service (0x0300) | ❌ **Absent** | ✅ Present |
+| Serial/Diagnostic (0x0600) | ❌ Absent | ⚠️ Newer models only |
+| Smart Groomer (0x0700) | ✅ Present | ❌ Absent |
+
+### Platform Service Differences (0x01xx)
+
+The OneBlade supports most Platform Service characteristics, with these exceptions:
+
+| Characteristic | Short UUID | OneBlade Status |
+|---------------|------------|-----------------|
+| Blade Replacement | `0x010E` | ⚠️ Exists but `NotPermitted` (read blocked) |
+| Cleaning Progress | `0x011A` | ❌ Not present (no cleaning unit) |
+| Motor RPM Min | `0x011B` | ❌ Not present |
+
+All other 0x01xx characteristics (Motor Current, Motor RPM, Device State, Total Age, Head Remaining, etc.) are present and functional.
+
+### OneBlade-Specific Behavior
+
+**Motor RPM (0x0104) is a fixed value.** Unlike regular shavers where Motor RPM reflects the live motor speed, the OneBlade reports a constant value (~6500 raw / ~2142 RPM) regardless of whether the motor is running or off. This represents the configured motor speed, not a live measurement. Motor Current (0x0102) does reflect live load.
+
+**History timestamps are relative, not Unix epoch.** The OneBlade does not have a real-time clock. History timestamps (0x0202) count from a device-internal zero point (e.g. factory reset), producing values like 529 or 17248 instead of Unix timestamps. The `date` field in history results will show dates near 1970-01-01 and should be ignored.
+
+**History RPM is constant.** Since the OneBlade runs at a fixed motor speed, the history RPM field always reports the same value (~2141 RPM).
+
+**Device Type (0x0119) returns "m".** Regular shavers return the model number (e.g. "XP9201"), while the OneBlade QP4530 returns `6d 00` ("m" + null terminator).
+
+**No Control Service means no:** shaving modes, light ring, pressure sensing, motion type, handle load type, coaching settings, or cleaning cycle tracking.
+
+### Total Running Motor (0x0112)
+
+Present on the OneBlade (and likely on regular shavers too). Not yet implemented in the integration.
+
+| Characteristic | Short UUID | Properties | Format | Description |
+|---------------|------------|------------|--------|-------------|
+| Total Running Motor | `0x0112` | READ | uint16 LE | Total motor runtime (unit unclear — possibly minutes or cycles) |
 
 ## Known Quirks
 

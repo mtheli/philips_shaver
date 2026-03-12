@@ -6,13 +6,15 @@ esphome:
 # notification limits are only configurable via sdkconfig.  Arduino uses
 # precompiled libbt.a with BTA_GATTC_MAX_CACHE_CHAR=40 (too small for
 # the shaver's ~66 attributes) and BTA_GATTC_NOTIF_REG_MAX=5 (we need 17+).
+#
+# Dual-device: two BLE clients need ~130 attributes total and 34+ subscriptions.
 esp32:
   board: m5stack-atom
   framework:
     type: esp-idf
     sdkconfig_options:
-      CONFIG_BT_GATTC_MAX_CACHE_CHAR: "100"   # default 40; shaver has ~66 attributes
-      CONFIG_BT_GATTC_NOTIF_REG_MAX: "30"     # default 5; we subscribe to 17+ chars
+      CONFIG_BT_GATTC_MAX_CACHE_CHAR: "160"   # default 40; ~66 attrs per device × 2
+      CONFIG_BT_GATTC_NOTIF_REG_MAX: "50"     # default 5; ~17 subs per device × 2
 
 logger:
   level: DEBUG
@@ -43,8 +45,8 @@ captive_portal:
 # max_notifications must match CONFIG_BT_GATTC_NOTIF_REG_MAX.
 esp32_ble:
   io_capability: none
-  max_notifications: 30
-  max_connections: 4           # bluetooth_proxy needs 3 + ble_client needs 1
+  max_notifications: 50
+  max_connections: 5
 
 esp32_ble_tracker:
   scan_parameters:
@@ -53,19 +55,14 @@ esp32_ble_tracker:
     window: 120ms
 
 ble_client:
-  - mac_address: "XX:XX:XX:XX:XX:XX"
-    id: philips_shaver_ble
+  - mac_address: "EC:EC:66:27:F0:ED"
+    id: shaver_ble
     auto_connect: true
     on_connect:
       then:
-        - logger.log: "Connected to shaver, attempting pairing..."
+        - logger.log: "Connected to XP9201, attempting pairing..."
         - lambda: |-
-            // ESPHome's pair() uses ESP_BLE_SEC_ENCRYPT which the shaver
-            // rejects (disconnect 0x13).  The shaver requires Secure
-            // Connections (LE SC) — confirmed via btmon capture of a
-            // successful Linux pairing.  ESP_BLE_SEC_ENCRYPT_MITM triggers
-            // the SC handshake together with the SMP params set in setup().
-            esp_ble_set_encryption(id(philips_shaver_ble).get_remote_bda(), ESP_BLE_SEC_ENCRYPT_MITM);
+            esp_ble_set_encryption(id(shaver_ble).get_remote_bda(), ESP_BLE_SEC_ENCRYPT_MITM);
         - light.turn_on:
             id: status_led
             red: 0%
@@ -79,6 +76,18 @@ ble_client:
             green: 0%
             blue: 0%
 
+  - mac_address: "D2:EC:C6:98:B9:67"
+    id: oneblade_ble
+    auto_connect: true
+    on_connect:
+      then:
+        - logger.log: "Connected to OneBlade, attempting pairing..."
+        - lambda: |-
+            esp_ble_set_encryption(id(oneblade_ble).get_remote_bda(), ESP_BLE_SEC_ENCRYPT_MITM);
+    on_disconnect:
+      then:
+        - logger.log: "OneBlade disconnected"
+
 # --- Philips Shaver Component ---
 
 external_components:
@@ -87,13 +96,15 @@ external_components:
       url: https://github.com/mtheli/philips_shaver
       ref: main
       path: esphome/components
+    refresh: 0s
     components: [philips_shaver]
-    refresh: 0s                  # always fetch latest code on build
 
 philips_shaver:
-  ble_client_id: philips_shaver_ble
-  connected:
-    name: "Shaver Connected"
+  - ble_client_id: shaver_ble
+    device_id: "shaver"
+
+  - ble_client_id: oneblade_ble
+    device_id: "oneblade"
 
 # --- Hardware: M5Stack Atom Lite ---
 
@@ -108,8 +119,23 @@ light:
     name: "Status LED"
     restore_mode: ALWAYS_OFF
 
+# Button (GPIO39) - manual pair trigger
+binary_sensor:
+  - platform: gpio
+    id: atom_button
+    name: "Pairing Button"
+    pin:
+      number: GPIO39
+      inverted: true
+    on_press:
+      then:
+        - light.turn_on:
+            id: status_led
+            red: 0%
+            green: 0%
+            blue: 100%
+        - lambda: "id(shaver_ble).pair();"
+
 # --- Optional: Bluetooth Proxy ---
-# The ESP32 can also act as a standard BLE proxy for other sensors
-# (e.g. Xiaomi temperature sensors) while maintaining the shaver connection.
 bluetooth_proxy:
   active: true

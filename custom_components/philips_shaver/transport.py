@@ -107,6 +107,7 @@ class BleakTransport(ShaverTransport):
         self._address = address
         self._client: BleakClient | None = None
         self._disconnect_cb: Callable[[], None] | None = None
+        self._last_read_errors: dict[str, str] = {}
 
     @property
     def is_connected(self) -> bool:
@@ -139,6 +140,10 @@ class BleakTransport(ShaverTransport):
                 pass
         self._client = None
 
+    def pop_read_error(self, char_uuid: str) -> str | None:
+        """Return and clear the last read error for a characteristic, if any."""
+        return self._last_read_errors.pop(char_uuid, None)
+
     async def read_char(self, char_uuid: str) -> bytes | None:
         if not self.is_connected:
             return None
@@ -147,6 +152,7 @@ class BleakTransport(ShaverTransport):
             return bytes(value) if value else None
         except Exception as e:
             _LOGGER.debug("Read failed for %s: %s", char_uuid, e)
+            self._last_read_errors[char_uuid] = str(e)
             return None
 
     async def read_chars(self, char_uuids: list[str]) -> dict[str, bytes | None]:
@@ -171,7 +177,7 @@ class BleakTransport(ShaverTransport):
                     if value:
                         results[uuid] = bytes(value)
                 except Exception as e:
-                    _LOGGER.warning("Read failed for %s: %s", uuid, e)
+                    _LOGGER.debug("Read failed for %s: %s", uuid, e)
         except Exception as err:
             _LOGGER.error("BLE poll error: %s", err)
         finally:
@@ -230,10 +236,12 @@ class EspBridgeTransport(ShaverTransport):
         hass: HomeAssistant,
         address: str,
         esphome_device_name: str,
+        esp_device_id: str = "",
     ) -> None:
         self._hass = hass
         self._address = address
         self._device_name = esphome_device_name  # e.g. "atom_lite"
+        self._esp_device_id = esp_device_id  # e.g. "shaver" — suffix for multi-device ESP
         self._setup_done = False  # event listeners registered
         self._shaver_connected = False  # ESP↔Shaver BLE link active
         self._esp_alive = False  # heartbeat received from ESP
@@ -251,8 +259,11 @@ class EspBridgeTransport(ShaverTransport):
         self._needs_resubscribe = False
 
     def _svc_name(self, action: str) -> str:
-        """Full ESPHome service name, e.g. 'atom_lite_ble_read_char'."""
-        return f"{self._device_name}_{action}"
+        """Full ESPHome service name, e.g. 'atom_lite_ble_read_char_shaver'."""
+        base = f"{self._device_name}_{action}"
+        if self._esp_device_id:
+            return f"{base}_{self._esp_device_id}"
+        return base
 
     @staticmethod
     def _get_service_uuid(char_uuid: str) -> str:

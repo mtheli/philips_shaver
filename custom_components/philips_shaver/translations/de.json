@@ -46,11 +46,18 @@
       },
       "bluetooth_confirm": {
         "title": "Erkanntes Gerät bestätigen",
-        "description": "Möchten Sie den erkannten Philips Shaver \"{name}\" zu Home Assistant hinzufügen?"
+        "description": "Möchten Sie den erkannten Philips Shaver \"{name}\" zu Home Assistant hinzufügen?\n\nNach dem Absenden wird eine Verbindung zum Gerät hergestellt, um das Pairing zu prüfen und die Hardware-Fähigkeiten zu lesen. Dies kann einige Sekunden dauern."
       },
       "bluetooth_confirm_esp": {
         "title": "Erkanntes Gerät bestätigen",
-        "description": "Möchten Sie den erkannten Philips Shaver \"{name}\" zu Home Assistant hinzufügen?\n\n⚠️ **Hinweis:** Für diese Integration ist bereits eine ESP32-Bridge konfiguriert. Eine zusätzliche direkte Bluetooth-Verbindung kann zu Konflikten führen. Fahren Sie nur fort, wenn Sie auf direktes Bluetooth wechseln möchten."
+        "description": "Möchten Sie den erkannten Philips Shaver \"{name}\" zu Home Assistant hinzufügen?\n\nNach dem Absenden wird eine Verbindung zum Gerät hergestellt, um das Pairing zu prüfen und die Hardware-Fähigkeiten zu lesen. Dies kann einige Sekunden dauern.\n\n⚠️ **Hinweis:** Für diese Integration ist bereits eine ESP32-Bridge konfiguriert. Eine zusätzliche direkte Bluetooth-Verbindung kann zu Konflikten führen. Fahren Sie nur fort, wenn Sie auf direktes Bluetooth wechseln möchten."
+      },
+      "esp_select_device": {
+        "title": "BLE-Gerät auswählen",
+        "description": "Diese ESP-Bridge hat mehrere Philips-Geräte verbunden. Wählen Sie das Gerät aus, das Sie zu Home Assistant hinzufügen möchten.",
+        "data": {
+          "esp_device_id": "BLE-Gerät"
+        }
       },
       "esp_bridge_status": {
         "title": "ESP32 Bridge Status",
@@ -66,7 +73,7 @@
       "no_esphome_devices": "Keine ESPHome-Geräte gefunden. Bitte richten Sie zuerst ein ESPHome-Gerät mit der BLE-Bridge-Komponente ein. Siehe [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/ESP_BRIDGE_SETUP.md) für eine Anleitung.",
       "cannot_connect": "Verbindung zum Rasierer fehlgeschlagen. Bitte stelle sicher, dass er eingeschaltet, in Reichweite und nicht mit einem anderen Gerät (z.B. deinem Smartphone) verbunden ist.",
       "device_not_found": "Das Gerät wurde nicht gefunden. Bitte stelle sicher, dass es eingeschaltet und in Reichweite ist.",
-      "not_paired": "Der Rasierer ist nicht mit diesem System gepairt. Bitte zuerst über SSH mit `bluetoothctl pair <MAC>` pairen. Siehe README für eine detaillierte Anleitung.",
+      "not_paired": "Der Rasierer ist nicht mit diesem System gepairt. Bitte zuerst über SSH pairen (siehe README für eine Anleitung).",
       "unknown": "Unerwarteter Fehler. Bitte prüfe die Systemprotokolle."
     },
     "abort": {
@@ -242,6 +249,17 @@
           "too_low": "Zu niedrig",
           "optimal": "Optimal",
           "too_high": "Zu hoch"
+        }
+      },
+      "speed": {
+        "name": "Geschwindigkeit"
+      },
+      "speed_verdict": {
+        "name": "Geschwindigkeitsbewertung",
+        "state": {
+          "optimal": "Optimal",
+          "too_fast": "Zu schnell",
+          "none": "Keine"
         }
       }
     },

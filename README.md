@@ -8,13 +8,14 @@ This is a custom component for Home Assistant to integrate **Philips Bluetooth-e
 
 ### Tested Models
 
-| Model | Connection | Status |
-| :--- | :--- | :--- |
-| **i9000 / XP9201** | Direct BLE, ESP32 Bridge | Developed & tested by maintainer |
-| **XP9400** | ESP32 Bridge | Community-tested ([#3](https://github.com/mtheli/philips_shaver/issues/3)) |
-| **S7887** | ESP32 Bridge | Community-tested ([forum](https://community.home-assistant.io/t/philips-bluetooth-shaver-monitoring/858822/8)) |
+| Model | Type | Connection | Status |
+| :--- | :--- | :--- | :--- |
+| **i9000 / XP9201** | Shaver | Direct BLE, ESP32 Bridge | Developed & tested by maintainer |
+| **i9000 / XP9400** | Shaver | ESP32 Bridge | Community-tested ([#3](https://github.com/mtheli/philips_shaver/issues/3)) |
+| **OneBlade 360 / QP4530** | Groomer | Direct BLE | Tested by maintainer |
+| **S7887** | Shaver | ESP32 Bridge | Community-tested ([forum](https://community.home-assistant.io/t/philips-bluetooth-shaver-monitoring/858822/8)) |
 
-Other BLE-enabled Philips shavers using the same GATT services may also work.
+Other BLE-enabled Philips shavers and groomers using the same GATT services may also work. The integration auto-detects available services and capabilities during setup — entities are only created for features your device supports.
 
 The integration connects to your shaver via **Bluetooth Low Energy (BLE)** to provide status, usage, and advanced telemetry data. It automatically detects the capabilities of your specific model during setup to only show relevant entities.
 

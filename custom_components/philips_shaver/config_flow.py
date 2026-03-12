@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import asyncio
 import voluptuous as vol
 import logging
 
@@ -36,13 +37,19 @@ from .const import (
     CHAR_BATTERY_LEVEL,
     CHAR_MODEL_NUMBER,
     CHAR_FIRMWARE_REVISION,
+    CHAR_SOFTWARE_REVISION,
+    CHAR_DEVICE_TYPE,
+    CHAR_GROOMER_CAPABILITIES,
     CHAR_DEVICE_STATE,
+    CHAR_HANDLE_LOAD_TYPE,
     CHAR_HISTORY_SYNC_STATUS,
     SVC_BATTERY,
     SVC_DEVICE_INFO,
     SVC_PLATFORM,
     SVC_HISTORY,
     SVC_CONTROL,
+    SVC_SERIAL,
+    SVC_GROOMER,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_ENABLE_LIVE_UPDATES,
     MIN_POLL_INTERVAL,
@@ -51,10 +58,13 @@ from .const import (
     CONF_POLL_INTERVAL,
     CONF_ENABLE_LIVE_UPDATES,
     CONF_CAPABILITIES,
+    CONF_SERVICES,
+    CONF_DEVICE_TYPE,
     CONF_TRANSPORT_TYPE,
     TRANSPORT_BLEAK,
     TRANSPORT_ESP_BRIDGE,
     CONF_ESP_DEVICE_NAME,
+    CONF_ESP_DEVICE_ID,
     CONF_NOTIFY_THROTTLE,
     DEFAULT_NOTIFY_THROTTLE,
     MIN_NOTIFY_THROTTLE,
@@ -191,6 +201,39 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             services = client.services
             capabilities["services"] = [str(s.uuid) for s in services]
 
+            # Probe battery level to verify pairing (requires encryption).
+            # Any read failure here indicates the device is not paired —
+            # BlueZ returns ATT errors (e.g. 0x0e "Unlikely Error") or
+            # times out while attempting auto-pairing.
+            _LOGGER.info("Probing pairing status on %s...", address)
+            if services.get_characteristic(CHAR_BATTERY_LEVEL):
+                try:
+                    raw_battery = await asyncio.wait_for(
+                        client.read_gatt_char(CHAR_BATTERY_LEVEL), timeout=10
+                    )
+                    if raw_battery:
+                        capabilities["battery"] = raw_battery[0]
+                    else:
+                        raise NotPairedException(
+                            "Battery probe returned empty data"
+                        )
+                except NotPairedException:
+                    raise
+                except (BleakError, TimeoutError) as err:
+                    if client.is_connected:
+                        _LOGGER.warning(
+                            "Battery probe failed on %s: %s – device not paired",
+                            address,
+                            err,
+                        )
+                        raise NotPairedException from err
+                    _LOGGER.warning(
+                        "Connection lost during battery probe on %s: %s",
+                        address,
+                        err,
+                    )
+                    raise CannotConnectException from err
+
             _LOGGER.info("Reading capabilities from %s...", address)
             if services.get_characteristic(CHAR_CAPABILITIES):
                 try:
@@ -234,6 +277,40 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                             ).strip()
                     except Exception:
                         pass
+
+            # Fallback: Software Revision when Firmware Revision is absent
+            if not capabilities.get("firmware"):
+                if services.get_characteristic(CHAR_SOFTWARE_REVISION):
+                    try:
+                        raw = await client.read_gatt_char(CHAR_SOFTWARE_REVISION)
+                        if raw:
+                            capabilities["firmware"] = bytes(raw).decode(
+                                "utf-8", errors="replace"
+                            ).strip()
+                    except Exception:
+                        pass
+
+            # Read Device Type (0x0119) — "OneBlade" for OneBlade, model number for shavers
+            if services.get_characteristic(CHAR_DEVICE_TYPE):
+                try:
+                    raw = await client.read_gatt_char(CHAR_DEVICE_TYPE)
+                    if raw:
+                        capabilities["device_type"] = bytes(raw).decode(
+                            "utf-8", errors="replace"
+                        ).strip().strip("\x00")
+                except Exception:
+                    pass
+
+            # Read Groomer Capabilities (0x0702) when Smart Groomer Service is present
+            if services.get_characteristic(CHAR_GROOMER_CAPABILITIES):
+                try:
+                    raw = await client.read_gatt_char(CHAR_GROOMER_CAPABILITIES)
+                    if raw:
+                        capabilities["groomer_capabilities"] = int.from_bytes(
+                            raw, "little"
+                        )
+                except Exception:
+                    pass
 
         except (BleakConnectionError, TimeoutError) as err:
             _LOGGER.error("Connection error during capabilities fetch: %s", err)
@@ -281,11 +358,15 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             except NotPairedException:
                 _LOGGER.error("Device %s is not paired", self.discovery_info.address)
                 errors["base"] = "not_paired"
-            except Exception:
-                _LOGGER.exception(
-                    "Setup failed: Unable to connect to the device or fetch capabilities"
-                )
+            except DeviceNotFoundException:
+                _LOGGER.error("Device %s not found in range", self.discovery_info.address)
+                errors["base"] = "device_not_found"
+            except CannotConnectException:
+                _LOGGER.error("Cannot connect to %s", self.discovery_info.address)
                 errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception("Unexpected error during setup")
+                errors["base"] = "unknown"
 
         self.context["title_placeholders"] = {
             "name": self.discovery_info.name or self.discovery_info.address
@@ -350,55 +431,88 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         SVC_DEVICE_INFO: CHAR_MODEL_NUMBER,
         SVC_PLATFORM: CHAR_DEVICE_STATE,
         SVC_HISTORY: CHAR_HISTORY_SYNC_STATUS,
-        SVC_CONTROL: CHAR_CAPABILITIES,
+        SVC_CONTROL: CHAR_HANDLE_LOAD_TYPE,
+        SVC_GROOMER: CHAR_GROOMER_CAPABILITIES,
     }
 
     async def _async_fetch_capabilities_esp(
         self,
         address: str,
         esp_device_name: str,
+        esp_device_id: str = "",
     ) -> dict[str, Any]:
         """Read capabilities and probe services via ESP32 bridge."""
-        transport = EspBridgeTransport(self.hass, address, esp_device_name)
+        transport = EspBridgeTransport(self.hass, address, esp_device_name, esp_device_id)
         try:
             await transport.connect()
-
-            # Read capabilities first — proves bridge ↔ shaver connectivity
-            raw_cap = await transport.read_char(CHAR_CAPABILITIES)
-            if raw_cap is None:
-                raise CannotConnectException(
-                    "Could not read capabilities via ESP bridge – shaver may not be connected"
-                )
-
-            cap_int = int.from_bytes(raw_cap, "little")
 
             # Probe each service with one representative characteristic
             found_services: list[str] = []
             model_number: str | None = None
+            probe_results: dict[str, bytes] = {}
             for svc_uuid, probe_char in self.SERVICE_PROBE_CHARS.items():
-                if probe_char == CHAR_CAPABILITIES:
-                    # Already read successfully above
-                    found_services.append(svc_uuid)
-                    continue
                 raw = await transport.read_char(probe_char)
                 if raw is not None:
                     found_services.append(svc_uuid)
+                    probe_results[probe_char] = raw
                     if probe_char == CHAR_MODEL_NUMBER:
                         model_number = raw.decode("utf-8", errors="replace").strip()
 
-            # Also read firmware revision
+            if not found_services:
+                raise CannotConnectException(
+                    "Could not read any service via ESP bridge – shaver may not be connected"
+                )
+
+            # Read capabilities (Control Service) — 0 if service absent (e.g. OneBlade)
+            cap_int = 0
+            if SVC_CONTROL in found_services:
+                raw_cap = await transport.read_char(CHAR_CAPABILITIES)
+                if raw_cap is not None:
+                    cap_int = int.from_bytes(raw_cap, "little")
+
+            # Battery — reuse probe result if available, otherwise read separately
+            battery: int | None = None
+            raw_bat = probe_results.get(CHAR_BATTERY_LEVEL)
+            if not raw_bat:
+                raw_bat = await transport.read_char(CHAR_BATTERY_LEVEL)
+            if raw_bat:
+                battery = raw_bat[0]
+
+            # Read firmware revision (with Software Revision fallback)
             firmware: str | None = None
             raw_fw = await transport.read_char(CHAR_FIRMWARE_REVISION)
             if raw_fw:
                 firmware = raw_fw.decode("utf-8", errors="replace").strip()
+            if not firmware:
+                raw_sw = await transport.read_char(CHAR_SOFTWARE_REVISION)
+                if raw_sw:
+                    firmware = raw_sw.decode("utf-8", errors="replace").strip()
 
-            return {
+            # Read Device Type (0x0119)
+            device_type: str | None = None
+            raw_dt = await transport.read_char(CHAR_DEVICE_TYPE)
+            if raw_dt:
+                device_type = raw_dt.decode("utf-8", errors="replace").strip().strip("\x00")
+
+            # Groomer Capabilities — reuse probe result (probe char IS groomer caps)
+            groomer_cap: int | None = None
+            raw_gc = probe_results.get(CHAR_GROOMER_CAPABILITIES)
+            if raw_gc:
+                groomer_cap = int.from_bytes(raw_gc, "little")
+
+            result: dict[str, Any] = {
                 "services": found_services,
                 "capabilities": cap_int,
                 "shaver_mac": transport.detected_mac,
                 "model_number": model_number,
                 "firmware": firmware,
+                "battery": battery,
             }
+            if device_type:
+                result["device_type"] = device_type
+            if groomer_cap is not None:
+                result["groomer_capabilities"] = groomer_cap
+            return result
 
         except TransportError as err:
             raise CannotConnectException(str(err)) from err
@@ -421,6 +535,25 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
         return options
 
+    def _detect_esp_device_ids(self, esp_device_name: str) -> list[str]:
+        """Detect available device_id suffixes on an ESP bridge.
+
+        Returns [""] for single-device (no suffix) or ["shaver", "oneblade", ...]
+        for multi-device setups.
+        """
+        # Try unsuffixed first (single device)
+        if self.hass.services.has_service("esphome", f"{esp_device_name}_ble_get_info"):
+            return [""]
+
+        # Multi-device: find suffixed services
+        esphome_services = self.hass.services.async_services().get("esphome", {})
+        prefix = f"{esp_device_name}_ble_get_info_"
+        return [
+            svc_name[len(prefix):]
+            for svc_name in esphome_services
+            if svc_name.startswith(prefix)
+        ]
+
     async def async_step_esp_bridge(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -430,25 +563,22 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             esp_device_name = user_input["esp_device_name"].strip().replace("-", "_")
 
-            # Quick bridge health check via ble_get_info
-            transport = EspBridgeTransport(self.hass, esp_device_name, esp_device_name)
-            bridge_info = None
-            try:
-                await transport.connect()
-                bridge_info = await transport.get_bridge_info()
-            except TransportError:
-                _LOGGER.error("ESP bridge not reachable: %s", esp_device_name)
+            # Detect available device_ids (single vs multi-device)
+            device_ids = self._detect_esp_device_ids(esp_device_name)
+            if not device_ids:
+                _LOGGER.error("No philips_shaver services found on %s", esp_device_name)
                 errors["base"] = "cannot_connect"
-            except Exception:
-                _LOGGER.exception("Unexpected error checking ESP bridge")
-                errors["base"] = "unknown"
-            finally:
-                await transport.disconnect()
-
-            if not errors:
+            else:
                 self.fetched_esp_device_name = esp_device_name
-                self.fetched_bridge_info = bridge_info
-                return await self.async_step_esp_bridge_status()
+                self._esp_device_ids = device_ids
+
+                if len(device_ids) > 1:
+                    # Multiple devices — let user pick
+                    return await self.async_step_esp_select_device()
+
+                # Single device (or single suffixed device)
+                self.fetched_esp_device_id = device_ids[0]
+                return await self._esp_bridge_health_check()
 
         esp_options = self._get_esphome_device_options()
 
@@ -475,6 +605,112 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_esp_select_device(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Let user pick which device on a multi-device ESP bridge."""
+        if user_input is not None:
+            self.fetched_esp_device_id = user_input["esp_device_id"]
+            # Store bridge info from the probe if available
+            self.fetched_bridge_info = self._esp_device_info.get(
+                user_input["esp_device_id"]
+            )
+            return await self._esp_bridge_health_check()
+
+        # Collect MACs already configured for this integration
+        configured_macs = {
+            entry.unique_id.upper()
+            for entry in self._async_current_entries()
+            if entry.unique_id
+        }
+
+        # Probe each device_id to get MAC and connection status
+        self._esp_device_info: dict[str, dict] = {}
+        options: list[SelectOptionDict] = []
+        for did in self._esp_device_ids:
+            transport = EspBridgeTransport(
+                self.hass, self.fetched_esp_device_name,
+                self.fetched_esp_device_name, did,
+            )
+            info = None
+            try:
+                await transport.connect()
+                info = await transport.get_bridge_info()
+            except Exception:
+                pass
+            finally:
+                await transport.disconnect()
+
+            self._esp_device_info[did] = info or {}
+            mac = (info or {}).get("mac", "")
+            ble = (info or {}).get("ble_connected", "false") == "true"
+
+            # Skip devices that are already configured
+            if mac and mac.upper() in configured_macs:
+                continue
+
+            if mac and mac != "00:00:00:00:00:00":
+                label = f"{did} — {mac} ({'connected' if ble else 'disconnected'})"
+            else:
+                label = did
+            options.append(SelectOptionDict(value=did, label=label))
+
+        if not options:
+            return self.async_abort(reason="already_configured")
+
+        # Auto-select if only one device left
+        if len(options) == 1:
+            self.fetched_esp_device_id = options[0]["value"]
+            self.fetched_bridge_info = self._esp_device_info.get(options[0]["value"])
+            return await self._esp_bridge_health_check()
+
+        return self.async_show_form(
+            step_id="esp_select_device",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("esp_device_id"): SelectSelector(
+                        SelectSelectorConfig(options=options)
+                    ),
+                }
+            ),
+        )
+
+    async def _esp_bridge_health_check(self) -> ConfigFlowResult:
+        """Run bridge health check and proceed to status step."""
+        # Skip if we already have bridge info from the device selection step
+        if self.fetched_bridge_info:
+            return await self.async_step_esp_bridge_status()
+
+        esp_device_name = self.fetched_esp_device_name
+        esp_device_id = self.fetched_esp_device_id
+
+        transport = EspBridgeTransport(
+            self.hass, esp_device_name, esp_device_name, esp_device_id
+        )
+        bridge_info = None
+        try:
+            await transport.connect()
+            bridge_info = await transport.get_bridge_info()
+        except TransportError:
+            _LOGGER.error("ESP bridge not reachable: %s (device_id=%s)", esp_device_name, esp_device_id)
+            return self.async_show_form(
+                step_id="esp_bridge",
+                data_schema=vol.Schema({vol.Required("esp_device_name"): str}),
+                errors={"base": "cannot_connect"},
+            )
+        except Exception:
+            _LOGGER.exception("Unexpected error checking ESP bridge")
+            return self.async_show_form(
+                step_id="esp_bridge",
+                data_schema=vol.Schema({vol.Required("esp_device_name"): str}),
+                errors={"base": "unknown"},
+            )
+        finally:
+            await transport.disconnect()
+
+        self.fetched_bridge_info = bridge_info
+        return await self.async_step_esp_bridge_status()
+
     async def async_step_esp_bridge_status(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -485,7 +721,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             esp_device_name = self.fetched_esp_device_name
             try:
                 capabilities = await self._async_fetch_capabilities_esp(
-                    esp_device_name, esp_device_name
+                    esp_device_name, esp_device_name,
+                    getattr(self, "fetched_esp_device_id", ""),
                 )
 
                 shaver_mac = capabilities.get("shaver_mac")
@@ -529,14 +766,18 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             paired = info.get("paired", "false") == "true"
             mac = info.get("mac", "")
 
-            status_lines = [
-                f"**Version:** v{version}",
-                f"**BLE:** {'✅ Connected' if ble_connected else '❌ Disconnected'}",
-                f"**Paired:** {'✅ Yes' if paired else '❌ No'}",
+            ble_status = "✅ Connected" if ble_connected else "❌ Disconnected"
+            pair_status = "✅ Yes" if paired else "❌ No"
+
+            rows = [
+                f"<tr><td><b>Version</b></td><td>v{version}</td></tr>",
+                f"<tr><td><b>BLE</b></td><td>{ble_status}</td></tr>",
+                f"<tr><td><b>Paired</b></td><td>{pair_status}</td></tr>",
             ]
             if mac and mac != "00:00:00:00:00:00":
-                status_lines.append(f"**MAC:** {mac}")
-            status_text = "\n".join(status_lines)
+                rows.append(f"<tr><td><b>MAC</b></td><td><code>{mac}</code></td></tr>")
+
+            status_text = "<table>" + "".join(rows) + "</table>"
         else:
             status_text = (
                 "⚠️ Diagnostic details not available. "
@@ -564,11 +805,18 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             entry_data: dict[str, Any] = {
                 CONF_CAPABILITIES: self.fetched_data.get("capabilities", 0),
+                CONF_SERVICES: self.fetched_data.get("services", []),
             }
+            device_type = self.fetched_data.get("device_type")
+            if device_type:
+                entry_data[CONF_DEVICE_TYPE] = device_type
 
             if self.fetched_transport_type == TRANSPORT_ESP_BRIDGE:
                 entry_data[CONF_TRANSPORT_TYPE] = TRANSPORT_ESP_BRIDGE
                 entry_data[CONF_ESP_DEVICE_NAME] = self.fetched_esp_device_name
+                esp_device_id = getattr(self, "fetched_esp_device_id", "")
+                if esp_device_id:
+                    entry_data[CONF_ESP_DEVICE_ID] = esp_device_id
                 if self.fetched_address:
                     entry_data[CONF_ADDRESS] = self.fetched_address
             else:
@@ -583,21 +831,29 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 },
             )
 
+        device_type = self.fetched_data.get("device_type", "")
         services_text = self._get_service_status_text(
-            self.fetched_data.get("services", [])
+            self.fetched_data.get("services", []), device_type
         )
 
         cap_val = self.fetched_data.get("capabilities", 0)
-        capabilities_text = self._get_capabilities_text(cap_val)
+        groomer_cap = self.fetched_data.get("groomer_capabilities")
+        capabilities_text = self._get_capabilities_text(cap_val, groomer_cap)
 
-        # Device info line (model + firmware)
+        # Device info line (model + type + firmware + battery)
         model = self.fetched_data.get("model_number")
+        device_type = self.fetched_data.get("device_type")
         firmware = self.fetched_data.get("firmware")
+        battery = self.fetched_data.get("battery")
         device_info_parts: list[str] = []
         if model:
             device_info_parts.append(f"Model: {model}")
+        if device_type:
+            device_info_parts.append(f"Type: {device_type}")
         if firmware:
             device_info_parts.append(f"Firmware: {firmware}")
+        if battery is not None:
+            device_info_parts.append(f"Battery: {battery}%")
         device_info = "\n" + " | ".join(device_info_parts) if device_info_parts else ""
 
         # Bridge info (ESP bridge only)
@@ -642,35 +898,67 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         (6, "Light Ring"),
     ]
 
+    GROOMER_CAPABILITY_FLAGS = [
+        (0, "Speed Guidance"),
+    ]
+
     @staticmethod
-    def _get_capabilities_text(cap_val: int) -> str:
+    def _get_capabilities_text(
+        cap_val: int, groomer_cap: int | None = None
+    ) -> str:
         """Format capability flags as human-readable checklist."""
+        if cap_val == 0 and groomer_cap is None:
+            return "No advanced capabilities detected (basic monitoring only)"
+
         lines: list[str] = []
-        for bit, name in PhilipsShaverConfigFlow.CAPABILITY_FLAGS:
-            if cap_val & (1 << bit):
-                lines.append(f"✅ {name}")
-            else:
-                lines.append(f"⬜ {name}")
-        return "\n".join(lines)
 
-    def _get_service_status_text(self, fetched_uuids: list[str]) -> str:
-        """Compare found services with PHILIPS_SERVICE_UUIDS and return formatted text."""
+        # Standard shaver capabilities (0x0302)
+        if cap_val > 0:
+            for bit, name in PhilipsShaverConfigFlow.CAPABILITY_FLAGS:
+                if cap_val & (1 << bit):
+                    lines.append(f"✅ {name}")
+                else:
+                    lines.append(f"⬜ {name}")
 
-        fetched_lower = [s.lower() for s in fetched_uuids]
-        required_lower = [s.lower() for s in PHILIPS_SERVICE_UUIDS]
+        # OneBlade groomer capabilities (0x0702)
+        if groomer_cap is not None:
+            for bit, name in PhilipsShaverConfigFlow.GROOMER_CAPABILITY_FLAGS:
+                if groomer_cap & (1 << bit):
+                    lines.append(f"✅ {name}")
+                else:
+                    lines.append(f"⬜ {name}")
 
-        found_required = []
-        missing_required = []
-        unknown_services = []
+        return "\n".join(lines) if lines else "No advanced capabilities detected (basic monitoring only)"
 
-        for uuid in sorted(required_lower):
+    def _get_service_status_text(self, fetched_uuids: list[str], device_type: str = "") -> str:
+        """Compare found services with expected services for this device type."""
+        fetched_lower = {s.lower() for s in fetched_uuids}
+        known_lower = {s.lower() for s in PHILIPS_SERVICE_UUIDS}
+
+        # Expected services depend on device type
+        expected = {s.lower() for s in PHILIPS_SERVICE_UUIDS}
+        if device_type == "m":
+            # OneBlade: no Control Service (0x0300), no Serial/Diagnostic (0x0600)
+            expected.discard(SVC_CONTROL.lower())
+            expected.discard(SVC_SERIAL.lower())
+        else:
+            # Shaver: no Smart Groomer Service (0x0700)
+            expected.discard(SVC_GROOMER.lower())
+
+        found = []
+        missing = []
+        unknown = []
+
+        for uuid in sorted(expected):
             if uuid in fetched_lower:
-                found_required.append(f"✅ {uuid}")
+                found.append(f"✅ {uuid}")
             else:
-                missing_required.append(f"❌ {uuid}")
+                missing.append(f"❌ {uuid}")
 
-        for uuid in sorted(fetched_lower):
-            if uuid not in required_lower:
-                unknown_services.append(f"❔ {uuid}")
+        for uuid in sorted(fetched_lower - expected):
+            if uuid in known_lower:
+                found.append(f"✅ {uuid}")  # known but optional for this type
+            else:
+                unknown.append(f"❔ {uuid}")
 
-        return "\n".join(found_required + missing_required + unknown_services)
+        return "\n".join(found + missing + unknown)

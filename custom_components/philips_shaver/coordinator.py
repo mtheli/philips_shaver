@@ -33,6 +33,7 @@ from .const import (
     CHAR_DAYS_SINCE_LAST_USED,
     CHAR_DEVICE_STATE,
     CHAR_FIRMWARE_REVISION,
+    CHAR_SOFTWARE_REVISION,
     CHAR_HEAD_REMAINING,
     CHAR_HEAD_REMAINING_MINUTES,
     CHAR_HISTORY_AVG_CURRENT,
@@ -63,8 +64,11 @@ from .const import (
     CHAR_SHAVING_MODE,
     CHAR_SHAVING_MODE_SETTINGS,
     CHAR_CUSTOM_SHAVING_MODE_SETTINGS,
+    CHAR_SPEED,
+    CHAR_SPEED_ZONE_THRESHOLD,
     CONF_ADDRESS,
     CONF_CAPABILITIES,
+    CONF_SERVICES,
     CONF_ESP_DEVICE_NAME,
     CONF_TRANSPORT_TYPE,
     TRANSPORT_ESP_BRIDGE,
@@ -76,6 +80,7 @@ from .const import (
     DEFAULT_POLL_INTERVAL,
     POLL_READ_CHARS,
     LIVE_READ_CHARS,
+    CHAR_SERVICE_MAP,
     SHAVING_MODES,
 )
 from .utils import (
@@ -106,6 +111,7 @@ NOTIFICATION_CHARS = [
     CHAR_HANDLE_LOAD_TYPE,
     CHAR_MOTION_TYPE,
     CHAR_APP_HANDLE_SETTINGS,
+    CHAR_SPEED,
 ]
 
 
@@ -135,8 +141,23 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             CONF_ENABLE_LIVE_UPDATES, DEFAULT_ENABLE_LIVE_UPDATES
         )
 
-        self._poll_chars = list(POLL_READ_CHARS)
-        self._live_chars = list(LIVE_READ_CHARS)
+        # Filter characteristics by available services (avoids "not found" for
+        # devices that lack certain services, e.g. OneBlade without SVC_CONTROL)
+        self.available_services = {
+            s.lower() for s in entry.data.get(CONF_SERVICES, [])
+        }
+        if self.available_services:
+            def _svc_available(char: str) -> bool:
+                return CHAR_SERVICE_MAP.get(char, "").lower() in self.available_services
+
+            self._poll_chars = [c for c in POLL_READ_CHARS if _svc_available(c)]
+            self._live_chars = [c for c in LIVE_READ_CHARS if _svc_available(c)]
+            self._notify_chars = [c for c in NOTIFICATION_CHARS if _svc_available(c)]
+        else:
+            # No service info stored (legacy entries) — read everything
+            self._poll_chars = list(POLL_READ_CHARS)
+            self._live_chars = list(LIVE_READ_CHARS)
+            self._notify_chars = list(NOTIFICATION_CHARS)
 
         self._connection_lock = asyncio.Lock()
         self._live_task: asyncio.Task | None = None
@@ -191,6 +212,9 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "color_motion": (255, 0, 0),
             "lightring_enabled": None,
             "app_handle_settings_raw": None,
+            "speed": None,
+            "speed_threshold_high": None,
+            "speed_verdict": None,
             "last_seen": None,
         }
 
@@ -289,6 +313,8 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             new_data["battery"] = raw[0]
 
         if raw := results.get(CHAR_FIRMWARE_REVISION):
+            new_data["firmware"] = raw.decode("utf-8", "ignore").strip()
+        elif raw := results.get(CHAR_SOFTWARE_REVISION):
             new_data["firmware"] = raw.decode("utf-8", "ignore").strip()
 
         if raw := results.get(CHAR_MODEL_NUMBER):
@@ -403,6 +429,26 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Motion Type (uint8 – single byte, as per app FORMAT_UINT8)
         if raw := results.get(CHAR_MOTION_TYPE):
             new_data["motion_type_value"] = raw[0]
+
+        # Speed (0x0703) — OneBlade movement speed (uint16 LE)
+        if raw := results.get(CHAR_SPEED):
+            new_data["speed"] = int.from_bytes(raw, "little")
+
+        # Speed Zone Thresholds (0x0705) — 7 bytes: 3× uint16 LE + 1× uint8
+        if raw := results.get(CHAR_SPEED_ZONE_THRESHOLD):
+            if len(raw) >= 6:
+                new_data["speed_threshold_high"] = int.from_bytes(raw[4:6], "little")
+
+        # Speed Verdict — computed locally (app ignores device 0x0706)
+        speed = new_data.get("speed")
+        threshold_high = new_data.get("speed_threshold_high")
+        if speed is not None and threshold_high is not None:
+            if speed >= threshold_high:
+                new_data["speed_verdict"] = "too_fast"
+            elif speed > 0:
+                new_data["speed_verdict"] = "optimal"
+            else:
+                new_data["speed_verdict"] = "none"
 
         # App Handle Settings (0x0319) — coaching/feedback bitfield
         if raw := results.get(CHAR_APP_HANDLE_SETTINGS):
@@ -558,7 +604,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
 
         cb = self._make_live_callback()
-        for char_uuid in NOTIFICATION_CHARS:
+        for char_uuid in self._notify_chars:
             try:
                 await self.transport.subscribe(char_uuid, cb)
                 _LOGGER.debug("Subscribed to %s", char_uuid)
