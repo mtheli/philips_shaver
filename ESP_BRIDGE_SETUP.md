@@ -10,7 +10,7 @@ Bluetooth access from the HA host.
 - **ESP32 board** — tested with [M5Stack Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite),
   any ESP32 with BLE should work (ESP32-S3, ESP32-C3, etc.)
 - **ESPHome** — installed as Home Assistant add-on or standalone
-- **Philips Shaver** — tested with i9000 / XP9201 and XP9400 (see [Tested Models](README.md#tested-models))
+- **Philips Shaver or OneBlade** — tested with XP9201 (shaver) and QP4530 (OneBlade 360), see [Tested Models](README.md#tested-models)
 
 ## Step 1: Find Your Shaver's MAC Address
 
@@ -66,13 +66,14 @@ Copy the template to your ESPHome configuration directory and customize:
 ### What you should NOT change
 
 - **Framework**: must be `esp-idf` (not Arduino) — required for configurable BLE limits
-- **sdkconfig options**: `CONFIG_BT_GATTC_MAX_CACHE_CHAR: "100"` and
-  `CONFIG_BT_GATTC_NOTIF_REG_MAX: "30"` — the shaver has ~66 GATT attributes and
-  we subscribe to 17+ characteristics
+- **sdkconfig options**: `CONFIG_BT_GATTC_MAX_CACHE_CHAR` and
+  `CONFIG_BT_GATTC_NOTIF_REG_MAX` — the shaver has ~66 GATT attributes and
+  we subscribe to 17+ characteristics. Use `100`/`30` for a single device, `160`/`50`
+  for two devices (see [Multi-Device Setup](#multi-device-setup) below)
 - **API flags**: `custom_services: true` and `homeassistant_services: true` — required
   for the bridge component to register its services
-- **`max_connections: 4`** under `esp32_ble:` — needed when `bluetooth_proxy` is active
-  (proxy uses 3 slots + `ble_client` needs 1; the default of 3 is not enough)
+- **`max_connections`** under `esp32_ble:` — `4` for single device, `5` for two devices
+  (bluetooth_proxy uses 3 slots + 1 slot per ble_client)
 - **external_components**: the component is loaded directly from this GitHub repository.
   The `refresh: 0s` setting ensures the latest code is fetched on every build
 
@@ -115,6 +116,63 @@ pairing succeeded. The `mode` value depends on your shaver model (9 = Just Works
 6. The integration reads the shaver's hardware capabilities and GATT services via the bridge
 7. Review the detected capabilities and click **Submit** to finish — the shaver appears as a
    sub-device of the ESP32
+
+## Multi-Device Setup
+
+A single ESP32 can bridge **two Philips devices** simultaneously (e.g. a shaver and an
+OneBlade). The [`atom-lite.yaml`](esphome/atom-lite.yaml) template shows a dual-device
+configuration.
+
+### Key differences from single-device
+
+| Setting | Single device | Two devices |
+|---------|--------------|-------------|
+| `CONFIG_BT_GATTC_MAX_CACHE_CHAR` | `"100"` | `"160"` |
+| `CONFIG_BT_GATTC_NOTIF_REG_MAX` | `"30"` | `"50"` |
+| `max_notifications` | 30 | 50 |
+| `max_connections` | 4 | 5 |
+| `ble_client` entries | 1 | 2 |
+| `philips_shaver` entries | 1 | 2 (each with `device_id`) |
+
+### Configuration
+
+Each device needs its own `ble_client` and `philips_shaver` entry. When using multiple
+devices, each `philips_shaver` entry **must** have a unique `device_id`:
+
+```yaml
+ble_client:
+  - mac_address: "AA:BB:CC:DD:EE:01"   # Shaver MAC
+    id: shaver_ble
+    auto_connect: true
+    on_connect:
+      then:
+        - lambda: |-
+            esp_ble_set_encryption(id(shaver_ble).get_remote_bda(), ESP_BLE_SEC_ENCRYPT_MITM);
+
+  - mac_address: "AA:BB:CC:DD:EE:02"   # OneBlade MAC
+    id: oneblade_ble
+    auto_connect: true
+    on_connect:
+      then:
+        - lambda: |-
+            esp_ble_set_encryption(id(oneblade_ble).get_remote_bda(), ESP_BLE_SEC_ENCRYPT_MITM);
+
+philips_shaver:
+  - ble_client_id: shaver_ble
+    device_id: "shaver"
+
+  - ble_client_id: oneblade_ble
+    device_id: "oneblade"
+```
+
+The `device_id` is used to namespace the ESPHome service calls (e.g. `ble_read_char_shaver`
+vs `ble_read_char_oneblade`). For a **single device**, you can omit `device_id` entirely.
+
+### Adding devices in Home Assistant
+
+When setting up via **ESP32 Bridge** in the integration config flow, a device selector
+appears if multiple devices are detected. It shows each device's `device_id`, MAC address,
+and connection status. Each device is added as a separate integration entry.
 
 ## Troubleshooting
 

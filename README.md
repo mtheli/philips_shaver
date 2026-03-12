@@ -12,7 +12,7 @@ This is a custom component for Home Assistant to integrate **Philips Bluetooth-e
 | :--- | :--- | :--- | :--- |
 | **i9000 / XP9201** | Shaver | Direct BLE, ESP32 Bridge | Developed & tested by maintainer |
 | **i9000 / XP9400** | Shaver | ESP32 Bridge | Community-tested ([#3](https://github.com/mtheli/philips_shaver/issues/3)) |
-| **OneBlade 360 / QP4530** | Groomer | Direct BLE | Tested by maintainer |
+| **OneBlade 360 / QP4530** | Groomer | Direct BLE, ESP32 Bridge | Tested by maintainer |
 | **S7887** | Shaver | ESP32 Bridge | Community-tested ([forum](https://community.home-assistant.io/t/philips-bluetooth-shaver-monitoring/858822/8)) |
 
 Other BLE-enabled Philips shavers and groomers using the same GATT services may also work. The integration auto-detects available services and capabilities during setup — entities are only created for features your device supports.
@@ -63,6 +63,12 @@ This integration creates a new device for your shaver and provides the following
 | **Light Ring Brightness** | Select | Adjust the pressure light ring brightness (`High`, `Medium`, `Low`). |
 | **Motor Speed** | Sensor | Current motor speed in RPM (e.g., ~2200 RPM). |
 | **Motor Current** | Sensor | Current motor power consumption in mA. |
+
+### Speed Coaching (OneBlade)
+| Entity | Type | Description |
+| :--- | :--- | :--- |
+| **Speed** | Sensor | Live grooming speed (0–200 raw). |
+| **Speed Verdict** | Sensor | Real-time feedback (`Optimal`, `Too Slow`, `Too Fast`). Computed locally from speed and zone thresholds. |
 
 ### Usage & Maintenance
 | Entity | Type | Description |
@@ -201,6 +207,8 @@ Once the OS-level pairing is complete, proceed to add the integration via the Ho
 If your Home Assistant host is too far from the shaver for a direct Bluetooth connection, you can use an ESP32 as a wireless BLE bridge. The ESP32 connects to the shaver and relays data to HA over WiFi.
 
 This is **not** a standard ESPHome Bluetooth Proxy — it is a custom component that handles the shaver's LE Secure Connections pairing and provides full read/write/subscribe access to all GATT characteristics.
+
+A single ESP32 can bridge **multiple devices** (e.g. a shaver and an OneBlade simultaneously).
 
 For the complete setup guide, see **[ESP_BRIDGE_SETUP.md](ESP_BRIDGE_SETUP.md)**.
 

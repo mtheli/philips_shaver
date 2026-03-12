@@ -7,14 +7,15 @@ esphome:
 # precompiled libbt.a with BTA_GATTC_MAX_CACHE_CHAR=40 (too small for
 # the shaver's ~66 attributes) and BTA_GATTC_NOTIF_REG_MAX=5 (we need 17+).
 #
-# Dual-device: two BLE clients need ~130 attributes total and 34+ subscriptions.
+# Dual-device example: two BLE clients need ~130 attributes total and 34+
+# subscriptions.  For a single device, use 100/30 instead (see comments).
 esp32:
   board: m5stack-atom
   framework:
     type: esp-idf
     sdkconfig_options:
-      CONFIG_BT_GATTC_MAX_CACHE_CHAR: "160"   # default 40; ~66 attrs per device × 2
-      CONFIG_BT_GATTC_NOTIF_REG_MAX: "50"     # default 5; ~17 subs per device × 2
+      CONFIG_BT_GATTC_MAX_CACHE_CHAR: "160"   # single device: "100"; ~66 attrs per device
+      CONFIG_BT_GATTC_NOTIF_REG_MAX: "50"     # single device: "30"; ~17 subs per device
 
 logger:
   level: DEBUG
@@ -45,8 +46,8 @@ captive_portal:
 # max_notifications must match CONFIG_BT_GATTC_NOTIF_REG_MAX.
 esp32_ble:
   io_capability: none
-  max_notifications: 50
-  max_connections: 5
+  max_notifications: 50                        # single device: 30
+  max_connections: 5                           # single device: 4
 
 esp32_ble_tracker:
   scan_parameters:
@@ -54,13 +55,23 @@ esp32_ble_tracker:
     interval: 211ms
     window: 120ms
 
+# --- BLE Clients ---
+# Replace MAC addresses with your device's Bluetooth address.
+# You can find the MAC in the Philips app or via a BLE scanner.
+#
+# Single device: use one ble_client entry and one philips_shaver entry
+# (without device_id).
+#
+# Dual device: use two ble_client entries and two philips_shaver entries
+# (each with a unique device_id).
+
 ble_client:
-  - mac_address: "EC:EC:66:27:F0:ED"
+  - mac_address: "AA:BB:CC:DD:EE:01"          # Replace with your shaver's MAC
     id: shaver_ble
     auto_connect: true
     on_connect:
       then:
-        - logger.log: "Connected to XP9201, attempting pairing..."
+        - logger.log: "Connected to shaver, attempting pairing..."
         - lambda: |-
             esp_ble_set_encryption(id(shaver_ble).get_remote_bda(), ESP_BLE_SEC_ENCRYPT_MITM);
         - light.turn_on:
@@ -76,7 +87,7 @@ ble_client:
             green: 0%
             blue: 0%
 
-  - mac_address: "D2:EC:C6:98:B9:67"
+  - mac_address: "AA:BB:CC:DD:EE:02"          # Replace with your 2nd device's MAC
     id: oneblade_ble
     auto_connect: true
     on_connect:
@@ -99,6 +110,8 @@ external_components:
     refresh: 0s
     components: [philips_shaver]
 
+# Each device needs a unique device_id when using multiple devices.
+# For a single device, omit the device_id line entirely.
 philips_shaver:
   - ble_client_id: shaver_ble
     device_id: "shaver"

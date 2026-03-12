@@ -115,6 +115,10 @@ You can use the **short form** (e.g. `0x0319` or `0319`) — the integration aut
 | `0x0306` | Pressure | uint16 LE | Current pressure value |
 | `0x0319` | App Handle Settings | uint32 LE | Bitfield (bit 4 = light ring on/off) |
 | `0x0322` | Handle Load Type | uint16 LE | Attached head type |
+| `0x0702` | Groomer Capabilities | uint8 | OneBlade capability bitfield |
+| `0x0703` | Speed | uint8 | OneBlade grooming speed (0–200) |
+| `0x0705` | Speed Zone Thresholds | 6 bytes | Three uint16 LE zone boundaries |
+| `0x0706` | Speed Verdict | uint8 | 0=optimal, 1=too slow, 2=too fast |
 
 For a full protocol reference, see [PROTOCOL.md](PROTOCOL.md).
 
