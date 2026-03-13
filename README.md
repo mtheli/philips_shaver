@@ -152,9 +152,30 @@ Before attempting to connect to Home Assistant, ensure the shaver is not connect
 2. *Unpair / Forget* the Shaver.
 3. If you used the [GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) or [OneBlade](https://www.philips.com/c-w/country-selectorpage/myoneblade.html) app, ensure the device is removed there as well. The shaver will refuse a new connection if it is still "bonded" to a mobile app.
 
-### Step 1: OS-Level Pairing with `bluetoothctl`
+### Step 1: OS-Level Pairing
 
 You must access the terminal of your Home Assistant server (e.g., via SSH or the "Terminal & SSH" add-on).
+
+#### Option A: Automated Pairing Script (Recommended)
+
+This integration includes a pairing script that automates the entire process — scanning, pairing, and trusting:
+
+```bash
+bash /config/custom_components/philips_shaver/scripts/pair.sh
+```
+
+The script will scan for nearby Philips devices, let you choose which one to pair, and handle the `bluetoothctl` agent setup required for LE Secure Connections.
+
+You can also pair a specific device directly by MAC address:
+
+```bash
+bash /config/custom_components/philips_shaver/scripts/pair.sh AA:BB:CC:11:22:33
+```
+
+#### Option B: Manual Pairing with `bluetoothctl`
+
+<details>
+<summary>Click to expand manual pairing steps</summary>
 
 1.  Ensure your shaver is **turned on or placed on its charging stand**.
 2.  Start the Bluetooth control tool:
@@ -163,7 +184,14 @@ You must access the terminal of your Home Assistant server (e.g., via SSH or the
     bluetoothctl
     ```
 
-3.  Start scanning to find your shaver. It will likely appear as "Shaver" or similar. Note down its **MAC Address** (e.g., `AA:BB:CC:11:22:33`).
+3.  Register the pairing agent (required for LE Secure Connections):
+
+    ```bash
+    agent KeyboardDisplay
+    default-agent
+    ```
+
+4.  Start scanning to find your shaver. It will appear as "Philips XP9201" or similar. Note down its **MAC Address** (e.g., `AA:BB:CC:11:22:33`).
 
     ```bash
     scan on
@@ -171,23 +199,25 @@ You must access the terminal of your Home Assistant server (e.g., via SSH or the
     scan off
     ```
 
-4.  Perform the pairing with the shaver's MAC address. **Replace** the placeholder with your device's actual address.
+5.  Perform the pairing with the shaver's MAC address. **Replace** the placeholder with your device's actual address.
 
     ```bash
     pair AA:BB:CC:11:22:33
     ```
 
-5.  Trust the device to ensure stable auto-reconnection:
+6.  Trust the device to ensure stable auto-reconnection:
 
     ```bash
     trust AA:BB:CC:11:22:33
     ```
 
-6.  Exit the tool:
+7.  Exit the tool:
 
     ```bash
     exit
     ```
+
+</details>
 
 The shaver is now paired with your host system.
 

@@ -59,7 +59,7 @@ scan_for_devices() {
 
     # Scan — all output to stderr (display only)
     bluetoothctl --timeout "$SCAN_SECONDS" scan on 2>/dev/null | \
-        grep --line-buffered -i "philips\|shaver\|NEW" | \
+        grep --line-buffered -i "philips\|shaver" | \
         sed 's/^/    /' >&2 &
     local scan_pid=$!
     wait "$scan_pid" 2>/dev/null || true
@@ -124,7 +124,7 @@ pair_device() {
         # LE Secure Connections pairing + GATT discovery takes several seconds
         sleep 15
         echo "quit"
-    } | bluetoothctl 2>&1 ) || true
+    } | bluetoothctl 2>&1 | grep -v "^\[DEL\]\|^\[NEW\]\|^	" ) || true
 
     if echo "$pair_output" | grep -q "Pairing successful"; then
         ok "Pairing successful!"
@@ -151,11 +151,12 @@ pair_device() {
 
     # Trust
     info "Trusting device for auto-reconnection..."
-    bluetoothctl trust "$mac" 2>/dev/null
+    bluetoothctl trust "$mac" >/dev/null 2>&1
     ok "Device trusted."
 
     # Disconnect (HA will reconnect on its own)
-    bluetoothctl disconnect "$mac" 2>/dev/null || true
+    # Subshell suppresses bash's segfault message; redirects suppress GATT cache dump
+    (bluetoothctl disconnect "$mac" >/dev/null 2>&1 || true) 2>/dev/null
 
     echo "" >&2
     ok "${name} is ready for Home Assistant!"
