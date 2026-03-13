@@ -142,40 +142,51 @@ The integration supports two connection methods:
 
 ### Option A: Direct Bluetooth (Pairing)
 
-This method requires that the shaver be **paired at the operating system (OS) level** of your Home Assistant host before you can add the integration.
+#### Before You Start
 
-### Step 0: Clear Existing Connections (Crucial)
+Make sure the shaver is **not connected to your phone**:
 
-Before attempting to connect to Home Assistant, ensure the shaver is not connected to your phone.
+1. Open the Bluetooth settings on your phone and *Unpair / Forget* the shaver.
+2. If you used the [GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) or [OneBlade](https://www.philips.com/c-w/country-selectorpage/myoneblade.html) app, remove the device there as well. The shaver will refuse a new connection if it is still bonded to a mobile app.
 
-1. Open the Bluetooth settings on your phone.
-2. *Unpair / Forget* the Shaver.
-3. If you used the [GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) or [OneBlade](https://www.philips.com/c-w/country-selectorpage/myoneblade.html) app, ensure the device is removed there as well. The shaver will refuse a new connection if it is still "bonded" to a mobile app.
+#### Adding the Integration
 
-### Step 1: OS-Level Pairing
+1.  Ensure the shaver is **turned on** or placed on its **charging stand**.
+2.  Navigate to **Settings > Devices & Services**.
+3.  The shaver should appear under **Discovered** — click **Configure**.
+    - If not discovered automatically, click **+ Add Integration**, search for "**Philips Shaver**", and enter the MAC address manually.
+4.  Click **Submit**. The integration will attempt to connect.
 
-You must access the terminal of your Home Assistant server (e.g., via SSH or the "Terminal & SSH" add-on).
+#### Automatic Pairing (HAOS / Linux with BlueZ)
 
-#### Option A: Automated Pairing Script (Recommended)
+If the shaver is not yet paired, the integration will offer **one-click pairing** directly from the setup dialog. Just click **Submit** — pairing, trusting, and connecting happens automatically via D-Bus/BlueZ. This works on Home Assistant OS and any Linux system with BlueZ.
 
-This integration includes a pairing script that automates the entire process — scanning, pairing, and trusting:
+The integration also handles **stale bonds** automatically: if the shaver was previously paired but the bond is no longer valid (e.g., after re-pairing with a phone), the old bond is removed and a fresh pairing is initiated.
+
+#### Manual Pairing (Fallback)
+
+On systems without D-Bus (e.g., Docker containers, macOS), the integration will show instructions for manual pairing via terminal instead.
+
+<details>
+<summary>Click to expand manual pairing options</summary>
+
+##### Automated Pairing Script
+
+This integration includes a pairing script that automates the process:
 
 ```bash
 bash /config/custom_components/philips_shaver/scripts/pair.sh
 ```
 
-The script will scan for nearby Philips devices, let you choose which one to pair, and handle the `bluetoothctl` agent setup required for LE Secure Connections.
+The script scans for nearby Philips devices, lets you choose which one to pair, and handles the `bluetoothctl` agent setup required for LE Secure Connections.
 
-You can also pair a specific device directly by MAC address:
+You can also pair a specific device directly:
 
 ```bash
 bash /config/custom_components/philips_shaver/scripts/pair.sh AA:BB:CC:11:22:33
 ```
 
-#### Option B: Manual Pairing with `bluetoothctl`
-
-<details>
-<summary>Click to expand manual pairing steps</summary>
+##### Manual Pairing with `bluetoothctl`
 
 1.  Ensure your shaver is **turned on or placed on its charging stand**.
 2.  Start the Bluetooth control tool:
@@ -199,7 +210,7 @@ bash /config/custom_components/philips_shaver/scripts/pair.sh AA:BB:CC:11:22:33
     scan off
     ```
 
-5.  Perform the pairing with the shaver's MAC address. **Replace** the placeholder with your device's actual address.
+5.  Perform the pairing with the shaver's MAC address:
 
     ```bash
     pair AA:BB:CC:11:22:33
@@ -217,26 +228,9 @@ bash /config/custom_components/philips_shaver/scripts/pair.sh AA:BB:CC:11:22:33
     exit
     ```
 
+After manual pairing, return to the integration setup dialog and click **Submit** to retry.
+
 </details>
-
-The shaver is now paired with your host system.
-
-### Step 2: Adding the Integration in Home Assistant
-
-Once the OS-level pairing is complete, proceed to add the integration via the Home Assistant UI.
-
-#### Method 1: Automatic Discovery (Recommended)
-
-1.  Navigate to **Settings > Devices & Services**.
-2.  If pairing was successful, Home Assistant should automatically discover the shaver and list it under **Discovered**.
-3.  Click **Configure** on the discovered device card and confirm the setup by clicking **Submit**.
-
-#### Method 2: Manual Setup
-
-1.  If the shaver is not automatically discovered, click **+ Add Integration**.
-2.  Search for "**Philips Shaver**" and select the integration.
-3.  Enter the **MAC Address** (e.g., `AA:BB:CC:11:22:33`) you used in Step 1.
-4.  Click **Submit**.
 
 ### Option B: ESP32 BLE Bridge
 
