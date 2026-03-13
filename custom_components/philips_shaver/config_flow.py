@@ -185,6 +185,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     fetched_transport_type: str | None = None
     fetched_esp_device_name: str | None = None
     fetched_bridge_info: dict[str, str] | None = None
+    _pair_address: str | None = None  # MAC for D-Bus pairing step
 
     async def _async_fetch_capabilities(
         self,
@@ -350,6 +351,18 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                     pass
 
         except (BleakConnectionError, TimeoutError) as err:
+            err_msg = str(err).lower()
+            # "failed to discover services, device disconnected" is the
+            # classic symptom of a stale bond — BlueZ connects with old
+            # encryption keys, the device rejects them and disconnects
+            # during service discovery.
+            if "failed to discover services" in err_msg:
+                _LOGGER.warning(
+                    "Service discovery failed for %s — likely stale bond: %s",
+                    address,
+                    err,
+                )
+                raise NotPairedException from err
             _LOGGER.error("Connection error during capabilities fetch: %s", err)
             raise CannotConnectException from err
 
@@ -425,6 +438,24 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            # Quick D-Bus pre-check: if the device is known to BlueZ but
+            # not paired, skip the slow bleak connection attempts (~80s)
+            # and go straight to the pairing step.
+            from .dbus_pairing import is_dbus_available, async_is_device_paired
+
+            if is_dbus_available():
+                paired = await async_is_device_paired(
+                    self.discovery_info.address
+                )
+                if paired is False:
+                    _LOGGER.info(
+                        "D-Bus pre-check: %s is not paired — "
+                        "skipping to pairing step",
+                        self.discovery_info.address,
+                    )
+                    self._pair_address = self.discovery_info.address
+                    return await self.async_step_pair()
+
             try:
                 capabilities = await self._async_fetch_capabilities(
                     self.discovery_info.address
@@ -440,7 +471,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
             except NotPairedException:
                 _LOGGER.error("Device %s is not paired", self.discovery_info.address)
-                return await self.async_step_not_paired()
+                self._pair_address = self.discovery_info.address
+                return await self._route_to_pairing()
             except DeviceNotFoundException:
                 _LOGGER.error("Device %s not found in range", self.discovery_info.address)
                 errors["base"] = "device_not_found"
@@ -461,6 +493,20 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
                 errors["base"] = "connection_aborted"
             except BleakNotFoundError:
+                # If habluetooth sees the device (advertisements) but bleak
+                # can't connect, the most likely cause is a stale bond in
+                # BlueZ preventing new connections.
+                ble_dev = async_ble_device_from_address(
+                    self.hass, self.discovery_info.address
+                )
+                if ble_dev:
+                    _LOGGER.warning(
+                        "Device %s is visible but unreachable — "
+                        "likely stale bond",
+                        self.discovery_info.address,
+                    )
+                    self._pair_address = self.discovery_info.address
+                    return await self._route_to_pairing()
                 _LOGGER.error(
                     "Device %s not found by any Bluetooth adapter",
                     self.discovery_info.address,
@@ -502,6 +548,20 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(address)
             self._abort_if_unique_id_configured()
 
+            # Quick D-Bus pre-check (same as bluetooth_confirm path)
+            from .dbus_pairing import is_dbus_available, async_is_device_paired
+
+            if is_dbus_available():
+                paired = await async_is_device_paired(address)
+                if paired is False:
+                    _LOGGER.info(
+                        "D-Bus pre-check: %s is not paired — "
+                        "skipping to pairing step",
+                        address,
+                    )
+                    self._pair_address = address
+                    return await self._route_to_pairing()
+
             try:
                 capabilities = await self._async_fetch_capabilities(address)
 
@@ -513,7 +573,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
             except NotPairedException:
                 _LOGGER.error("Device %s is not paired", address)
-                return await self.async_step_not_paired()
+                self._pair_address = address
+                return await self._route_to_pairing()
             except Exception:
                 _LOGGER.exception(
                     "Setup failed: Unable to connect to the device or fetch capabilities"
@@ -918,6 +979,82 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 "shaver_name": shaver_name,
                 "status": status_text,
             },
+            errors=errors,
+        )
+
+    async def _route_to_pairing(self) -> ConfigFlowResult:
+        """Route to D-Bus pairing if available, otherwise show script instructions."""
+        from .dbus_pairing import is_dbus_available
+
+        if is_dbus_available():
+            return await self.async_step_pair()
+        return await self.async_step_not_paired()
+
+    async def async_step_pair(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Pair the device via D-Bus and retry capabilities fetch."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            from .dbus_pairing import async_pair_and_trust, PairingError
+
+            address = self._pair_address
+            try:
+                await async_pair_and_trust(address)
+                _LOGGER.info("D-Bus pairing successful for %s", address)
+
+                # Brief settle time for BlueZ key distribution
+                await asyncio.sleep(2)
+
+                # Retry capabilities fetch
+                capabilities = await self._async_fetch_capabilities(address)
+                self.fetched_data = capabilities
+                self.fetched_address = address
+                self.fetched_name = (
+                    self.discovery_info.name
+                    if self.discovery_info
+                    else address
+                )
+                return await self.async_step_show_capabilities()
+
+            except PairingError as err:
+                _LOGGER.error(
+                    "D-Bus pairing failed for %s: %s", address, err
+                )
+                errors["base"] = "pairing_failed"
+            except NotPairedException:
+                _LOGGER.error(
+                    "Pairing succeeded but device still not accessible "
+                    "for %s — falling back to manual instructions",
+                    address,
+                )
+                return await self.async_step_not_paired()
+            except (
+                DeviceNotFoundException,
+                CannotConnectException,
+                BleakOutOfConnectionSlotsError,
+                BleakAbortedError,
+                BleakNotFoundError,
+            ) as err:
+                _LOGGER.error(
+                    "Post-pairing connection failed for %s: %s", address, err
+                )
+                errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception("Unexpected error during pairing")
+                errors["base"] = "pairing_failed"
+
+        name = ""
+        if self.discovery_info:
+            name = self.discovery_info.name or self.discovery_info.address
+        elif self._pair_address:
+            name = self._pair_address
+
+        return self.async_show_form(
+            step_id="pair",
+            data_schema=vol.Schema({}),
+            description_placeholders={"name": name},
             errors=errors,
         )
 

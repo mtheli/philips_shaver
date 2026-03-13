@@ -65,6 +65,10 @@
         "title": "ESP32 Bridge Status",
         "description": "Setting up **{shaver_name}** via ESP32 bridge.\n\n✅ Bridge **{device_name}** is reachable.\n\n{status}\n\nClick Submit to read shaver capabilities."
       },
+      "pair": {
+        "title": "Pair Device",
+        "description": "**{name}** needs to be paired with this system.\n\nℹ️ **Before pairing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **not connected** to your phone\n   — Remove from Bluetooth settings **and** GroomTribe / OneBlade app\n\nClick **Submit** to start automatic Bluetooth pairing."
+      },
       "not_paired": {
         "title": "Pairing Required",
         "description": "**{name}** is not paired with this system.\n\n{pairing_help}\n\n`{pair_cmd}`\n\nThe script will scan for nearby Philips devices and guide you through the pairing process.\n\nAfter pairing, click **Submit** to retry."
@@ -82,6 +86,7 @@
       "not_paired": "The shaver is not paired with this system.",
       "out_of_slots": "No Bluetooth adapter could reach the device. Either all connection slots are in use, or the device is out of range. Ensure the shaver is powered on and close to the Bluetooth adapter, and try removing unused Bluetooth devices if needed.",
       "connection_aborted": "Connection was aborted. The device may be out of range or connected through an unsupported Bluetooth proxy. This integration requires direct Bluetooth or the dedicated ESP32 BLE bridge — standard ESPHome Bluetooth Proxies are not supported.",
+      "pairing_failed": "Bluetooth pairing failed. Ensure the shaver is powered on and not connected to another device. If the problem persists, try turning the shaver off and back on, or pair manually via terminal (see [README](https://github.com/mtheli/philips_shaver#option-a-direct-bluetooth-pairing)).",
       "unknown": "Unexpected error. Please check the logs."
     },
     "abort": {
