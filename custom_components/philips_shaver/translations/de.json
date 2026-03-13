@@ -65,6 +65,10 @@
         "title": "ESP32 Bridge Status",
         "description": "Einrichtung von **{shaver_name}** über ESP32 Bridge.\n\n✅ Bridge **{device_name}** ist erreichbar.\n\n{status}\n\nKlicken Sie auf Absenden, um die Rasierer-Fähigkeiten zu lesen."
       },
+      "not_paired": {
+        "title": "Pairing erforderlich",
+        "description": "**{name}** ist nicht mit diesem System gepairt.\n\n{pairing_help}\n\n`{pair_cmd}`\n\nDas Script sucht nach Philips-Geräten in der Nähe und führt durch den Pairing-Prozess.\n\nNach dem Pairing auf **Absenden** klicken, um es erneut zu versuchen."
+      },
       "show_capabilities": {
         "title": "Hardware-Fähigkeiten erkannt",
         "description": "Erfolgreich mit **{name}**{bridge_info} verbunden.\n\n**Hardware-Fähigkeiten:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legende:**\n✅ Service gefunden & unterstützt\n❌ Erwarteter Service fehlt\n❔ Unbekannter Service vom Gerät\n\nKlicken Sie auf Absenden, um die Einrichtung abzuschließen."
@@ -75,7 +79,7 @@
       "no_esphome_devices": "Keine ESPHome-Geräte gefunden. Bitte richten Sie zuerst ein ESPHome-Gerät mit der BLE-Bridge-Komponente ein. Siehe [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/ESP_BRIDGE_SETUP.md) für eine Anleitung.",
       "cannot_connect": "Verbindung zum Rasierer fehlgeschlagen. Bitte stelle sicher, dass er eingeschaltet, in Reichweite und nicht mit einem anderen Gerät (z.B. deinem Smartphone) verbunden ist.",
       "device_not_found": "Das Gerät wurde nicht gefunden. Bitte stelle sicher, dass es eingeschaltet und in Reichweite ist.",
-      "not_paired": "Der Rasierer ist nicht mit diesem System gepairt. Bitte zuerst über das Terminal pairen (siehe [README](https://github.com/mtheli/philips_shaver#option-a-direct-bluetooth-pairing)).",
+      "not_paired": "Der Rasierer ist nicht mit diesem System gepairt.",
       "out_of_slots": "Kein Bluetooth-Adapter konnte das Gerät erreichen. Entweder sind alle Verbindungsslots belegt oder das Gerät ist außer Reichweite. Stelle sicher, dass der Rasierer eingeschaltet und in der Nähe des Bluetooth-Adapters ist, und entferne ggf. ungenutzte Bluetooth-Geräte.",
       "connection_aborted": "Verbindung wurde abgebrochen. Das Gerät ist möglicherweise außer Reichweite oder über einen nicht unterstützten Bluetooth-Proxy verbunden. Diese Integration benötigt direktes Bluetooth oder die dedizierte ESP32 BLE-Bridge — Standard-ESPHome-Bluetooth-Proxys werden nicht unterstützt.",
       "unknown": "Unerwarteter Fehler. Bitte prüfe die Systemprotokolle."

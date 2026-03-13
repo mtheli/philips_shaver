@@ -84,6 +84,10 @@ from .exceptions import (
     TransportError,
 )
 
+def _is_hassio(hass) -> bool:
+    """Check if Home Assistant is running on HAOS / Supervised."""
+    return "hassio" in hass.config.components
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -255,6 +259,17 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                         err,
                     )
                     raise CannotConnectException from err
+                except EOFError:
+                    # BlueZ drops the D-Bus connection when auto-pairing
+                    # fails on an unpaired device.
+                    _LOGGER.warning(
+                        "D-Bus connection dropped during battery probe "
+                        "on %s – device not paired",
+                        address,
+                    )
+                    raise NotPairedException(
+                        "D-Bus EOF during encrypted read"
+                    )
 
             _LOGGER.info("Reading capabilities from %s...", address)
             if services.get_characteristic(CHAR_CAPABILITIES):
@@ -425,7 +440,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
             except NotPairedException:
                 _LOGGER.error("Device %s is not paired", self.discovery_info.address)
-                errors["base"] = "not_paired"
+                return await self.async_step_not_paired()
             except DeviceNotFoundException:
                 _LOGGER.error("Device %s not found in range", self.discovery_info.address)
                 errors["base"] = "device_not_found"
@@ -498,7 +513,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
             except NotPairedException:
                 _LOGGER.error("Device %s is not paired", address)
-                errors["base"] = "not_paired"
+                return await self.async_step_not_paired()
             except Exception:
                 _LOGGER.exception(
                     "Setup failed: Unable to connect to the device or fetch capabilities"
@@ -904,6 +919,46 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 "status": status_text,
             },
             errors=errors,
+        )
+
+    async def async_step_not_paired(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Show pairing instructions when the device is not paired."""
+        if user_input is not None:
+            # Retry — go back to the appropriate confirm/manual step
+            if self.discovery_info:
+                return await self.async_step_bluetooth_confirm(user_input)
+            return await self.async_step_user_bleak()
+
+        # Build description placeholders based on environment
+        pair_cmd = "bash /config/custom_components/philips_shaver/scripts/pair.sh"
+        if _is_hassio(self.hass):
+            pairing_help = (
+                "Open the **Terminal & SSH** addon "
+                "([install it first](/hassio/addon/core_ssh/info) if needed) "
+                "and run the pairing script:"
+            )
+        else:
+            pairing_help = (
+                "Open a terminal on the machine running Home Assistant "
+                "and run the pairing script:"
+            )
+
+        name = ""
+        if self.discovery_info:
+            name = self.discovery_info.name or self.discovery_info.address
+        elif self.fetched_address:
+            name = self.fetched_address
+
+        return self.async_show_form(
+            step_id="not_paired",
+            data_schema=vol.Schema({}),
+            description_placeholders={
+                "name": name,
+                "pairing_help": pairing_help,
+                "pair_cmd": pair_cmd,
+            },
         )
 
     async def async_step_show_capabilities(

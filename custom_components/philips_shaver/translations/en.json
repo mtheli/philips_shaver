@@ -65,6 +65,10 @@
         "title": "ESP32 Bridge Status",
         "description": "Setting up **{shaver_name}** via ESP32 bridge.\n\n✅ Bridge **{device_name}** is reachable.\n\n{status}\n\nClick Submit to read shaver capabilities."
       },
+      "not_paired": {
+        "title": "Pairing Required",
+        "description": "**{name}** is not paired with this system.\n\n{pairing_help}\n\n`{pair_cmd}`\n\nThe script will scan for nearby Philips devices and guide you through the pairing process.\n\nAfter pairing, click **Submit** to retry."
+      },
       "show_capabilities": {
         "title": "Hardware Capabilities detected",
         "description": "Successfully connected to **{name}**{bridge_info}.\n\n**Hardware Capabilities:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legend:**\n✅ Service found & supported\n❌ Expected service missing\n❔ Unknown service from device\n\nClick Submit to finish the setup."
@@ -75,7 +79,7 @@
       "no_esphome_devices": "No ESPHome devices found. Please set up an ESPHome device with the BLE bridge component first. See the [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/ESP_BRIDGE_SETUP.md) for instructions.",
       "cannot_connect": "Failed to connect to the shaver. Please ensure it is powered on, in range, and not connected to another device (e.g. your phone).",
       "device_not_found": "Device not found. Please ensure it is powered on and in range.",
-      "not_paired": "The shaver is not paired with this system. Please pair it first via terminal (see [README](https://github.com/mtheli/philips_shaver#option-a-direct-bluetooth-pairing)).",
+      "not_paired": "The shaver is not paired with this system.",
       "out_of_slots": "No Bluetooth adapter could reach the device. Either all connection slots are in use, or the device is out of range. Ensure the shaver is powered on and close to the Bluetooth adapter, and try removing unused Bluetooth devices if needed.",
       "connection_aborted": "Connection was aborted. The device may be out of range or connected through an unsupported Bluetooth proxy. This integration requires direct Bluetooth or the dedicated ESP32 BLE bridge — standard ESPHome Bluetooth Proxies are not supported.",
       "unknown": "Unexpected error. Please check the logs."
