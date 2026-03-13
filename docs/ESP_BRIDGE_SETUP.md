@@ -18,7 +18,7 @@ Bluetooth access from the HA host.
 - **ESP32 board** — tested with [M5Stack Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite),
   any ESP32 with BLE should work (ESP32-S3, ESP32-C3, etc.)
 - **ESPHome** — installed as Home Assistant add-on or standalone
-- **Philips Shaver or OneBlade** — tested with XP9201 (shaver) and QP4530 (OneBlade 360), see [Tested Models](README.md#tested-models)
+- **Philips Shaver or OneBlade** — tested with XP9201 (shaver) and QP4530 (OneBlade 360), see [Tested Models](../README.md#tested-models)
 
 ## Step 1: Find Your Shaver's MAC Address
 

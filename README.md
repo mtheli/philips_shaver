@@ -24,7 +24,7 @@ The integration connects to your shaver via **Bluetooth Low Energy (BLE)** to pr
 Two connection methods are supported:
 
 1.  **Direct Bluetooth** — connects from the HA host's Bluetooth adapter. Uses a persistent live connection with a poll fallback.
-2.  **ESP32 BLE Bridge** — an ESP32 running ESPHome acts as a wireless BLE relay. Ideal when the shaver is out of Bluetooth range of the HA host. See the [ESP Bridge Setup Guide](ESP_BRIDGE_SETUP.md) for instructions.
+2.  **ESP32 BLE Bridge** — an ESP32 running ESPHome acts as a wireless BLE relay. Ideal when the shaver is out of Bluetooth range of the HA host. See the [ESP Bridge Setup Guide](docs/ESP_BRIDGE_SETUP.md) for instructions.
 
 ---
 
@@ -101,14 +101,14 @@ This integration creates a new device for your shaver and provides the following
 
 ## Example Automations
 
-See **[AUTOMATIONS.md](AUTOMATIONS.md)** for ready-to-use automation examples, including low battery alerts, smart plug charging, usage reminders, and maintenance notifications.
+See **[docs/AUTOMATIONS.md](docs/AUTOMATIONS.md)** for ready-to-use automation examples, including low battery alerts, smart plug charging, usage reminders, and maintenance notifications.
 
 ---
 
 ## Prerequisites
 
 * A compatible Philips Shaver (see [Tested Models](#tested-models) above).
-* **Either** a Home Assistant instance with the **Bluetooth integration** enabled and a working Bluetooth adapter, **or** an ESP32 running the [BLE bridge component](ESP_BRIDGE_SETUP.md).
+* **Either** a Home Assistant instance with the **Bluetooth integration** enabled and a working Bluetooth adapter, **or** an ESP32 running the [BLE bridge component](docs/ESP_BRIDGE_SETUP.md).
 * *Exclusive Connection:* The shaver supports only one active connection at a time.
 * *GroomTribe App:* You must unpair/remove the shaver from any other devices (especially smartphones with the manufacturer's [GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) app) before Home Assistant can connect.
 
@@ -216,14 +216,14 @@ This is **not** a standard ESPHome Bluetooth Proxy — it is a custom component 
 
 A single ESP32 can bridge **multiple devices** (e.g. a shaver and an OneBlade simultaneously).
 
-For the complete setup guide, see **[ESP_BRIDGE_SETUP.md](ESP_BRIDGE_SETUP.md)**.
+For the complete setup guide, see **[docs/ESP_BRIDGE_SETUP.md](docs/ESP_BRIDGE_SETUP.md)**.
 
 ---
 
 ## Troubleshooting & Caveats
 
 * *Connection Conflict*: If the integration fails to set up, ensure no smartphone is currently connected to the shaver.
-* *ESPHome Bluetooth Proxy*: The standard ESPHome Bluetooth Proxy does **not** work with this shaver because it requires LE Secure Connections pairing. Use the dedicated [ESP32 BLE Bridge](ESP_BRIDGE_SETUP.md) instead.
+* *ESPHome Bluetooth Proxy*: The standard ESPHome Bluetooth Proxy does **not** work with this shaver because it requires LE Secure Connections pairing. Use the dedicated [ESP32 BLE Bridge](docs/ESP_BRIDGE_SETUP.md) instead.
 * *Stability:* Bluetooth signals are weak. Ensure your HA host or ESP32 bridge is placed as close to the shaver's location as possible.
 
 ---
@@ -234,9 +234,9 @@ The integration communicates directly via BLE — no cloud, no app required. All
 
 The shaver exposes multiple GATT services with individual characteristics for each data point (battery, motor, pressure, light ring, etc.). Data is read directly from these characteristics and live updates are received via GATT notifications.
 
-For a detailed technical description of the BLE protocol including service UUIDs, characteristic reference, data formats, and capability flags, see [PROTOCOL.md](PROTOCOL.md).
+For a detailed technical description of the BLE protocol including service UUIDs, characteristic reference, data formats, and capability flags, see [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
-For debug service actions (reading arbitrary BLE characteristics via Developer Tools), see [ADVANCED.md](ADVANCED.md).
+For debug service actions (reading arbitrary BLE characteristics via Developer Tools), see [docs/ADVANCED.md](docs/ADVANCED.md).
 
 ## Screenshots
 
