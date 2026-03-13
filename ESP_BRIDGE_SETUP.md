@@ -5,7 +5,8 @@ for the Philips Shaver Home Assistant integration. The ESP32 connects to the sha
 via BLE and relays data to Home Assistant over WiFi, removing the need for direct
 Bluetooth access from the HA host.
 
-> **Important:** This is a **dedicated ESPHome component**, not a standard
+> [!IMPORTANT]
+> This is a **dedicated ESPHome component**, not a standard
 > [ESPHome Bluetooth Proxy](https://esphome.io/components/bluetooth_proxy.html).
 > The standard Bluetooth Proxy does **not** support the LE Secure Connections
 > pairing that Philips shavers require. If you already have an ESP32 running
