@@ -1207,6 +1207,12 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             return "No advanced capabilities detected (basic monitoring only)"
         return "<table>" + "".join(rows) + "</table>"
 
+    # Standard BLE services present on every device — hide from display
+    _STANDARD_BLE_SERVICES = {
+        "00001800-0000-1000-8000-00805f9b34fb",  # Generic Access
+        "00001801-0000-1000-8000-00805f9b34fb",  # Generic Attribute
+    }
+
     SERVICE_NAMES: dict[str, str] = {
         SVC_BATTERY.lower(): "Battery",
         SVC_DEVICE_INFO.lower(): "Device Information",
@@ -1215,6 +1221,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         SVC_CONTROL.lower(): "Control",
         SVC_SERIAL.lower(): "Serial / Diagnostic",
         SVC_GROOMER.lower(): "Smart Groomer",
+        "e50ba3c0-af04-4564-92ad-fef019489de6": "ByteStreaming",
     }
 
     @staticmethod
@@ -1224,7 +1231,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def _get_service_status_text(self, fetched_uuids: list[str], device_type: str = "") -> str:
         """Compare found services with expected services for this device type."""
-        fetched_lower = {s.lower() for s in fetched_uuids}
+        fetched_lower = {s.lower() for s in fetched_uuids} - self._STANDARD_BLE_SERVICES
         known_lower = {s.lower() for s in PHILIPS_SERVICE_UUIDS}
 
         # Expected services depend on device type
@@ -1261,8 +1268,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                     f"<tr><td>✅</td><td>{name}</td><td><code>{short}</code></td></tr>"
                 )
             else:
+                name = self.SERVICE_NAMES.get(uuid, "Unknown")
                 unknown_rows.append(
-                    f"<tr><td>❔</td><td>Unknown</td><td><code>{short}</code></td></tr>"
+                    f"<tr><td>❔</td><td>{name}</td><td><code>{short}</code></td></tr>"
                 )
 
         rows = found_rows + missing_rows + unknown_rows
