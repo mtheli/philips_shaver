@@ -1,4 +1,10 @@
 {
+  "issues": {
+    "esp_bridge_outdated": {
+      "title": "ESP-Bridge-Firmware-Update erforderlich",
+      "description": "Ihre ESP-Bridge läuft mit **v{version}**, aber **v{min_version}** oder neuer wird für volle Funktionalität benötigt.\n\nBauen und flashen Sie Ihr ESPHome-Gerät neu, um die aktuelle Firmware zu erhalten.\n\nSiehe [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/ESP_BRIDGE_SETUP.md) für Details."
+    }
+  },
   "options": {
     "step": {
       "init": {
@@ -46,11 +52,7 @@
       },
       "bluetooth_confirm": {
         "title": "Erkanntes Gerät bestätigen",
-        "description": "Möchten Sie den erkannten Philips Shaver \"{name}\" zu Home Assistant hinzufügen?\n\nNach dem Absenden wird eine Verbindung zum Gerät hergestellt, um das Pairing zu prüfen und die Hardware-Fähigkeiten zu lesen. Dies kann einige Sekunden dauern."
-      },
-      "bluetooth_confirm_esp": {
-        "title": "Erkanntes Gerät bestätigen",
-        "description": "Möchten Sie den erkannten Philips Shaver \"{name}\" zu Home Assistant hinzufügen?\n\nNach dem Absenden wird eine Verbindung zum Gerät hergestellt, um das Pairing zu prüfen und die Hardware-Fähigkeiten zu lesen. Dies kann einige Sekunden dauern.\n\n⚠️ **Hinweis:** Für diese Integration ist bereits eine ESP32-Bridge konfiguriert. Eine zusätzliche direkte Bluetooth-Verbindung kann zu Konflikten führen. Fahren Sie nur fort, wenn Sie auf direktes Bluetooth wechseln möchten."
+        "description": "Möchten Sie den erkannten Philips Shaver **{name}** zu Home Assistant hinzufügen?\n\nℹ️ **Bitte vor dem Fortfahren prüfen:**\n1. ⬜ Rasierer ist **eingeschaltet** oder auf der **Ladestation**\n2. ⬜ Rasierer ist **entkoppelt** vom Handy\n   — Aus Bluetooth-Einstellungen **und** GroomTribe / OneBlade App entfernen\n3. ⬜ Rasierer ist **gepairt** mit diesem System via `bluetoothctl` (siehe [README](https://github.com/mtheli/philips_shaver#option-a-direct-bluetooth-pairing))\n\nNach dem Absenden wird eine Verbindung zum Gerät hergestellt, um das Pairing zu prüfen und die Hardware-Fähigkeiten zu lesen. Dies kann einige Sekunden dauern."
       },
       "esp_select_device": {
         "title": "BLE-Gerät auswählen",
@@ -61,11 +63,11 @@
       },
       "esp_bridge_status": {
         "title": "ESP32 Bridge Status",
-        "description": "✅ Bridge **{device_name}** ist erreichbar.\n\n{status}\n\nKlicken Sie auf Absenden, um die Rasierer-Fähigkeiten zu lesen."
+        "description": "Einrichtung von **{shaver_name}** über ESP32 Bridge.\n\n✅ Bridge **{device_name}** ist erreichbar.\n\n{status}\n\nKlicken Sie auf Absenden, um die Rasierer-Fähigkeiten zu lesen."
       },
       "show_capabilities": {
         "title": "Hardware-Fähigkeiten erkannt",
-        "description": "Erfolgreich mit **{name}** verbunden.{device_info}{bridge_info}\n\n**Hardware-Fähigkeiten:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legende:**\n✅ Service gefunden & unterstützt\n❌ Erwarteter Service fehlt\n❔ Unbekannter Service vom Gerät\n\nKlicken Sie auf Absenden, um die Einrichtung abzuschließen."
+        "description": "Erfolgreich mit **{name}**{bridge_info} verbunden.\n\n**Hardware-Fähigkeiten:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legende:**\n✅ Service gefunden & unterstützt\n❌ Erwarteter Service fehlt\n❔ Unbekannter Service vom Gerät\n\nKlicken Sie auf Absenden, um die Einrichtung abzuschließen."
       }
     },
     "error": {
@@ -73,7 +75,9 @@
       "no_esphome_devices": "Keine ESPHome-Geräte gefunden. Bitte richten Sie zuerst ein ESPHome-Gerät mit der BLE-Bridge-Komponente ein. Siehe [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/ESP_BRIDGE_SETUP.md) für eine Anleitung.",
       "cannot_connect": "Verbindung zum Rasierer fehlgeschlagen. Bitte stelle sicher, dass er eingeschaltet, in Reichweite und nicht mit einem anderen Gerät (z.B. deinem Smartphone) verbunden ist.",
       "device_not_found": "Das Gerät wurde nicht gefunden. Bitte stelle sicher, dass es eingeschaltet und in Reichweite ist.",
-      "not_paired": "Der Rasierer ist nicht mit diesem System gepairt. Bitte zuerst über SSH pairen (siehe README für eine Anleitung).",
+      "not_paired": "Der Rasierer ist nicht mit diesem System gepairt. Bitte zuerst über das Terminal pairen (siehe [README](https://github.com/mtheli/philips_shaver#option-a-direct-bluetooth-pairing)).",
+      "out_of_slots": "Kein Bluetooth-Adapter konnte das Gerät erreichen. Entweder sind alle Verbindungsslots belegt oder das Gerät ist außer Reichweite. Stelle sicher, dass der Rasierer eingeschaltet und in der Nähe des Bluetooth-Adapters ist, und entferne ggf. ungenutzte Bluetooth-Geräte.",
+      "connection_aborted": "Verbindung wurde abgebrochen. Das Gerät ist möglicherweise außer Reichweite oder über einen nicht unterstützten Bluetooth-Proxy verbunden. Diese Integration benötigt direktes Bluetooth oder die dedizierte ESP32 BLE-Bridge — Standard-ESPHome-Bluetooth-Proxys werden nicht unterstützt.",
       "unknown": "Unerwarteter Fehler. Bitte prüfe die Systemprotokolle."
     },
     "abort": {
@@ -123,6 +127,9 @@
       }
     },
     "sensor": {
+      "bridge_version": {
+        "name": "Bridge Version"
+      },
       "battery": {
         "name": "Batterie"
       },

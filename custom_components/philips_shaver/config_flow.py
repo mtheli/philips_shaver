@@ -19,7 +19,13 @@ from homeassistant.components.bluetooth import (
 )
 from bleak import BleakClient
 from bleak.exc import BleakError
-from bleak_retry_connector import BleakConnectionError, establish_connection
+from bleak_retry_connector import (
+    BleakAbortedError,
+    BleakConnectionError,
+    BleakNotFoundError,
+    BleakOutOfConnectionSlotsError,
+    establish_connection,
+)
 
 from homeassistant.helpers.selector import (
     NumberSelector,
@@ -220,7 +226,23 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 except NotPairedException:
                     raise
                 except (BleakError, TimeoutError) as err:
-                    if client.is_connected:
+                    err_msg = str(err).lower()
+                    # ATT errors that indicate missing pairing/encryption,
+                    # even if BlueZ drops the connection afterwards:
+                    #   0x05 = Insufficient Authentication
+                    #   0x0e = Unlikely Error (encryption required)
+                    #   0x0f = Insufficient Encryption
+                    if any(
+                        hint in err_msg
+                        for hint in (
+                            "0x05",
+                            "0x0e",
+                            "0x0f",
+                            "unlikely error",
+                            "insufficient auth",
+                            "insufficient enc",
+                        )
+                    ) or client.is_connected:
                         _LOGGER.warning(
                             "Battery probe failed on %s: %s – device not paired",
                             address,
@@ -332,7 +354,53 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Confirm discovery and fetch capabilities."""
+        # On first display, check if an ESP bridge is already connected
+        # to this shaver — redirect to ESP flow if so.
+        if user_input is None:
+            esp = await self._find_esp_bridge_for_mac(
+                self.discovery_info.address
+            )
+            if esp:
+                _LOGGER.info(
+                    "ESP bridge '%s' is already connected to %s — "
+                    "redirecting to ESP bridge setup",
+                    esp["device_name"],
+                    self.discovery_info.address,
+                )
+                self.fetched_esp_device_name = esp["device_name"]
+                self.fetched_esp_device_id = esp.get("device_id", "")
+                self.fetched_bridge_info = esp["info"]
+                return await self.async_step_esp_bridge_status()
+
         return await self._async_bluetooth_confirm(user_input, "bluetooth_confirm")
+
+    async def _find_esp_bridge_for_mac(self, mac: str) -> dict | None:
+        """Check if any ESP bridge is connected to the given MAC."""
+        esphome_entries = self.hass.config_entries.async_entries("esphome")
+        for entry in esphome_entries:
+            device_name = entry.data.get("device_name")
+            if not device_name:
+                continue
+            esp_name = device_name.replace("-", "_")
+            device_ids = self._detect_esp_device_ids(esp_name)
+            for did in device_ids:
+                transport = EspBridgeTransport(
+                    self.hass, mac, esp_name, did
+                )
+                try:
+                    await transport.connect()
+                    info = await transport.get_bridge_info()
+                    if info and info.get("mac", "").upper() == mac.upper():
+                        return {
+                            "device_name": esp_name,
+                            "device_id": did,
+                            "info": info,
+                        }
+                except Exception:
+                    pass
+                finally:
+                    await transport.disconnect()
+        return None
 
     async def _async_bluetooth_confirm(
         self, user_input: dict[str, Any] | None, step_id: str
@@ -364,6 +432,25 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             except CannotConnectException:
                 _LOGGER.error("Cannot connect to %s", self.discovery_info.address)
                 errors["base"] = "cannot_connect"
+            except BleakOutOfConnectionSlotsError:
+                _LOGGER.error(
+                    "No connection slot available for %s",
+                    self.discovery_info.address,
+                )
+                errors["base"] = "out_of_slots"
+            except BleakAbortedError:
+                _LOGGER.error(
+                    "Connection aborted for %s — device may be out of range "
+                    "or using an unsupported Bluetooth proxy",
+                    self.discovery_info.address,
+                )
+                errors["base"] = "connection_aborted"
+            except BleakNotFoundError:
+                _LOGGER.error(
+                    "Device %s not found by any Bluetooth adapter",
+                    self.discovery_info.address,
+                )
+                errors["base"] = "device_not_found"
             except Exception:
                 _LOGGER.exception("Unexpected error during setup")
                 errors["base"] = "unknown"
@@ -758,6 +845,22 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected error reading shaver capabilities")
                 errors["base"] = "unknown"
 
+        # Refresh bridge info to get current BLE connection status
+        esp_device_id = getattr(self, "fetched_esp_device_id", "")
+        transport = EspBridgeTransport(
+            self.hass,
+            self.fetched_esp_device_name,
+            self.fetched_esp_device_name,
+            esp_device_id,
+        )
+        try:
+            await transport.connect()
+            self.fetched_bridge_info = await transport.get_bridge_info()
+        except Exception:
+            pass
+        finally:
+            await transport.disconnect()
+
         # Format bridge status display
         info = self.fetched_bridge_info or {}
         if info:
@@ -784,11 +887,20 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 "Consider updating the ESP bridge component."
             )
 
+        # Determine shaver name for display
+        if self.discovery_info:
+            shaver_name = self.discovery_info.name or self.discovery_info.address
+        elif info.get("mac") and info["mac"] != "00:00:00:00:00:00":
+            shaver_name = info["mac"]
+        else:
+            shaver_name = "Unknown device"
+
         return self.async_show_form(
             step_id="esp_bridge_status",
             data_schema=vol.Schema({}),
             description_placeholders={
                 "device_name": self.fetched_esp_device_name,
+                "shaver_name": shaver_name,
                 "status": status_text,
             },
             errors=errors,
@@ -840,33 +952,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         groomer_cap = self.fetched_data.get("groomer_capabilities")
         capabilities_text = self._get_capabilities_text(cap_val, groomer_cap)
 
-        # Device info line (model + type + firmware + battery)
-        model = self.fetched_data.get("model_number")
-        device_type = self.fetched_data.get("device_type")
-        firmware = self.fetched_data.get("firmware")
-        battery = self.fetched_data.get("battery")
-        device_info_parts: list[str] = []
-        if model:
-            device_info_parts.append(f"Model: {model}")
-        if device_type:
-            device_info_parts.append(f"Type: {device_type}")
-        if firmware:
-            device_info_parts.append(f"Firmware: {firmware}")
-        if battery is not None:
-            device_info_parts.append(f"Battery: {battery}%")
-        device_info = "\n" + " | ".join(device_info_parts) if device_info_parts else ""
-
-        # Bridge info (ESP bridge only)
-        bridge_version = self.fetched_data.get("bridge_version")
+        # Connection info suffix (e.g. " via ESP Bridge")
         esp_name = self.fetched_esp_device_name
-        if bridge_version and esp_name:
-            bridge_info = f"\nESP Bridge: {esp_name} (v{bridge_version})"
-        elif bridge_version:
-            bridge_info = f"\nESP Bridge: v{bridge_version}"
-        elif esp_name:
-            bridge_info = f"\nESP Bridge: {esp_name}"
-        else:
-            bridge_info = ""
+        bridge_info = " via ESP Bridge" if esp_name else ""
 
         return self.async_show_form(
             step_id="show_capabilities",
@@ -875,7 +963,6 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 "name": str(self.fetched_name),
                 "services": services_text,
                 "capabilities": capabilities_text,
-                "device_info": device_info,
                 "bridge_info": bridge_info,
             },
         )
@@ -906,29 +993,42 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     def _get_capabilities_text(
         cap_val: int, groomer_cap: int | None = None
     ) -> str:
-        """Format capability flags as human-readable checklist."""
+        """Format capability flags as HTML table."""
         if cap_val == 0 and groomer_cap is None:
             return "No advanced capabilities detected (basic monitoring only)"
 
-        lines: list[str] = []
+        rows: list[str] = []
 
         # Standard shaver capabilities (0x0302)
         if cap_val > 0:
             for bit, name in PhilipsShaverConfigFlow.CAPABILITY_FLAGS:
-                if cap_val & (1 << bit):
-                    lines.append(f"✅ {name}")
-                else:
-                    lines.append(f"⬜ {name}")
+                icon = "✅" if cap_val & (1 << bit) else "⬜"
+                rows.append(f"<tr><td>{icon}</td><td>{name}</td></tr>")
 
         # OneBlade groomer capabilities (0x0702)
         if groomer_cap is not None:
             for bit, name in PhilipsShaverConfigFlow.GROOMER_CAPABILITY_FLAGS:
-                if groomer_cap & (1 << bit):
-                    lines.append(f"✅ {name}")
-                else:
-                    lines.append(f"⬜ {name}")
+                icon = "✅" if groomer_cap & (1 << bit) else "⬜"
+                rows.append(f"<tr><td>{icon}</td><td>{name}</td></tr>")
 
-        return "\n".join(lines) if lines else "No advanced capabilities detected (basic monitoring only)"
+        if not rows:
+            return "No advanced capabilities detected (basic monitoring only)"
+        return "<table>" + "".join(rows) + "</table>"
+
+    SERVICE_NAMES: dict[str, str] = {
+        SVC_BATTERY.lower(): "Battery",
+        SVC_DEVICE_INFO.lower(): "Device Information",
+        SVC_PLATFORM.lower(): "Platform",
+        SVC_HISTORY.lower(): "History",
+        SVC_CONTROL.lower(): "Control",
+        SVC_SERIAL.lower(): "Serial / Diagnostic",
+        SVC_GROOMER.lower(): "Smart Groomer",
+    }
+
+    @staticmethod
+    def _uuid_short(uuid: str) -> str:
+        """Extract the short prefix from a UUID (e.g. '8d560100' or '0000180f')."""
+        return uuid.split("-")[0]
 
     def _get_service_status_text(self, fetched_uuids: list[str], device_type: str = "") -> str:
         """Compare found services with expected services for this device type."""
@@ -945,20 +1045,33 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             # Shaver: no Smart Groomer Service (0x0700)
             expected.discard(SVC_GROOMER.lower())
 
-        found = []
-        missing = []
-        unknown = []
+        found_rows: list[str] = []
+        missing_rows: list[str] = []
+        unknown_rows: list[str] = []
 
         for uuid in sorted(expected):
+            name = self.SERVICE_NAMES.get(uuid, "Unknown")
+            short = self._uuid_short(uuid)
             if uuid in fetched_lower:
-                found.append(f"✅ {uuid}")
+                found_rows.append(
+                    f"<tr><td>✅</td><td>{name}</td><td><code>{short}</code></td></tr>"
+                )
             else:
-                missing.append(f"❌ {uuid}")
+                missing_rows.append(
+                    f"<tr><td>❌</td><td>{name}</td><td><code>{short}</code></td></tr>"
+                )
 
         for uuid in sorted(fetched_lower - expected):
+            short = self._uuid_short(uuid)
             if uuid in known_lower:
-                found.append(f"✅ {uuid}")  # known but optional for this type
+                name = self.SERVICE_NAMES.get(uuid, "Unknown")
+                found_rows.append(
+                    f"<tr><td>✅</td><td>{name}</td><td><code>{short}</code></td></tr>"
+                )
             else:
-                unknown.append(f"❔ {uuid}")
+                unknown_rows.append(
+                    f"<tr><td>❔</td><td>Unknown</td><td><code>{short}</code></td></tr>"
+                )
 
-        return "\n".join(found + missing + unknown)
+        rows = found_rows + missing_rows + unknown_rows
+        return "<table>" + "".join(rows) + "</table>"

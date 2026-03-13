@@ -13,6 +13,7 @@ from homeassistant.helpers import device_registry as dr
 
 from .const import (
     DOMAIN,
+    CONF_ADDRESS,
     CONF_TRANSPORT_TYPE,
     TRANSPORT_ESP_BRIDGE,
     CONF_ESP_DEVICE_NAME,
@@ -84,8 +85,11 @@ def _async_link_via_esp_device(hass: HomeAssistant, entry: ConfigEntry) -> None:
         return
 
     # Find our shaver device and set via_device
+    # Device identifier is shaver MAC (preferred) or esp_device_name (fallback)
+    shaver_mac = entry.data.get(CONF_ADDRESS)
+    device_id = shaver_mac if shaver_mac else esp_device_name
     shaver_device = dev_reg.async_get_device(
-        identifiers={(DOMAIN, esp_device_name)}
+        identifiers={(DOMAIN, device_id)}
     )
     if shaver_device:
         dev_reg.async_update_device(shaver_device.id, via_device_id=esp_device.id)
@@ -93,7 +97,7 @@ def _async_link_via_esp_device(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
     # Also link the bridge sub-device to the ESPHome device
     bridge_device = dev_reg.async_get_device(
-        identifiers={(DOMAIN, f"{esp_device_name}_bridge")}
+        identifiers={(DOMAIN, f"{device_id}_bridge")}
     )
     if bridge_device:
         dev_reg.async_update_device(bridge_device.id, via_device_id=esp_device.id)
