@@ -99,6 +99,12 @@ This integration creates a new device for your shaver and provides the following
 
 ---
 
+## Example Automations
+
+See **[AUTOMATIONS.md](AUTOMATIONS.md)** for ready-to-use automation examples, including low battery alerts, smart plug charging, usage reminders, and maintenance notifications.
+
+---
+
 ## Prerequisites
 
 * A compatible Philips Shaver (see [Tested Models](#tested-models) above).
