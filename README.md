@@ -10,10 +10,10 @@ This is a custom component for Home Assistant to integrate **Philips Bluetooth-e
 
 | Model | Type | Direct BLE | ESP32 Bridge | Tested by |
 | :--- | :--- | :---: | :---: | :--- |
-| **i9000 / XP9201** | Shaver | :white_check_mark: | :white_check_mark: | Maintainer |
-| **i9000 / XP9400** | Shaver | | :white_check_mark: | Community ([#3](https://github.com/mtheli/philips_shaver/issues/3)) |
+| **Series 9000 / XP9201** | Shaver | :white_check_mark: | :white_check_mark: | Maintainer |
+| **Series 9000 / XP9400** | Shaver | | :white_check_mark: | Community ([#3](https://github.com/mtheli/philips_shaver/issues/3)) |
 | **OneBlade 360 / QP4530** | Groomer | :white_check_mark: | :white_check_mark: | Maintainer |
-| **S7887** | Shaver | | :white_check_mark: | Community ([forum](https://community.home-assistant.io/t/philips-bluetooth-shaver-monitoring/858822/8)) |
+| **Series 7000 / S7887** | Shaver | | :white_check_mark: | Community ([forum](https://community.home-assistant.io/t/philips-bluetooth-shaver-monitoring/858822/8)) |
 
 Other BLE-enabled Philips shavers and groomers using the same GATT services may also work. The integration auto-detects available services and capabilities during setup — entities are only created for features your device supports.
 
