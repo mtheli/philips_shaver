@@ -150,7 +150,7 @@ Before attempting to connect to Home Assistant, ensure the shaver is not connect
 
 1. Open the Bluetooth settings on your phone.
 2. *Unpair / Forget* the Shaver.
-3. If you used the [GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) app, ensure the device is removed there as well. The shaver will refuse a new connection if it is still "bonded" to a mobile app.
+3. If you used the [GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) or [OneBlade](https://www.philips.com/c-w/country-selectorpage/myoneblade.html) app, ensure the device is removed there as well. The shaver will refuse a new connection if it is still "bonded" to a mobile app.
 
 ### Step 1: OS-Level Pairing with `bluetoothctl`
 
