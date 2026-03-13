@@ -243,6 +243,6 @@ If data still doesn't flow:
 
 | Board | Status |
 |-------|--------|
-| M5Stack Atom Lite (ESP32-PICO) | Confirmed working |
+| [M5Stack Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) (ESP32-PICO) | Confirmed working (used by maintainer) |
 | Generic ESP32-DevKit | Should work (same SoC) |
 | ESP32-S3 / ESP32-C3 | Untested — BLE stack should be compatible |
