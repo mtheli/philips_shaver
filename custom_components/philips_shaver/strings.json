@@ -2,7 +2,7 @@
   "issues": {
     "esp_bridge_outdated": {
       "title": "ESP bridge firmware update required",
-      "description": "Your ESP bridge is running **v{version}**, but **v{min_version}** or newer is required for full functionality.\n\nRebuild and flash your ESPHome device to get the latest firmware.\n\nSee the [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/ESP_BRIDGE_SETUP.md) for details."
+      "description": "Your ESP bridge is running **v{version}**, but **v{min_version}** or newer is required for full functionality.\n\nRebuild and flash your ESPHome device to get the latest firmware.\n\nSee the [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/docs/ESP_BRIDGE_SETUP.md) for details."
     }
   },
   "options": {
@@ -80,7 +80,7 @@
     },
     "error": {
       "abort_if_unique_id_configured": "This device is already configured.",
-      "no_esphome_devices": "No ESPHome devices found. Please set up an ESPHome device with the BLE bridge component first. See the [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/ESP_BRIDGE_SETUP.md) for instructions.",
+      "no_esphome_devices": "No ESPHome devices found. Please set up an ESPHome device with the BLE bridge component first. See the [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/docs/ESP_BRIDGE_SETUP.md) for instructions.",
       "cannot_connect": "Failed to connect to the shaver. Please ensure it is powered on, in range, and not connected to another device (e.g. your phone).",
       "device_not_found": "Device not found. Please ensure it is powered on and in range.",
       "not_paired": "The shaver is not paired with this system.",

@@ -2,7 +2,7 @@
   "issues": {
     "esp_bridge_outdated": {
       "title": "ESP-Bridge-Firmware-Update erforderlich",
-      "description": "Ihre ESP-Bridge läuft mit **v{version}**, aber **v{min_version}** oder neuer wird für volle Funktionalität benötigt.\n\nBauen und flashen Sie Ihr ESPHome-Gerät neu, um die aktuelle Firmware zu erhalten.\n\nSiehe [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/ESP_BRIDGE_SETUP.md) für Details."
+      "description": "Ihre ESP-Bridge läuft mit **v{version}**, aber **v{min_version}** oder neuer wird für volle Funktionalität benötigt.\n\nBauen und flashen Sie Ihr ESPHome-Gerät neu, um die aktuelle Firmware zu erhalten.\n\nSiehe [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/docs/ESP_BRIDGE_SETUP.md) für Details."
     }
   },
   "options": {
@@ -80,7 +80,7 @@
     },
     "error": {
       "abort_if_unique_id_configured": "Das Gerät ist bereits konfiguriert.",
-      "no_esphome_devices": "Keine ESPHome-Geräte gefunden. Bitte richten Sie zuerst ein ESPHome-Gerät mit der BLE-Bridge-Komponente ein. Siehe [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/ESP_BRIDGE_SETUP.md) für eine Anleitung.",
+      "no_esphome_devices": "Keine ESPHome-Geräte gefunden. Bitte richten Sie zuerst ein ESPHome-Gerät mit der BLE-Bridge-Komponente ein. Siehe [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/docs/ESP_BRIDGE_SETUP.md) für eine Anleitung.",
       "cannot_connect": "Verbindung zum Rasierer fehlgeschlagen. Bitte stelle sicher, dass er eingeschaltet, in Reichweite und nicht mit einem anderen Gerät (z.B. deinem Smartphone) verbunden ist.",
       "device_not_found": "Das Gerät wurde nicht gefunden. Bitte stelle sicher, dass es eingeschaltet und in Reichweite ist.",
       "not_paired": "Der Rasierer ist nicht mit diesem System gepairt.",

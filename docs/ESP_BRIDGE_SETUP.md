@@ -43,8 +43,8 @@ Choose a template based on your board:
 
 | Board | Template |
 |-------|----------|
-| Generic ESP32 (DevKit, etc.) | [`esphome/esp32-generic.yaml`](esphome/esp32-generic.yaml) |
-| M5Stack Atom Lite | [`esphome/atom-lite.yaml`](esphome/atom-lite.yaml) |
+| Generic ESP32 (DevKit, etc.) | [`esphome/esp32-generic.yaml`](../esphome/esp32-generic.yaml) |
+| M5Stack Atom Lite | [`esphome/atom-lite.yaml`](../esphome/atom-lite.yaml) |
 
 Copy the template to your ESPHome configuration directory and customize:
 
@@ -128,7 +128,7 @@ pairing succeeded. The `mode` value depends on your shaver model (9 = Just Works
 ## Multi-Device Setup
 
 A single ESP32 can bridge **two Philips devices** simultaneously (e.g. a shaver and an
-OneBlade). The [`atom-lite.yaml`](esphome/atom-lite.yaml) template shows a dual-device
+OneBlade). The [`atom-lite.yaml`](../esphome/atom-lite.yaml) template shows a dual-device
 configuration.
 
 ### Key differences from single-device

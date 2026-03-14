@@ -109,8 +109,7 @@ See **[docs/AUTOMATIONS.md](docs/AUTOMATIONS.md)** for ready-to-use automation e
 
 * A compatible Philips Shaver (see [Tested Models](#tested-models) above).
 * **Either** a Home Assistant instance with the **Bluetooth integration** enabled and a working Bluetooth adapter, **or** an ESP32 running the [BLE bridge component](docs/ESP_BRIDGE_SETUP.md).
-* *Exclusive Connection:* The shaver supports only one active connection at a time.
-* *Manufacturer Apps:* You must unpair/remove the shaver from any other devices (especially smartphones with the [GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) or [OneBlade](https://www.philips.com/c-w/country-selectorpage/myoneblade.html) app) before Home Assistant can connect.
+* The shaver supports only one active connection at a time — it must be unpaired from your phone and any manufacturer app ([GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) / [OneBlade](https://www.philips.com/c-w/country-selectorpage/myoneblade.html)) before Home Assistant can connect.
 
 ---
 
