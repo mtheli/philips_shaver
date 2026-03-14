@@ -139,11 +139,11 @@ The integration supports two connection methods:
 | **[Option A](#option-a-direct-bluetooth-pairing)** | **Direct Bluetooth** | HA host is within Bluetooth range of the shaver |
 | **[Option B](#option-b-esp32-ble-bridge)** | **ESP32 BLE Bridge** | Shaver is out of range — an ESP32 relays BLE over WiFi |
 
-### Option A: Direct Bluetooth (Pairing)
-
 > [!IMPORTANT]
 > The shaver must be **unpaired from your phone** before connecting to Home Assistant.
 > Remove it from your phone's Bluetooth settings **and** the [GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) / [OneBlade](https://www.philips.com/c-w/country-selectorpage/myoneblade.html) app. The shaver only allows one active connection.
+
+### Option A: Direct Bluetooth (Pairing)
 
 1.  Ensure the shaver is **turned on** or placed on its **charging stand**.
 2.  Navigate to **Settings > Devices & Services**.
