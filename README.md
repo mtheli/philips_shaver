@@ -141,37 +141,25 @@ The integration supports two connection methods:
 
 ### Option A: Direct Bluetooth (Pairing)
 
-#### Before You Start
-
-Make sure the shaver is **not connected to your phone**:
-
-1. Open the Bluetooth settings on your phone and *Unpair / Forget* the shaver.
-2. If you used the [GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) or [OneBlade](https://www.philips.com/c-w/country-selectorpage/myoneblade.html) app, remove the device there as well. The shaver will refuse a new connection if it is still bonded to a mobile app.
-
-#### Adding the Integration
+> [!IMPORTANT]
+> The shaver must be **unpaired from your phone** before connecting to Home Assistant.
+> Remove it from your phone's Bluetooth settings **and** the [GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) / [OneBlade](https://www.philips.com/c-w/country-selectorpage/myoneblade.html) app. The shaver only allows one active connection.
 
 1.  Ensure the shaver is **turned on** or placed on its **charging stand**.
 2.  Navigate to **Settings > Devices & Services**.
 3.  The shaver should appear under **Discovered** — click **Configure**.
     - If not discovered automatically, click **+ Add Integration**, search for "**Philips Shaver**", and enter the MAC address manually.
-4.  Click **Submit**. The integration will attempt to connect.
+4.  Click **Submit**. The integration connects and pairs automatically.
 
-#### Automatic Pairing (HAOS / Linux with BlueZ)
-
-If the shaver is not yet paired, the integration will offer **one-click pairing** directly from the setup dialog. Just click **Submit** — pairing, trusting, and connecting happens automatically via D-Bus/BlueZ. This works on Home Assistant OS and any Linux system with BlueZ.
-
-The integration also handles **stale bonds** automatically: if the shaver was previously paired but the bond is no longer valid (e.g., after re-pairing with a phone), the old bond is removed and a fresh pairing is initiated.
-
-#### Manual Pairing (Fallback)
-
-On systems without D-Bus (e.g., Docker containers, macOS), the integration will show instructions for manual pairing via terminal instead.
+> [!TIP]
+> **Automatic pairing** works out of the box on Home Assistant OS and any Linux system with BlueZ. Pairing, trusting, and stale bond removal are handled automatically via D-Bus — no terminal commands needed.
 
 <details>
-<summary>Click to expand manual pairing options</summary>
+<summary>Manual Pairing (Fallback for Docker, macOS, etc.)</summary>
 
-##### Automated Pairing Script
+On systems without D-Bus, the integration will show instructions for manual pairing via terminal instead. You have two options:
 
-This integration includes a pairing script that automates the process:
+#### Automated Pairing Script
 
 ```bash
 bash /config/custom_components/philips_shaver/scripts/pair.sh
@@ -185,23 +173,22 @@ You can also pair a specific device directly:
 bash /config/custom_components/philips_shaver/scripts/pair.sh AA:BB:CC:11:22:33
 ```
 
-##### Manual Pairing with `bluetoothctl`
+#### Manual Pairing with `bluetoothctl`
 
-1.  Ensure your shaver is **turned on or placed on its charging stand**.
-2.  Start the Bluetooth control tool:
+1.  Start the Bluetooth control tool:
 
     ```bash
     bluetoothctl
     ```
 
-3.  Register the pairing agent (required for LE Secure Connections):
+2.  Register the pairing agent (required for LE Secure Connections):
 
     ```bash
     agent KeyboardDisplay
     default-agent
     ```
 
-4.  Start scanning to find your shaver. It will appear as "Philips XP9201" or similar. Note down its **MAC Address** (e.g., `AA:BB:CC:11:22:33`).
+3.  Start scanning to find your shaver. It will appear as "Philips XP9201" or similar. Note down its **MAC Address** (e.g., `AA:BB:CC:11:22:33`).
 
     ```bash
     scan on
@@ -209,21 +196,11 @@ bash /config/custom_components/philips_shaver/scripts/pair.sh AA:BB:CC:11:22:33
     scan off
     ```
 
-5.  Perform the pairing with the shaver's MAC address:
+4.  Pair and trust the device:
 
     ```bash
     pair AA:BB:CC:11:22:33
-    ```
-
-6.  Trust the device to ensure stable auto-reconnection:
-
-    ```bash
     trust AA:BB:CC:11:22:33
-    ```
-
-7.  Exit the tool:
-
-    ```bash
     exit
     ```
 
