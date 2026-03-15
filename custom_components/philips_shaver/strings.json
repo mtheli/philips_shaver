@@ -2,7 +2,7 @@
   "issues": {
     "esp_bridge_outdated": {
       "title": "ESP bridge firmware update required",
-      "description": "Your ESP bridge is running **v{version}**, but **v{min_version}** or newer is required for full functionality.\n\nRebuild and flash your ESPHome device to get the latest firmware.\n\nSee the [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/docs/ESP_BRIDGE_SETUP.md) for details."
+      "description": "Your ESP bridge is running **v{version}**, but **v{min_version}** or newer is required for full functionality.\n\nRebuild and flash your ESPHome device to get the latest firmware.\n\nSee the ESP Bridge Setup Guide in the integration documentation for details."
     }
   },
   "options": {
@@ -52,7 +52,7 @@
       },
       "bluetooth_confirm": {
         "title": "Confirm detected device",
-        "description": "Do you want to add the detected Philips Shaver **{name}** to Home Assistant?\n\nℹ️ **Before continuing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **unpaired** from your phone\n   — Remove from Bluetooth settings **and** GroomTribe / OneBlade app\n3. ⬜ Shaver is **paired** with this system via `bluetoothctl` (see [README](https://github.com/mtheli/philips_shaver#option-a-direct-bluetooth-pairing))\n\nClicking Submit will connect to the device to verify pairing and read hardware capabilities. This may take a few seconds."
+        "description": "Do you want to add the detected Philips Shaver **{name}** to Home Assistant?\n\nℹ️ **Before continuing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **unpaired** from your phone\n   — Remove from Bluetooth settings **and** GroomTribe / OneBlade app\n3. ⬜ Shaver is **paired** with this system via `bluetoothctl`\n\nClicking Submit will connect to the device to verify pairing and read hardware capabilities. This may take a few seconds."
       },
       "esp_select_device": {
         "title": "Select BLE Device",
@@ -80,13 +80,13 @@
     },
     "error": {
       "abort_if_unique_id_configured": "This device is already configured.",
-      "no_esphome_devices": "No ESPHome devices found. Please set up an ESPHome device with the BLE bridge component first. See the [ESP Bridge Setup Guide](https://github.com/mtheli/philips_shaver/blob/main/docs/ESP_BRIDGE_SETUP.md) for instructions.",
+      "no_esphome_devices": "No ESPHome devices found. Please set up an ESPHome device with the BLE bridge component first. See the ESP Bridge Setup Guide in the integration documentation for instructions.",
       "cannot_connect": "Failed to connect to the shaver. Please ensure it is powered on, in range, and not connected to another device (e.g. your phone).",
       "device_not_found": "Device not found. Please ensure it is powered on and in range.",
       "not_paired": "The shaver is not paired with this system.",
       "out_of_slots": "No Bluetooth adapter could reach the device. Either all connection slots are in use, or the device is out of range. Ensure the shaver is powered on and close to the Bluetooth adapter, and try removing unused Bluetooth devices if needed.",
       "connection_aborted": "Connection was aborted. The device may be out of range or connected through an unsupported Bluetooth proxy. This integration requires direct Bluetooth or the dedicated ESP32 BLE bridge — standard ESPHome Bluetooth Proxies are not supported.",
-      "pairing_failed": "Bluetooth pairing failed. Ensure the shaver is powered on and not connected to another device. If the problem persists, try turning the shaver off and back on, or pair manually via terminal (see [README](https://github.com/mtheli/philips_shaver#option-a-direct-bluetooth-pairing)).",
+      "pairing_failed": "Bluetooth pairing failed. Ensure the shaver is powered on and not connected to another device. If the problem persists, try turning the shaver off and back on, or pair manually via terminal.",
       "unknown": "Unexpected error. Please check the logs."
     },
     "abort": {
@@ -98,20 +98,16 @@
   "entity": {
     "light": {
       "color_low": {
-        "name": "Color: Low",
-        "description": "RGB color used for low shaver status."
+        "name": "Color: Low"
       },
       "color_ok": {
-        "name": "Color: OK",
-        "description": "RGB color used for normal shaver status."
+        "name": "Color: OK"
       },
       "color_high": {
-        "name": "Color: High",
-        "description": "RGB color used for high shaver status."
+        "name": "Color: High"
       },
       "color_motion": {
-        "name": "Color: Motion",
-        "description": "RGB color used for the motion lighting effect."
+        "name": "Color: Motion"
       }
     },
     "select": {
