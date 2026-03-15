@@ -63,15 +63,16 @@ SPEED_VERDICTS = {
 CHAR_DAYS_SINCE_LAST_USED = "8d560108-3cb9-4387-a7e8-b79d826a7025"
 
 """
-	TODO: System Notifications — implement notification handling
+System Notifications — uint32 LE bitfield (NOTIFY, READ, WRITE)
 
-	UUID: 8d560110-3cb9-4387-a7e8-b79d826a7025
-	Properties: NOTIFY, READ, WRITE
-	Value: (0x) 12-00-00-00
-	Descriptors:
-	Client Characteristic Configuration
-	UUID: 0x2902
+UUID: 8d560110-3cb9-4387-a7e8-b79d826a7025
+Bit 0: Motor Blocked
+Bit 1: Clean Reminder
+Bit 2: Head Replacement
+Bit 3: Battery Overheated
+Bit 4: Unplug Before Use
 """
+CHAR_CLEANING_REMINDER = "8d56010d-3cb9-4387-a7e8-b79d826a7025"
 CHAR_BLADE_REPLACEMENT = "8d56010e-3cb9-4387-a7e8-b79d826a7025"
 CHAR_SYSTEM_NOTIFICATIONS = "8d560110-3cb9-4387-a7e8-b79d826a7025"
 
@@ -494,6 +495,7 @@ POLL_READ_CHARS = [
     CHAR_HANDLE_LOAD_TYPE,
     CHAR_MOTION_TYPE,
     CHAR_APP_HANDLE_SETTINGS,
+    CHAR_SYSTEM_NOTIFICATIONS,
     CHAR_SPEED,
     CHAR_SPEED_ZONE_THRESHOLD,
 ]

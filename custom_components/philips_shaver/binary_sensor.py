@@ -30,6 +30,12 @@ async def async_setup_entry(
         PhilipsTravelLockBinarySensor(coordinator, entry),
     ]
 
+    # System notification binary sensors (bit 0–4)
+    for bit, key, icon_on, icon_off in NOTIFICATION_BITS:
+        entities.append(
+            PhilipsNotificationBinarySensor(coordinator, entry, bit, key, icon_on, icon_off)
+        )
+
     if is_esp:
         # Bridge sensors live on the ESP Bridge sub-device
         entities.append(PhilipsEspBridgeAliveSensor(coordinator, entry))
@@ -79,6 +85,45 @@ class PhilipsTravelLockBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
     @property
     def icon(self) -> str:
         return "mdi:lock" if self.is_on else "mdi:lock-open-variant"
+
+
+NOTIFICATION_BITS = [
+    # (bit_mask, translation_key, icon_on, icon_off)
+    (0x01, "notification_motor_blocked", "mdi:engine-off", "mdi:engine"),
+    (0x02, "notification_clean_reminder", "mdi:spray-bottle", "mdi:spray-bottle"),
+    (0x04, "notification_head_replacement", "mdi:razor-double-edge", "mdi:razor-double-edge"),
+    (0x08, "notification_battery_overheated", "mdi:thermometer-alert", "mdi:thermometer"),
+    (0x10, "notification_unplug_required", "mdi:power-plug-off", "mdi:power-plug"),
+]
+
+
+class PhilipsNotificationBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
+    """Binary sensor for a single system notification bit."""
+
+    def __init__(
+        self,
+        coordinator: PhilipsShaverCoordinator,
+        entry: ConfigEntry,
+        bit_mask: int,
+        translation_key: str,
+        icon_on: str,
+        icon_off: str,
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._bit_mask = bit_mask
+        self._attr_translation_key = translation_key
+        self._attr_unique_id = f"{self._device_id}_{translation_key}"
+        self._icon_on = icon_on
+        self._icon_off = icon_off
+
+    @property
+    def is_on(self) -> bool:
+        flags = self.coordinator.data.get("system_notifications", 0)
+        return bool(flags & self._bit_mask)
+
+    @property
+    def icon(self) -> str:
+        return self._icon_on if self.is_on else self._icon_off
 
 
 class PhilipsShaverBleConnectedSensor(PhilipsShaverEntity, BinarySensorEntity):

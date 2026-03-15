@@ -303,6 +303,21 @@
           "on": "Online",
           "off": "Offline"
         }
+      },
+      "notification_motor_blocked": {
+        "name": "⚠ Motor blockiert"
+      },
+      "notification_clean_reminder": {
+        "name": "⚠ Reinigung fällig"
+      },
+      "notification_head_replacement": {
+        "name": "⚠ Scherkopf wechseln"
+      },
+      "notification_battery_overheated": {
+        "name": "⚠ Akku überhitzt"
+      },
+      "notification_unplug_required": {
+        "name": "⚠ Ausstecken erforderlich"
       }
     },
     "button": {
@@ -311,6 +326,12 @@
       },
       "cartridge_reset": {
         "name": "Reinigungskartusche zurücksetzen"
+      },
+      "reset_clean_reminder": {
+        "name": "Reinigungshinweis zurücksetzen"
+      },
+      "reset_all_notifications": {
+        "name": "Alle Hinweise zurücksetzen"
       }
     },
     "switch": {

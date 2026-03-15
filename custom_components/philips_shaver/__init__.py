@@ -29,6 +29,7 @@ PLATFORMS = [Platform.SENSOR, Platform.LIGHT, Platform.SELECT, Platform.BINARY_S
 SERVICE_FETCH_HISTORY = "fetch_history"
 SERVICE_READ_CHARACTERISTIC = "read_characteristic"
 SERVICE_READ_CHARACTERISTIC_RAW = "read_characteristic_raw"
+SERVICE_WRITE_CHARACTERISTIC = "write_characteristic"
 
 UUID_TEMPLATE_PHILIPS = "8d56%s-3cb9-4387-a7e8-b79d826a7025"
 UUID_TEMPLATE_BLE_STANDARD = "0000%s-0000-1000-8000-00805f9b34fb"
@@ -249,6 +250,48 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             schema=_char_schema, supports_response=SupportsResponse.ONLY,
         )
 
+    if not hass.services.has_service(DOMAIN, SERVICE_WRITE_CHARACTERISTIC):
+        async def handle_write_characteristic(call: ServiceCall) -> ServiceResponse:
+            """Write a hex value to a BLE GATT characteristic."""
+            coord = _get_coordinator(hass, call.data.get("entry_id"))
+            if not coord:
+                return {"status": "no_device"}
+
+            raw_uuid = call.data["characteristic_uuid"]
+            char_uuid = _expand_char_uuid(raw_uuid)
+            hex_value = call.data["value"].replace(" ", "")
+
+            if not coord.transport.is_connected:
+                return {"status": "not_connected", "characteristic": char_uuid}
+
+            try:
+                payload = bytes.fromhex(hex_value)
+            except ValueError:
+                return {"status": "error", "error": f"Invalid hex value: {hex_value}"}
+
+            try:
+                await coord.transport.write_char(char_uuid, payload)
+            except Exception as e:
+                _LOGGER.error("Failed to write characteristic %s: %s", char_uuid, e)
+                return {"status": "error", "characteristic": char_uuid, "error": str(e)}
+
+            return {
+                "status": "ok",
+                "characteristic": char_uuid,
+                "written": hex_value,
+                "bytes": len(payload),
+            }
+
+        hass.services.async_register(
+            DOMAIN, SERVICE_WRITE_CHARACTERISTIC, handle_write_characteristic,
+            schema=vol.Schema({
+                vol.Required("characteristic_uuid"): str,
+                vol.Required("value"): str,
+                vol.Optional("entry_id"): str,
+            }),
+            supports_response=SupportsResponse.ONLY,
+        )
+
     device_id = entry.data.get("address") or entry.data.get(CONF_ESP_DEVICE_NAME)
     _LOGGER.info("Philips Shaver integration loaded – device: %s", device_id)
     return True
@@ -269,6 +312,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, SERVICE_FETCH_HISTORY)
         hass.services.async_remove(DOMAIN, SERVICE_READ_CHARACTERISTIC)
         hass.services.async_remove(DOMAIN, SERVICE_READ_CHARACTERISTIC_RAW)
+        hass.services.async_remove(DOMAIN, SERVICE_WRITE_CHARACTERISTIC)
 
     _LOGGER.info("Unloading philips shaver integration finished")
     return True

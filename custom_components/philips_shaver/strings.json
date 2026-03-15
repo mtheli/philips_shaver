@@ -303,6 +303,21 @@
           "on": "Online",
           "off": "Offline"
         }
+      },
+      "notification_motor_blocked": {
+        "name": "⚠ Motor Blocked"
+      },
+      "notification_clean_reminder": {
+        "name": "⚠ Clean Reminder"
+      },
+      "notification_head_replacement": {
+        "name": "⚠ Head Replacement"
+      },
+      "notification_battery_overheated": {
+        "name": "⚠ Battery Overheated"
+      },
+      "notification_unplug_required": {
+        "name": "⚠ Unplug Required"
       }
     },
     "button": {
@@ -311,6 +326,12 @@
       },
       "cartridge_reset": {
         "name": "Reset Cleaning Cartridge"
+      },
+      "reset_clean_reminder": {
+        "name": "Reset Clean Reminder"
+      },
+      "reset_all_notifications": {
+        "name": "Reset All Notifications"
       }
     },
     "switch": {

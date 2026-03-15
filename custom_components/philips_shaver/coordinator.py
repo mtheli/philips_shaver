@@ -66,6 +66,7 @@ from .const import (
     CHAR_CUSTOM_SHAVING_MODE_SETTINGS,
     CHAR_SPEED,
     CHAR_SPEED_ZONE_THRESHOLD,
+    CHAR_SYSTEM_NOTIFICATIONS,
     CONF_ADDRESS,
     CONF_CAPABILITIES,
     CONF_SERVICES,
@@ -112,6 +113,7 @@ NOTIFICATION_CHARS = [
     CHAR_MOTION_TYPE,
     CHAR_APP_HANDLE_SETTINGS,
     CHAR_SPEED,
+    CHAR_SYSTEM_NOTIFICATIONS,
 ]
 
 
@@ -215,6 +217,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "speed": None,
             "speed_threshold_high": None,
             "speed_verdict": None,
+            "system_notifications": 0,
             "last_seen": None,
         }
 
@@ -449,6 +452,10 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 new_data["speed_verdict"] = "optimal"
             else:
                 new_data["speed_verdict"] = "none"
+
+        # System Notifications (0x0110) — uint32 LE bitfield
+        if raw := results.get(CHAR_SYSTEM_NOTIFICATIONS):
+            new_data["system_notifications"] = int.from_bytes(raw, "little")
 
         # App Handle Settings (0x0319) — coaching/feedback bitfield
         if raw := results.get(CHAR_APP_HANDLE_SETTINGS):

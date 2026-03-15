@@ -57,3 +57,33 @@ read_characteristic_raw:
       required: false
       selector:
         text:
+
+write_characteristic:
+  name: Write Characteristic
+  description: >-
+    Writes a hex value to a BLE GATT characteristic.
+    Accepts short form (e.g. "0x0110") or full UUID.
+  fields:
+    characteristic_uuid:
+      name: Characteristic UUID
+      description: >-
+        The characteristic UUID. Short form like "0x0110"
+        is automatically expanded to the full Philips UUID.
+      required: true
+      example: "0x0110"
+      selector:
+        text:
+    value:
+      name: Value (Hex)
+      description: >-
+        The value to write as a hex string (e.g. "00000000" or "01").
+      required: true
+      example: "00000000"
+      selector:
+        text:
+    entry_id:
+      name: Config Entry ID
+      description: The config entry ID of the shaver device. If omitted, uses the first available device.
+      required: false
+      selector:
+        text:
