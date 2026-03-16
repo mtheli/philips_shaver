@@ -10,6 +10,7 @@ This is a custom component for Home Assistant to integrate **Philips Bluetooth-e
 
 | Model | Type | Direct BLE | ESP32 Bridge | Tested by |
 | :--- | :--- | :---: | :---: | :--- |
+| [**Series 7000 / S7886**](https://www.usa.philips.com/c-p/S7886_84/shaver-series-7000-wet-dry-electric-shaver) | Shaver | :white_check_mark: | | Community ([#5](https://github.com/mtheli/philips_shaver/issues/5)) |
 | [**Series 7000 / S7887**](https://www.usa.philips.com/c-p/S7887_82/shaver-series-7000-wet-dry-electric-shaver) | Shaver | | :white_check_mark: | Community ([forum](https://community.home-assistant.io/t/philips-bluetooth-shaver-monitoring/858822/8)) |
 | [**Series 9000 / XP9201**](https://www.usa.philips.com/c-p/XP9201_88/i9000-prestige-wet-dry-electric-shaver-with-senseiq) | Shaver | :white_check_mark: | :white_check_mark: | Maintainer |
 | [**Series 9000 / XP9400**](https://www.usa.philips.com/c-p/XP9400_89/i9000-prestige-ultra-wet-dry-electric-shaver-with-senseiq-pr) | Shaver | | :white_check_mark: | Community ([#3](https://github.com/mtheli/philips_shaver/issues/3)) |
@@ -144,12 +145,13 @@ The integration supports two connection methods:
 > Remove it from your phone's Bluetooth settings **and** the [GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) / [OneBlade](https://www.philips.com/c-w/country-selectorpage/myoneblade.html) app. The shaver only allows one active connection.
 >
 > To unpair on the device itself:
+> - **S7000 series**: Press and hold the on/off button for at least **10 seconds** until the notification symbol lights up 4 times briefly. Note: ~5 seconds activates travel mode — keep holding. ([Manual, p. 57](https://www.documents.philips.com/assets/20230524/321aee78595d447cb224b00c008c2dda.pdf))
 > - **i9000 / S-series shavers**: Press the menu button until you reach the Bluetooth menu, hold it until a cross and checkmark appear, then press again to select the checkmark. ([Manual](https://www.manualslib.com/guide/4036443/philips-i9000-prestige-xp9205-05-xp9204-30-xp9203-32-xp9202-20-manual.html#unpair-the-shaver-and-smartphone))
 > - **OneBlade 360**: Hold the power button for **10 seconds** until the light ring starts flashing blue. ([Philips Support](https://www.usa.philips.com/c-t/XC000020493/my-oneblade-360-connected-is-not-pairing-with-my-phone))
 
 ### Option A: Direct Bluetooth (Pairing)
 
-1.  Ensure the shaver is **turned on** or placed on its **charging stand**.
+1.  Ensure the shaver is **turned on**.
 2.  Navigate to **Settings > Devices & Services**.
 3.  The shaver should appear under **Discovered** — click **Configure**.
     - If not discovered automatically, click **+ Add Integration**, search for "**Philips Shaver**", and enter the MAC address manually.
@@ -226,6 +228,7 @@ For the complete setup guide, see **[ESP Bridge Setup Guide](ESP_BRIDGE_SETUP.md
 
 ## Troubleshooting & Caveats
 
+* *Pairing fails*: The shaver must be unpaired from **both** your phone's Bluetooth settings **and** from the device itself. Unpairing in the app alone is not enough — see the [unpairing instructions](#configuration) for your model. This is the most common cause of pairing failures.
 * *Connection Conflict*: If the integration fails to set up, ensure no smartphone is currently connected to the shaver.
 * *ESPHome Bluetooth Proxy*: The standard ESPHome Bluetooth Proxy does **not** work with this shaver because it requires LE Secure Connections pairing. Use the dedicated [ESP32 BLE Bridge](ESP_BRIDGE_SETUP.md) instead.
 * *Stability:* Bluetooth signals are weak. Ensure your HA host or ESP32 bridge is placed as close to the shaver's location as possible.
