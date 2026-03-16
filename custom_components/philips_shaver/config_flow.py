@@ -198,8 +198,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         if not device:
             raise DeviceNotFoundException("BLE device not found")
 
+        client: BleakClient | None = None
         try:
-            client: BleakClient | None = None
             client = await establish_connection(
                 BleakClient, device, "philips_shaver", timeout=15
             )
@@ -365,6 +365,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 raise NotPairedException from err
             _LOGGER.error("Connection error during capabilities fetch: %s", err)
             raise CannotConnectException from err
+        finally:
+            if client and client.is_connected:
+                await client.disconnect()
 
         return capabilities
 

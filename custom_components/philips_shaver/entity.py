@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.components.bluetooth import async_last_service_info
@@ -57,34 +57,7 @@ class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        # Only update device registry when relevant device data has changed
-        data = self.coordinator.data
-
-        model_changed = (
-            self.device_info.get("model") != data.get("model_number")
-            if self.device_info
-            else True
-        )
-        fw_changed = (
-            self.device_info.get("sw_version") != data.get("firmware")
-            if self.device_info
-            else True
-        )
-
-        if model_changed or fw_changed:
-            device_registry = dr.async_get(self.hass)
-            device = device_registry.async_get_device(
-                    identifiers={(DOMAIN, self._device_id)}
-                )
-
-            if device:
-                device_registry.async_update_device(
-                    device.id,
-                    model=data.get("model_number") or "i9000 / XP9201",
-                    sw_version=data.get("firmware"),
-                )
-
-        # dynamically updating icon
+        # Dynamic icon update
         if hasattr(self, "icon"):
             try:
                 new_icon = self.icon
@@ -97,7 +70,7 @@ class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
                     err,
                 )
 
-        self.async_write_ha_state()
+        super()._handle_coordinator_update()
 
     @property
     def available(self) -> bool:
@@ -112,7 +85,7 @@ class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
         # ESP bridge / BLE fallback: check last_seen freshness (10 min timeout)
         last_seen = self.coordinator.data.get("last_seen") if self.coordinator.data else None
         if last_seen:
-            return (datetime.now() - last_seen).total_seconds() < 600
+            return (datetime.now(timezone.utc) - last_seen).total_seconds() < 600
 
         return False
 

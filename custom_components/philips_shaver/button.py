@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from homeassistant.components.button import ButtonEntity
@@ -65,7 +65,7 @@ class PhilipsBladeReplacementButton(PhilipsShaverEntity, ButtonEntity):
 
         new_data = self.coordinator.data.copy()
         new_data["head_remaining"] = 100
-        new_data["last_seen"] = datetime.now()
+        new_data["last_seen"] = datetime.now(timezone.utc)
         self.coordinator.async_set_updated_data(new_data)
 
 

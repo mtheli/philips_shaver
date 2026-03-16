@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta, timezone
 import logging
 from typing import Any
 
@@ -222,22 +222,22 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         }
 
     async def async_start(self) -> None:
-        """Start initial refresh and live monitoring. Call after setup is complete."""
-        self.hass.async_create_task(self.async_refresh())
-
+        """Start live monitoring. Call after setup is complete."""
         if self.enable_live_updates:
-            self._live_task = self.hass.loop.create_task(self._start_live_monitoring())
+            self._live_task = self.entry.async_create_background_task(
+                self.hass, self._start_live_monitoring(), "philips_shaver_monitoring"
+            )
         else:
             _LOGGER.info("Live updates disabled – polling only")
 
-        if isinstance(self.transport, BleakTransport) and _LOGGER.isEnabledFor(logging.DEBUG):
-            await self._async_start_advertisement_logging()
-
-    async def _async_start_advertisement_logging(self) -> None:
+    def _start_advertisement_logging(self) -> None:
         """Log every advertisement from the shaver (useful for debugging)."""
 
         @callback
         def _advertisement_debug_callback(service_info, change):
+            if not _LOGGER.isEnabledFor(logging.DEBUG):
+                return
+
             adv = service_info.advertisement
             _LOGGER.debug(
                 "ADVERTISEMENT %s | Name: %s | RSSI: %s dBm | "
@@ -262,7 +262,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.hass,
             _advertisement_debug_callback,
             BluetoothCallbackMatcher(address=self.address),
-            BluetoothScanningMode.ACTIVE,
+            BluetoothScanningMode.PASSIVE,
         )
 
     # ------------------------------------------------------------------
@@ -275,7 +275,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self.transport.is_connected:
             _LOGGER.debug("Live connection active – polling skipped")
             data = self.data or {}
-            data["last_seen"] = datetime.now()
+            data["last_seen"] = datetime.now(timezone.utc)
             return data
 
         if self.data is None:
@@ -284,7 +284,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # 2. Recent data within poll interval → skip
         last_seen = self.data.get("last_seen")
         if last_seen:
-            age = (datetime.now() - last_seen).total_seconds()
+            age = (datetime.now(timezone.utc) - last_seen).total_seconds()
 
             if age < self.poll_interval_seconds:
                 _LOGGER.debug(
@@ -463,8 +463,36 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             new_data["lightring_enabled"] = bool(val & APP_SETTINGS_FULL_COACHING)
             new_data["app_handle_settings_raw"] = raw
 
-        # Always update – important for "available"
-        new_data["last_seen"] = datetime.now()
+        # Change detection: only update last_seen when data actually changed
+        # or every 30s as heartbeat for availability tracking
+        old = self.data or {}
+        changed = any(
+            new_data.get(k) != old.get(k)
+            for k in new_data
+            if k != "last_seen"
+        )
+
+        now = datetime.now(timezone.utc)
+        last = old.get("last_seen")
+        if changed or last is None or (now - last).total_seconds() >= 30:
+            new_data["last_seen"] = now
+        else:
+            new_data["last_seen"] = last
+
+        # Device registry: only update when model or firmware actually changed
+        model = new_data.get("model_number")
+        firmware = new_data.get("firmware")
+        if changed and (model or firmware):
+            dev_reg = dr.async_get(self.hass)
+            device = dev_reg.async_get_device(
+                identifiers={(DOMAIN, self.address)}
+            )
+            if device and (device.model != model or device.sw_version != firmware):
+                dev_reg.async_update_device(
+                    device.id,
+                    model=model or "Philips Shaver",
+                    sw_version=firmware,
+                )
 
         return new_data
 

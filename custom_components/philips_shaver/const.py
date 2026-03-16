@@ -108,7 +108,7 @@ CHAR_HEAD_REMAINING_MINUTES = "8d560118-3cb9-4387-a7e8-b79d826a7025"
 CHAR_SHAVING_TIME = "8d56010f-3cb9-4387-a7e8-b79d826a7025"
 # 01=off, 02=shaving, 03=charging
 """
-	Unknown Characteristic => SHAVER_HANDLE_STATE_CHARACTERISTIC_UUID (01 = aktiv | 02 = charging)
+	Unknown Characteristic => SHAVER_HANDLE_STATE_CHARACTERISTIC_UUID (01 = active | 02 = charging)
 	UUID: 8d56010a-3cb9-4387-a7e8-b79d826a7025
 	Properties: NOTIFY, READ
 	Value: (0x) 01

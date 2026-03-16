@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -483,9 +483,7 @@ class PhilipsDeviceActivitySensor(PhilipsShaverEntity, SensorEntity):
 # =============================================================================
 class PhilipsLastSeenSensor(PhilipsShaverEntity, RestoreEntity, SensorEntity):
     _attr_translation_key = "last_seen"
-    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
-    _attr_device_class = SensorDeviceClass.DURATION
-    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:clock-check"
 
@@ -503,28 +501,19 @@ class PhilipsLastSeenSensor(PhilipsShaverEntity, RestoreEntity, SensorEntity):
             return  # Already have fresh data
 
         last_state = await self.async_get_last_state()
-        if last_state and (iso := last_state.attributes.get("last_seen_iso")):
+        if last_state and last_state.state not in (None, "unknown", "unavailable"):
             try:
-                restored = datetime.fromisoformat(iso)
+                restored = datetime.fromisoformat(last_state.state)
+                if restored.tzinfo is None:
+                    restored = restored.replace(tzinfo=timezone.utc)
                 self.coordinator.data["last_seen"] = restored
                 _LOGGER.info("Restored last_seen: %s", restored.isoformat())
             except (ValueError, TypeError):
                 pass
 
     @property
-    def extra_state_attributes(self) -> dict[str, str] | None:
-        """Persist the actual timestamp for restore on restart."""
-        last_seen = self.coordinator.data.get("last_seen")
-        if last_seen:
-            return {"last_seen_iso": last_seen.isoformat()}
-        return None
-
-    @property
-    def native_value(self) -> int | None:
-        last_seen = self.coordinator.data.get("last_seen")
-        if not last_seen:
-            return None
-        return int((datetime.now() - last_seen).total_seconds() // 60)
+    def native_value(self) -> datetime | None:
+        return self.coordinator.data.get("last_seen")
 
 
 
@@ -639,9 +628,10 @@ class PhilipsRemainingCleaningCyclesSensor(
                     pass
             if "sync_timestamp" in attrs:
                 try:
-                    self._sync_timestamp = datetime.fromisoformat(
-                        attrs["sync_timestamp"]
-                    )
+                    restored = datetime.fromisoformat(attrs["sync_timestamp"])
+                    if restored.tzinfo is None:
+                        restored = restored.replace(tzinfo=timezone.utc)
+                    self._sync_timestamp = restored
                 except (ValueError, TypeError):
                     pass
 
@@ -651,7 +641,7 @@ class PhilipsRemainingCleaningCyclesSensor(
             return None
         # Apply real-time evaporation since last sync
         days_since = (
-            (datetime.now() - self._sync_timestamp).total_seconds() / 86400
+            (datetime.now(timezone.utc) - self._sync_timestamp).total_seconds() / 86400
         )
         evaporation = days_since * EVAPORATION_RATE
         return max(0.0, min(CARTRIDGE_CAPACITY, self._stored_remaining - evaporation))
@@ -673,14 +663,14 @@ class PhilipsRemainingCleaningCyclesSensor(
             if self._sync_cleaning_count is None:
                 # First sync: initialize baseline
                 self._sync_cleaning_count = current_cycles
-                self._sync_timestamp = datetime.now()
+                self._sync_timestamp = datetime.now(timezone.utc)
             elif current_cycles != self._sync_cleaning_count:
                 self._recalculate(current_cycles)
         super()._handle_coordinator_update()
 
     def _recalculate(self, current_cycles: int) -> None:
         """Apply the evaporation algorithm to compute remaining cycles."""
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         days_since_sync = (
             (now - self._sync_timestamp).total_seconds() / 86400
             if self._sync_timestamp
@@ -724,7 +714,7 @@ class PhilipsRemainingCleaningCyclesSensor(
         current = self.coordinator.data.get("cleaning_cycles")
         if current is not None:
             self._sync_cleaning_count = current
-        self._sync_timestamp = datetime.now()
+        self._sync_timestamp = datetime.now(timezone.utc)
         self.async_write_ha_state()
 
 

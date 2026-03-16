@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -193,7 +193,7 @@ class PhilipsColorConfigLight(PhilipsShaverEntity, LightEntity):
 
         new_data = self.coordinator.data.copy()
         new_data[key] = (r, g, b)
-        new_data["last_seen"] = datetime.now()
+        new_data["last_seen"] = datetime.now(timezone.utc)
 
         self.coordinator.async_set_updated_data(new_data)
 

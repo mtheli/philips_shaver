@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
@@ -101,5 +101,5 @@ class PhilipsLightRingSwitch(PhilipsShaverEntity, SwitchEntity):
         new_data = self.coordinator.data.copy()
         new_data["lightring_enabled"] = enabled
         new_data["app_handle_settings_raw"] = new_raw
-        new_data["last_seen"] = datetime.now()
+        new_data["last_seen"] = datetime.now(timezone.utc)
         self.coordinator.async_set_updated_data(new_data)
