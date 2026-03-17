@@ -133,7 +133,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Start polling/live monitoring after platforms are registered
     await coordinator.async_start()
     if transport_type != TRANSPORT_ESP_BRIDGE:
-        coordinator._start_advertisement_logging()
+        coordinator._start_advertisement_callback()
 
     # Register services (only once)
     if not hass.services.has_service(DOMAIN, SERVICE_FETCH_HISTORY):
