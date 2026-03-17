@@ -92,28 +92,32 @@ from .utils import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# Characteristics to subscribe for live notifications
+# Characteristics to subscribe for live notifications.
+# Ordered by priority: real-time data first (subscribed before device sleeps).
 NOTIFICATION_CHARS = [
+    # Real-time (changes every second during use)
     CHAR_DEVICE_STATE,
-    CHAR_TRAVEL_LOCK,
+    CHAR_MOTOR_RPM,
+    CHAR_MOTOR_CURRENT,
+    CHAR_PRESSURE,
+    CHAR_SHAVING_TIME,
+    CHAR_SPEED,
+    # Per-session (changes on state transitions)
     CHAR_BATTERY_LEVEL,
+    CHAR_SYSTEM_NOTIFICATIONS,
+    CHAR_HANDLE_LOAD_TYPE,
+    CHAR_MOTION_TYPE,
+    # Slow-changing (counters, config — updated infrequently)
+    CHAR_TRAVEL_LOCK,
     CHAR_AMOUNT_OF_CHARGES,
     CHAR_AMOUNT_OF_OPERATIONAL_TURNS,
     CHAR_CLEANING_PROGRESS,
     CHAR_CLEANING_CYCLES,
-    CHAR_MOTOR_RPM,
-    CHAR_MOTOR_CURRENT,
-    CHAR_PRESSURE,
     CHAR_HEAD_REMAINING,
     CHAR_HEAD_REMAINING_MINUTES,
-    CHAR_SHAVING_TIME,
     CHAR_SHAVING_MODE_SETTINGS,
     CHAR_TOTAL_AGE,
-    CHAR_HANDLE_LOAD_TYPE,
-    CHAR_MOTION_TYPE,
     CHAR_APP_HANDLE_SETTINGS,
-    CHAR_SPEED,
-    CHAR_SYSTEM_NOTIFICATIONS,
 ]
 
 
