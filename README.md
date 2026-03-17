@@ -110,7 +110,7 @@ See **[AUTOMATIONS.md](docs/AUTOMATIONS.md)** for ready-to-use automation exampl
 
 * A compatible Philips Shaver (see [Tested Models](#tested-models) above).
 * **Either** a Home Assistant instance with the **Bluetooth integration** enabled and a working Bluetooth adapter, **or** an ESP32 running the [BLE bridge component](ESP_BRIDGE_SETUP.md).
-* The shaver supports only one active connection at a time — it must be unpaired from your phone and any manufacturer app ([GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) / [OneBlade](https://www.philips.com/c-w/country-selectorpage/myoneblade.html)) before Home Assistant can connect.
+* The shaver supports only one active connection at a time — it must be unpaired from your phone, any manufacturer app ([GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) / [OneBlade](https://www.philips.com/c-w/country-selectorpage/myoneblade.html)), **and from the device itself** before Home Assistant can connect.
 
 ---
 
@@ -141,10 +141,11 @@ The integration supports two connection methods:
 | **[Option B](#option-b-esp32-ble-bridge)** | **ESP32 BLE Bridge** | Shaver is out of range — an ESP32 relays BLE over WiFi |
 
 > [!IMPORTANT]
-> The shaver must be **unpaired from your phone** before connecting to Home Assistant.
-> Remove it from your phone's Bluetooth settings **and** the [GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) / [OneBlade](https://www.philips.com/c-w/country-selectorpage/myoneblade.html) app. The shaver only allows one active connection.
+> The shaver must be **fully unpaired** before connecting to Home Assistant. This is a **two-step process**:
 >
-> To unpair on the device itself:
+> **Step 1 — Unpair from your phone:** Remove the shaver from your phone's Bluetooth settings **and** from the [GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) / [OneBlade](https://www.philips.com/c-w/country-selectorpage/myoneblade.html) app.
+>
+> **Step 2 — Unpair on the device itself:** The shaver stores its own pairing bond. App-only unpairing is **not enough** — you must also reset the pairing on the device:
 > - **S7000 series**: Press and hold the on/off button for at least **10 seconds** until the notification symbol lights up 4 times briefly. Note: ~5 seconds activates travel mode — keep holding. ([Manual, p. 57](https://www.documents.philips.com/assets/20230524/321aee78595d447cb224b00c008c2dda.pdf))
 > - **i9000 / S-series shavers**: Press the menu button until you reach the Bluetooth menu, hold it until a cross and checkmark appear, then press again to select the checkmark. ([Manual](https://www.manualslib.com/guide/4036443/philips-i9000-prestige-xp9205-05-xp9204-30-xp9203-32-xp9202-20-manual.html#unpair-the-shaver-and-smartphone))
 > - **OneBlade 360**: Hold the power button for **10 seconds** until the light ring starts flashing blue. ([Philips Support](https://www.usa.philips.com/c-t/XC000020493/my-oneblade-360-connected-is-not-pairing-with-my-phone))
