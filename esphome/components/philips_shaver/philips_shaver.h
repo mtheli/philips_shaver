@@ -14,7 +14,7 @@
 namespace esphome {
 namespace philips_shaver {
 
-static const char *const PHILIPS_SHAVER_VERSION = "1.5.0";
+static const char *const PHILIPS_SHAVER_VERSION = "1.5.1";
 
 class PhilipsShaver : public ble_client::BLEClientNode,
                       public Component,
@@ -82,6 +82,12 @@ class PhilipsShaver : public ble_client::BLEClientNode,
   uint8_t rapid_disconnect_count_{0};
   static const uint8_t MAX_RAPID_DISCONNECTS = 3;
   static const uint32_t RAPID_DISCONNECT_THRESHOLD_MS = 5000;
+
+  // Auth failure backoff: disable reconnection after repeated failures
+  uint8_t auth_fail_count_{0};
+  uint32_t backoff_until_ms_{0};
+  static const uint8_t MAX_AUTH_FAILURES = 3;
+  static const uint32_t AUTH_BACKOFF_MS = 60000;  // 60 seconds
 
   // Notification throttle: min interval between events per characteristic
   uint32_t notify_throttle_ms_{500};

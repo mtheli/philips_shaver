@@ -75,6 +75,15 @@ void PhilipsShaver::setup() {
 
 void PhilipsShaver::loop() {
   uint32_t now = millis();
+
+  // Re-enable BLE client after auth failure backoff expires
+  if (this->backoff_until_ms_ != 0 && now >= this->backoff_until_ms_) {
+    ESP_LOGI(TAG, "Auth backoff expired — re-enabling BLE connection");
+    this->backoff_until_ms_ = 0;
+    this->auth_fail_count_ = 0;
+    this->parent()->set_enabled(true);
+  }
+
   if ((now - this->last_heartbeat_ms_) >= HEARTBEAT_INTERVAL_MS) {
     this->last_heartbeat_ms_ = now;
     this->fire_homeassistant_event(
@@ -609,15 +618,48 @@ void PhilipsShaver::gap_event_handler(esp_gap_ble_cb_event_t event,
       esp_ble_confirm_reply(param->ble_security.key_notif.bd_addr, true);
       break;
 
-    case ESP_GAP_BLE_AUTH_CMPL_EVT:
-      this->auth_completed_ = true;
-      this->rapid_disconnect_count_ = 0;
-      if (!param->ble_security.auth_cmpl.success) {
-        ESP_LOGW(TAG, "Auth failed (reason=%d) — removing bond for fresh pair",
-                 param->ble_security.auth_cmpl.fail_reason);
+    case ESP_GAP_BLE_AUTH_CMPL_EVT: {
+      // Only handle events for our device (GAP events fire for all connections)
+      if (memcmp(param->ble_security.auth_cmpl.bd_addr,
+                 this->parent()->get_remote_bda(), 6) != 0) {
+        break;
+      }
+
+      if (param->ble_security.auth_cmpl.success) {
+        this->auth_completed_ = true;
+        this->rapid_disconnect_count_ = 0;
+        this->auth_fail_count_ = 0;
+      } else {
+        this->auth_fail_count_++;
+        ESP_LOGW(TAG, "Auth failed (reason=%d, attempt %d/%d) — removing bond",
+                 param->ble_security.auth_cmpl.fail_reason,
+                 this->auth_fail_count_, MAX_AUTH_FAILURES);
         esp_ble_remove_bond_device(param->ble_security.auth_cmpl.bd_addr);
+
+        if (this->auth_fail_count_ >= MAX_AUTH_FAILURES &&
+            this->backoff_until_ms_ == 0) {
+          uint32_t backoff_s = AUTH_BACKOFF_MS / 1000;
+          ESP_LOGE(TAG, "%d consecutive auth failures — disabling BLE for %us. "
+                   "Clear Bluetooth pairing on the shaver.",
+                   this->auth_fail_count_, backoff_s);
+          this->backoff_until_ms_ = millis() + AUTH_BACKOFF_MS;
+          this->parent()->set_enabled(false);
+
+          char fail_str[4], backoff_str[8];
+          snprintf(fail_str, sizeof(fail_str), "%d", this->auth_fail_count_);
+          snprintf(backoff_str, sizeof(backoff_str), "%u", backoff_s);
+          this->fire_homeassistant_event(
+              "esphome.philips_shaver_ble_status",
+              {
+                  {"status", "auth_failed"},
+                  {"mac", this->get_shaver_mac_()},
+                  {"fail_count", std::string(fail_str)},
+                  {"backoff_s", std::string(backoff_str)},
+              });
+        }
       }
       break;
+    }
 
     default:
       break;
