@@ -62,8 +62,8 @@
         }
       },
       "esp_bridge_status": {
-        "title": "ESP32 Bridge Status",
-        "description": "Setting up **{shaver_name}** via ESP32 bridge.\n\n✅ Bridge **{device_name}** is reachable.\n\n{status}\n\nClick Submit to read shaver capabilities."
+        "title": "Connection via ESP32 Bridge",
+        "description": "Setting up **{shaver_name}** via **ESP32 Bridge**.\n\n✅ Bridge **{device_name}** is reachable.\n\n{status}\n\nClick Submit to read shaver capabilities."
       },
       "pair": {
         "title": "Pair Device",
@@ -75,7 +75,7 @@
       },
       "show_capabilities": {
         "title": "Hardware Capabilities detected",
-        "description": "Successfully connected to **{name}**{bridge_info}.\n\n**Hardware Capabilities:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legend:**\n✅ Service found & supported\n❌ Expected service missing\n❔ Unknown service from device\n\nClick Submit to finish the setup."
+        "description": "Successfully connected to **{name}** {bridge_info}.\n\n**Hardware Capabilities:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legend:**\n✅ Service found & supported\n❌ Expected service missing\n❔ Unknown service from device\n\nClick Submit to finish the setup."
       }
     },
     "error": {
@@ -171,6 +171,7 @@
       "activity": {
         "name": "Activity",
         "state": {
+          "initializing": "Initializing",
           "off": "Off",
           "shaving": "Shaving",
           "charging": "Charging",
@@ -301,19 +302,19 @@
         }
       },
       "notification_motor_blocked": {
-        "name": "⚠ Motor Blocked"
+        "name": "Motor Blocked"
       },
       "notification_clean_reminder": {
-        "name": "⚠ Clean Reminder"
+        "name": "Clean Reminder"
       },
       "notification_head_replacement": {
-        "name": "⚠ Head Replacement"
+        "name": "Head Replacement"
       },
       "notification_battery_overheated": {
-        "name": "⚠ Battery Overheated"
+        "name": "Battery Overheated"
       },
       "notification_unplug_required": {
-        "name": "⚠ Unplug Required"
+        "name": "Unplug Required"
       }
     },
     "button": {

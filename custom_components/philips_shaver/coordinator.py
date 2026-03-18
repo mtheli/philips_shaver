@@ -543,18 +543,8 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     )
                     await self.transport.set_notify_throttle(throttle_ms)
 
-                    # Subscribe FIRST to keep connection alive
-                    await self._start_all_notifications()
-                    self._live_setup_done = True
-                    if isinstance(self.transport, EspBridgeTransport):
-                        self.transport.acknowledge_resubscribe()
-                        self._check_bridge_version()
-                    _LOGGER.info("Live monitoring active – polling paused")
-
-                    # Reset backoff after successful subscribe
-                    backoff = 5
-
-                    # Then read all characteristics
+                    # Read all characteristics first (reads are GATT activity
+                    # that keeps the connection alive, same as CCCD writes)
                     results = {}
                     for uuid in self._live_chars:
                         if not self.transport.is_connected:
@@ -567,10 +557,28 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                                 "Live initial read failed for %s: %s", uuid, e
                             )
 
+                    # For ESP bridge: if ALL reads failed, bridge is not ready
+                    if isinstance(self.transport, EspBridgeTransport):
+                        if not any(v is not None for v in results.values()):
+                            raise TransportError(
+                                "No characteristics could be read – bridge may not be ready"
+                            )
+
                     if any(v is not None for v in results.values()):
                         new_data = self._process_results(results)
                         self._update_device_registry(new_data)
                         self.async_set_updated_data(new_data)
+
+                    # Reset backoff after successful reads
+                    backoff = 5
+
+                    # Subscribe to notifications after reads
+                    await self._start_all_notifications()
+                    self._live_setup_done = True
+                    if isinstance(self.transport, EspBridgeTransport):
+                        self.transport.acknowledge_resubscribe()
+                        self._check_bridge_version()
+                    _LOGGER.info("Live monitoring active – polling paused")
 
                 except TransportError as err:
                     _LOGGER.debug(

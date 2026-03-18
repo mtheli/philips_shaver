@@ -14,7 +14,7 @@
 namespace esphome {
 namespace philips_shaver {
 
-static const char *const PHILIPS_SHAVER_VERSION = "1.4.0";
+static const char *const PHILIPS_SHAVER_VERSION = "1.5.0";
 
 class PhilipsShaver : public ble_client::BLEClientNode,
                       public Component,
@@ -63,6 +63,9 @@ class PhilipsShaver : public ble_client::BLEClientNode,
   bool connected_{false};
   uint16_t pending_handle_{0};
   std::string pending_char_uuid_;
+  // Cached BLE device name (read from GAP 0x2A00 after service discovery)
+  uint16_t name_handle_{0};
+  std::string remote_name_;
   // handle → char_uuid for active notification subscriptions
   std::map<uint16_t, std::string> notify_map_;
   // char_handle → cccd_handle for writing notification enable

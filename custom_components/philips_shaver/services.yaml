@@ -87,3 +87,34 @@ write_characteristic:
       required: false
       selector:
         text:
+
+acknowledge_notification:
+  name: Acknowledge Notification
+  description: >-
+    Clears a specific system notification on the shaver by clearing
+    the corresponding bit in the notification register (0x0110).
+  fields:
+    notification:
+      name: Notification
+      description: >-
+        The notification to acknowledge.
+      required: true
+      selector:
+        select:
+          options:
+            - label: Motor Blocked
+              value: notification_motor_blocked
+            - label: Clean Reminder
+              value: notification_clean_reminder
+            - label: Head Replacement
+              value: notification_head_replacement
+            - label: Battery Overheated
+              value: notification_battery_overheated
+            - label: Unplug Required
+              value: notification_unplug_required
+    entry_id:
+      name: Config Entry ID
+      description: The config entry ID of the shaver device. If omitted, uses the first available device.
+      required: false
+      selector:
+        text:

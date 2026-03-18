@@ -253,7 +253,8 @@ class EspBridgeTransport(ShaverTransport):
         self._pending_reads: dict[str, asyncio.Future[bytes | None]] = {}
         self._last_read_errors: dict[str, str] = {}
         self._notify_callbacks: dict[str, Callable[[str, bytes], None]] = {}
-        self._detected_mac: str | None = None
+        # Pre-set MAC filter from config to prevent cross-device event mixing
+        self._detected_mac: str | None = address if ":" in address else None
         self._bridge_version: str | None = None
         self._pending_info: asyncio.Future[dict[str, str]] | None = None
         self._needs_resubscribe = False

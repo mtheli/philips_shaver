@@ -180,6 +180,7 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
       if (this->connected_sensor_ != nullptr)
         this->connected_sensor_->publish_state(false);
       this->pending_handle_ = 0;
+      this->name_handle_ = 0;
       // Clear handle-based maps (handles are invalid after disconnect)
       // but keep desired_subscriptions_ for auto-resubscribe
       this->notify_map_.clear();
@@ -204,6 +205,23 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
                  this->desired_subscriptions_.size());
         this->resubscribe_all_();
       }
+      // Read GAP Device Name (0x2A00) for display in HA config flow
+      if (this->remote_name_.empty()) {
+        auto gap_svc = espbt::ESPBTUUID::from_uint16(0x1800);
+        auto name_chr = espbt::ESPBTUUID::from_uint16(0x2A00);
+        auto *chr = this->parent()->get_characteristic(gap_svc, name_chr);
+        if (chr) {
+          this->name_handle_ = chr->handle;
+          auto status = esp_ble_gattc_read_char(
+              this->parent()->get_gattc_if(),
+              this->parent()->get_conn_id(),
+              chr->handle, ESP_GATT_AUTH_REQ_NONE);
+          if (status != ESP_GATT_OK) {
+            ESP_LOGD(TAG, "Failed to initiate device name read: %d", status);
+            this->name_handle_ = 0;
+          }
+        }
+      }
       this->fire_homeassistant_event(
           "esphome.philips_shaver_ble_status",
           {
@@ -215,6 +233,20 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
     }
 
     case ESP_GATTC_READ_CHAR_EVT: {
+      // Handle device name read (from GAP 0x2A00)
+      if (this->name_handle_ != 0 && param->read.handle == this->name_handle_) {
+        if (param->read.status == ESP_GATT_OK && param->read.value_len > 0) {
+          this->remote_name_ = std::string(
+              reinterpret_cast<const char *>(param->read.value),
+              param->read.value_len);
+          ESP_LOGI(TAG, "Device name: %s", this->remote_name_.c_str());
+        } else {
+          ESP_LOGD(TAG, "Device name read failed, status=%d", param->read.status);
+        }
+        this->name_handle_ = 0;
+        break;
+      }
+
       if (param->read.status != ESP_GATT_OK) {
         ESP_LOGW(TAG, "Read failed for %s, status=%d",
                  this->pending_char_uuid_.c_str(), param->read.status);
@@ -547,22 +579,25 @@ void PhilipsShaver::on_get_info() {
     delete[] bond_list;
   }
 
-  this->fire_homeassistant_event(
-      "esphome.philips_shaver_ble_status",
-      {
-          {"status", "info"},
-          {"version", PHILIPS_SHAVER_VERSION},
-          {"ble_connected", this->connected_ ? "true" : "false"},
-          {"mac", this->get_shaver_mac_()},
-          {"uptime_s", std::string(uptime_str)},
-          {"free_heap", std::string(heap_str)},
-          {"subscriptions", std::string(subs_str)},
-          {"notify_throttle_ms", std::string(throttle_str)},
-          {"paired", paired},
-      });
+  std::map<std::string, std::string> info = {
+      {"status", "info"},
+      {"version", PHILIPS_SHAVER_VERSION},
+      {"ble_connected", this->connected_ ? "true" : "false"},
+      {"mac", this->get_shaver_mac_()},
+      {"uptime_s", std::string(uptime_str)},
+      {"free_heap", std::string(heap_str)},
+      {"subscriptions", std::string(subs_str)},
+      {"notify_throttle_ms", std::string(throttle_str)},
+      {"paired", paired},
+  };
+  if (!this->remote_name_.empty()) {
+    info["ble_name"] = this->remote_name_;
+  }
+  this->fire_homeassistant_event("esphome.philips_shaver_ble_status", info);
 
-  ESP_LOGI(TAG, "Info: v%s uptime=%ss heap=%s subs=%s paired=%s",
-           PHILIPS_SHAVER_VERSION, uptime_str, heap_str, subs_str, paired.c_str());
+  ESP_LOGI(TAG, "Info: v%s uptime=%ss heap=%s subs=%s paired=%s name=%s",
+           PHILIPS_SHAVER_VERSION, uptime_str, heap_str, subs_str, paired.c_str(),
+           this->remote_name_.empty() ? "(none)" : this->remote_name_.c_str());
 }
 
 void PhilipsShaver::gap_event_handler(esp_gap_ble_cb_event_t event,

@@ -18,6 +18,7 @@ from .const import (
     TRANSPORT_ESP_BRIDGE,
     CONF_ESP_DEVICE_NAME,
     CONF_ESP_DEVICE_ID,
+    CHAR_SYSTEM_NOTIFICATIONS,
 )
 from .coordinator import PhilipsShaverCoordinator
 from .transport import BleakTransport, EspBridgeTransport
@@ -30,6 +31,15 @@ SERVICE_FETCH_HISTORY = "fetch_history"
 SERVICE_READ_CHARACTERISTIC = "read_characteristic"
 SERVICE_READ_CHARACTERISTIC_RAW = "read_characteristic_raw"
 SERVICE_WRITE_CHARACTERISTIC = "write_characteristic"
+SERVICE_ACKNOWLEDGE_NOTIFICATION = "acknowledge_notification"
+
+NOTIFICATION_BIT_MAP = {
+    "notification_motor_blocked": 0x01,
+    "notification_clean_reminder": 0x02,
+    "notification_head_replacement": 0x04,
+    "notification_battery_overheated": 0x08,
+    "notification_unplug_required": 0x10,
+}
 
 UUID_TEMPLATE_PHILIPS = "8d56%s-3cb9-4387-a7e8-b79d826a7025"
 UUID_TEMPLATE_BLE_STANDARD = "0000%s-0000-1000-8000-00805f9b34fb"
@@ -111,7 +121,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if transport_type == TRANSPORT_ESP_BRIDGE:
         esp_device_name = entry.data[CONF_ESP_DEVICE_NAME]
         esp_device_id = entry.data.get(CONF_ESP_DEVICE_ID, "")
-        transport = EspBridgeTransport(hass, esp_device_name, esp_device_name, esp_device_id)
+        address = entry.data.get(CONF_ADDRESS, "")
+        transport = EspBridgeTransport(hass, address, esp_device_name, esp_device_id)
     else:
         address = entry.data["address"]
         transport = BleakTransport(hass, address)
@@ -292,6 +303,62 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             supports_response=SupportsResponse.ONLY,
         )
 
+    if not hass.services.has_service(DOMAIN, SERVICE_ACKNOWLEDGE_NOTIFICATION):
+        async def handle_acknowledge_notification(call: ServiceCall) -> None:
+            """Clear a specific notification bit via read-modify-write on 0x0110."""
+            coord = _get_coordinator(hass, call.data.get("entry_id"))
+            if not coord:
+                _LOGGER.warning("acknowledge_notification: no coordinator found")
+                return
+
+            notification = call.data["notification"]
+            bit_mask = NOTIFICATION_BIT_MAP.get(notification)
+            if bit_mask is None:
+                _LOGGER.error("Unknown notification key: %s", notification)
+                return
+
+            if not coord.transport.is_connected:
+                _LOGGER.warning("Shaver not connected – cannot acknowledge notification")
+                return
+
+            try:
+                raw = await coord.transport.read_char(CHAR_SYSTEM_NOTIFICATIONS)
+                if raw is None:
+                    _LOGGER.warning("Could not read system notifications")
+                    return
+                current = int.from_bytes(raw, "little")
+                updated = current & ~bit_mask
+                await coord.transport.write_char(
+                    CHAR_SYSTEM_NOTIFICATIONS, updated.to_bytes(4, "little")
+                )
+                _LOGGER.info(
+                    "Notification %s cleared (0x%08X → 0x%08X)",
+                    notification, current, updated,
+                )
+            except Exception as e:
+                _LOGGER.error("Failed to acknowledge notification %s: %s", notification, e)
+                return
+
+            # Re-read to confirm and update state
+            try:
+                raw = await coord.transport.read_char(CHAR_SYSTEM_NOTIFICATIONS)
+                if raw is not None:
+                    updated = int.from_bytes(raw, "little")
+            except Exception:
+                pass
+
+            new_data = coord.data.copy()
+            new_data["system_notifications"] = updated
+            coord.async_set_updated_data(new_data)
+
+        hass.services.async_register(
+            DOMAIN, SERVICE_ACKNOWLEDGE_NOTIFICATION, handle_acknowledge_notification,
+            schema=vol.Schema({
+                vol.Required("notification"): vol.In(list(NOTIFICATION_BIT_MAP.keys())),
+                vol.Optional("entry_id"): str,
+            }),
+        )
+
     device_id = entry.data.get("address") or entry.data.get(CONF_ESP_DEVICE_NAME)
     _LOGGER.info("Philips Shaver integration loaded – device: %s", device_id)
     return True
@@ -313,6 +380,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, SERVICE_READ_CHARACTERISTIC)
         hass.services.async_remove(DOMAIN, SERVICE_READ_CHARACTERISTIC_RAW)
         hass.services.async_remove(DOMAIN, SERVICE_WRITE_CHARACTERISTIC)
+        hass.services.async_remove(DOMAIN, SERVICE_ACKNOWLEDGE_NOTIFICATION)
 
     _LOGGER.info("Unloading philips shaver integration finished")
     return True

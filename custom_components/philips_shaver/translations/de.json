@@ -62,8 +62,8 @@
         }
       },
       "esp_bridge_status": {
-        "title": "ESP32 Bridge Status",
-        "description": "Einrichtung von **{shaver_name}** über ESP32 Bridge.\n\n✅ Bridge **{device_name}** ist erreichbar.\n\n{status}\n\nKlicken Sie auf Absenden, um die Rasierer-Fähigkeiten zu lesen."
+        "title": "Verbindung über ESP32 Bridge",
+        "description": "Einrichtung von **{shaver_name}** über **ESP32 Bridge**.\n\n✅ Bridge **{device_name}** ist erreichbar.\n\n{status}\n\nKlicken Sie auf Absenden, um die Rasierer-Fähigkeiten zu lesen."
       },
       "pair": {
         "title": "Gerät koppeln",
@@ -75,7 +75,7 @@
       },
       "show_capabilities": {
         "title": "Hardware-Fähigkeiten erkannt",
-        "description": "Erfolgreich mit **{name}**{bridge_info} verbunden.\n\n**Hardware-Fähigkeiten:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legende:**\n✅ Service gefunden & unterstützt\n❌ Erwarteter Service fehlt\n❔ Unbekannter Service vom Gerät\n\nKlicken Sie auf Absenden, um die Einrichtung abzuschließen."
+        "description": "Erfolgreich mit **{name}** {bridge_info} verbunden.\n\n**Hardware-Fähigkeiten:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legende:**\n✅ Service gefunden & unterstützt\n❌ Erwarteter Service fehlt\n❔ Unbekannter Service vom Gerät\n\nKlicken Sie auf Absenden, um die Einrichtung abzuschließen."
       }
     },
     "error": {
@@ -171,6 +171,7 @@
       "activity": {
         "name": "Aktivität",
         "state": {
+          "initializing": "Initialisierung",
           "off": "Aus",
           "shaving": "Rasieren",
           "charging": "Laden",
@@ -301,19 +302,19 @@
         }
       },
       "notification_motor_blocked": {
-        "name": "⚠ Motor blockiert"
+        "name": "Motor blockiert"
       },
       "notification_clean_reminder": {
-        "name": "⚠ Reinigung fällig"
+        "name": "Reinigung fällig"
       },
       "notification_head_replacement": {
-        "name": "⚠ Scherkopf wechseln"
+        "name": "Scherkopf wechseln"
       },
       "notification_battery_overheated": {
-        "name": "⚠ Akku überhitzt"
+        "name": "Akku überhitzt"
       },
       "notification_unplug_required": {
-        "name": "⚠ Ausstecken erforderlich"
+        "name": "Ausstecken erforderlich"
       }
     },
     "button": {

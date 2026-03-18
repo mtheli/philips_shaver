@@ -25,13 +25,15 @@ async def async_setup_entry(
     """Set up the Philips Shaver button platform."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
+    has_cleaning = coordinator.capabilities.cleaning_mode or coordinator.capabilities.unit_cleaning
+
     entities: list[ButtonEntity] = [
         PhilipsBladeReplacementButton(coordinator, entry),
-        PhilipsResetCleanReminderButton(coordinator, entry),
         PhilipsResetAllNotificationsButton(coordinator, entry),
     ]
 
-    if coordinator.capabilities.cleaning_mode or coordinator.capabilities.unit_cleaning:
+    if has_cleaning:
+        entities.append(PhilipsResetCleanReminderButton(coordinator, entry))
         entities.append(PhilipsCartridgeResetButton(coordinator, entry))
 
     async_add_entities(entities)
