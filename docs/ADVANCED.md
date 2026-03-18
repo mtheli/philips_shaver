@@ -6,6 +6,14 @@ This guide covers service actions for debugging and advanced use cases.
 
 The integration provides service actions accessible via **Developer Tools > Actions** in Home Assistant.
 
+| Action | Description |
+| :--- | :--- |
+| [`philips_shaver.read_characteristic`](#read-characteristic-parsed) | Read characteristics and return parsed values |
+| [`philips_shaver.read_characteristic_raw`](#read-characteristic-raw) | Read characteristics and return raw hex values |
+| [`philips_shaver.fetch_history`](#fetch-shaving-history) | Fetch shaving session history from the device |
+| [`philips_shaver.acknowledge_notification`](#acknowledge-notification) | Clear a specific system notification |
+| [`philips_shaver.write_characteristic`](#write-characteristic) | Write a hex value to a characteristic |
+
 ### Read Characteristic (Parsed)
 
 Reads one or more BLE GATT characteristics and returns both the raw hex value and the parsed representation used internally by the integration.
@@ -111,6 +119,30 @@ data:
 | `notification_head_replacement` | Replace shaving head |
 | `notification_battery_overheated` | Battery overheated |
 | `notification_unplug_required` | Unplug before use |
+
+---
+
+### Write Characteristic
+
+Writes a hex value to a BLE GATT characteristic. Use with caution — writing incorrect values can change device settings.
+
+**Action:** `philips_shaver.write_characteristic`
+
+```yaml
+action: philips_shaver.write_characteristic
+data:
+  characteristic_uuid: "0x0110"
+  value: "00000000"
+```
+
+**Example:** Clear all system notifications:
+
+```yaml
+action: philips_shaver.write_characteristic
+data:
+  characteristic_uuid: "0x0110"
+  value: "00000000"
+```
 
 ---
 
