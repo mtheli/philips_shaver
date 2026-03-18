@@ -309,7 +309,9 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         async with self._connection_lock:
             try:
                 results = await self.transport.read_chars(self._poll_chars)
-                return self._process_results(results)
+                new_data = self._process_results(results)
+                self._update_device_registry(new_data)
+                return new_data
             except Exception as err:
                 raise UpdateFailed(f"Error communicating with device: {err}") from err
 
@@ -491,22 +493,24 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         else:
             new_data["last_seen"] = last
 
-        # Device registry: only update when model or firmware actually changed
-        model = new_data.get("model_number")
-        firmware = new_data.get("firmware")
-        if changed and (model or firmware):
-            dev_reg = dr.async_get(self.hass)
-            device = dev_reg.async_get_device(
-                identifiers={(DOMAIN, self.address)}
-            )
-            if device and (device.model != model or device.sw_version != firmware):
-                dev_reg.async_update_device(
-                    device.id,
-                    model=model or "Philips Shaver",
-                    sw_version=firmware,
-                )
-
         return new_data
+
+    def _update_device_registry(self, data: dict[str, Any]) -> None:
+        """Update device registry when model or firmware changed."""
+        model = data.get("model_number")
+        if not model:
+            return
+        firmware = data.get("firmware")
+        dev_reg = dr.async_get(self.hass)
+        device = dev_reg.async_get_device(
+            identifiers={(DOMAIN, self.address)}
+        )
+        if device and (device.model != model or device.sw_version != firmware):
+            dev_reg.async_update_device(
+                device.id,
+                model=model,
+                sw_version=firmware,
+            )
 
     async def _start_live_monitoring(self) -> None:
         """Persistent live connection with notifications – exclusive and intelligent."""
@@ -565,6 +569,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                     if any(v is not None for v in results.values()):
                         new_data = self._process_results(results)
+                        self._update_device_registry(new_data)
                         self.async_set_updated_data(new_data)
 
                 except TransportError as err:
@@ -631,6 +636,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return
 
             new_data = self._process_results({char_uuid: data})
+            self._update_device_registry(new_data)
 
             if new_data == self.data:
                 return  # nothing changed
