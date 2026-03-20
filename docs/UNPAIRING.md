@@ -6,9 +6,9 @@ pairings. This is a **two-step process** — both steps are required.
 
 ## Step 1: Unpair from your phone
 
-Remove the shaver from your phone's Bluetooth settings **and** from the
-[GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) /
-[OneBlade](https://www.philips.com/c-w/country-selectorpage/myoneblade.html) app.
+Remove the shaver from your phone's Bluetooth settings **and** from the Philips app:
+- **S7000 / S9000 shavers** → [GroomTribe app](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html)
+- **OneBlade models** → [OneBlade app](https://www.philips.com/c-w/country-selectorpage/myoneblade.html)
 
 How to remove a Bluetooth device:
 - [Android / Samsung](https://www.samsung.com/ca/support/mobile-devices/unpair-a-bluetooth-device-from-your-samsung-galaxy/) — Settings → Connections → Bluetooth → tap the gear icon next to the shaver → Unpair

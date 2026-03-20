@@ -47,7 +47,7 @@ See [Configuration](#configuration) for setup instructions.
 | [**Series 9000 / XP9405**](https://www.usa.philips.com/c-p/XP9405_84/i9000-prestige-ultra-wet-dry-electric-shaver-with-senseiq-pr) | Shaver | :white_check_mark: | | Community ([forum](https://community.home-assistant.io/t/has-anyone-integrated-philips-s9000-with-home-assistant/592101/6)) |
 | [**OneBlade 360 / QP4530**](https://www.usa.philips.com/c-p/QP4530_90/oneblade-360-with-connectivity-face) | Groomer | :white_check_mark: | :white_check_mark: | Maintainer |
 
-Other BLE-enabled Philips shavers and groomers using the same GATT services may also work. The integration auto-detects available services and capabilities during setup — entities are only created for features your device supports.
+Other BLE-enabled Philips shavers and groomers using the same GATT services may also work. The integration auto-detects available services and capabilities during setup — entities are only created for features your device supports. If your model works, please [let us know](https://github.com/mtheli/philips_shaver/issues) so we can add it to the list!
 
 ---
 
@@ -125,7 +125,7 @@ This integration creates a new device for your shaver and provides the following
 ## Prerequisites
 
 * A compatible Philips Shaver (see [Tested Models](#tested-models) above).
-* **Either** a Home Assistant instance with the **Bluetooth integration** enabled and a working Bluetooth adapter, **or** an ESP32 running the [BLE bridge component](ESP_BRIDGE_SETUP.md).
+* **Either** a Home Assistant instance with the **Bluetooth integration** enabled and a working Bluetooth adapter, **or** an ESP32 running the [BLE bridge component](docs/ESP_BRIDGE_SETUP.md).
 * The shaver supports only one active connection at a time — it must be **unpaired from your phone**, any manufacturer app ([GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) / [OneBlade](https://www.philips.com/c-w/country-selectorpage/myoneblade.html)), **and from the device itself** before Home Assistant can connect.
 
 ---
@@ -133,6 +133,8 @@ This integration creates a new device for your shaver and provides the following
 ## Installation
 
 ### HACS (Recommended)
+
+> Don't have HACS yet? Follow the [HACS installation guide](https://hacs.xyz/docs/use/) first.
 
 1.  Go to **HACS** > **Integrations** in your Home Assistant UI.
 2.  Click the three-dot menu in the top right and select **Custom repositories**.
@@ -153,8 +155,8 @@ The integration supports two connection methods:
 
 | | Method | Best for |
 | :--- | :--- | :--- |
-| **[Option A](#option-a-direct-bluetooth-pairing)** | **Direct Bluetooth** | HA host is within Bluetooth range of the shaver |
-| **[Option B](#option-b-esp32-ble-bridge)** | **ESP32 BLE Bridge** | Shaver is out of range — an ESP32 relays BLE over WiFi |
+| **[Option A](#option-a-direct-bluetooth-pairing)** | **Direct Bluetooth** | HA host is within Bluetooth range of the shaver (typically 5–10 m / 15–30 ft, less through walls) |
+| **[Option B](#option-b-esp32-ble-bridge)** | **ESP32 BLE Bridge** | Shaver is out of range — a small ESP32 device placed near the shaver relays data over WiFi |
 
 > [!IMPORTANT]
 > The shaver must be **fully unpaired** (from your phone **and** the device itself) before connecting to Home Assistant.
@@ -233,7 +235,9 @@ This is **not** a standard ESPHome Bluetooth Proxy — it is a custom component 
 
 A single ESP32 can bridge **multiple devices** (e.g. a shaver and an OneBlade simultaneously).
 
-For the complete setup guide, see **[ESP Bridge Setup Guide](ESP_BRIDGE_SETUP.md)**.
+> **Note:** This option requires basic [ESPHome](https://esphome.io/) knowledge (flashing firmware, editing YAML configs). If you're new to ESPHome, check out [Getting Started with ESPHome](https://esphome.io/guides/getting_started_hassio) first.
+
+For the complete setup guide, see **[ESP Bridge Setup Guide](docs/ESP_BRIDGE_SETUP.md)**.
 
 ---
 
@@ -247,7 +251,7 @@ See **[AUTOMATIONS.md](docs/AUTOMATIONS.md)** for ready-to-use automation exampl
 
 * *Pairing fails*: The shaver must be unpaired from **both** your phone's Bluetooth settings **and** from the device itself. Unpairing in the app alone is not enough — see the [unpairing instructions](#configuration) for your model. This is the most common cause of pairing failures.
 * *Connection Conflict*: If the integration fails to set up, ensure no smartphone is currently connected to the shaver.
-* *ESPHome Bluetooth Proxy*: The standard ESPHome Bluetooth Proxy does **not** work with this shaver because it requires LE Secure Connections pairing. Use the dedicated [ESP32 BLE Bridge](ESP_BRIDGE_SETUP.md) instead.
+* *ESPHome Bluetooth Proxy*: The standard ESPHome Bluetooth Proxy does **not** work with this shaver because it requires LE Secure Connections pairing. Use the dedicated [ESP32 BLE Bridge](docs/ESP_BRIDGE_SETUP.md) instead.
 * *Stability:* Bluetooth signals are weak. Ensure your HA host or ESP32 bridge is placed as close to the shaver's location as possible.
 
 ---
