@@ -6,7 +6,37 @@
 
 This is a custom component for Home Assistant to integrate **Philips Bluetooth-enabled shavers**.
 
-### Tested Models
+The integration connects to your shaver via **Bluetooth Low Energy (BLE)** to provide status, usage, and advanced telemetry data. It automatically detects the capabilities of your specific model during setup to only show relevant entities.
+
+![Device overview in Home Assistant](./images/device.png)
+
+Two connection methods are supported:
+
+1.  **Direct Bluetooth** — connects from the HA host's Bluetooth adapter. Uses a persistent live connection with a poll fallback.
+2.  **ESP32 BLE Bridge** — an ESP32 running ESPHome acts as a wireless BLE relay. Ideal when the shaver is out of Bluetooth range of the HA host.
+
+See [Configuration](#configuration) for setup instructions.
+
+---
+
+## Table of Contents
+
+- [Tested Models](#tested-models)
+- [Lovelace Card](#lovelace-card)
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Configuration](#configuration)
+  - [Option A: Direct Bluetooth](#option-a-direct-bluetooth-pairing)
+  - [Option B: ESP32 BLE Bridge](#option-b-esp32-ble-bridge)
+- [Example Automations](#example-automations)
+- [Troubleshooting & Caveats](#troubleshooting--caveats)
+- [BLE Protocol](#ble-protocol)
+- [Screenshots](#screenshots)
+
+---
+
+## Tested Models
 
 | Model | Type | Direct BLE | ESP32 Bridge | Tested by |
 | :--- | :--- | :---: | :---: | :--- |
@@ -18,15 +48,6 @@ This is a custom component for Home Assistant to integrate **Philips Bluetooth-e
 | [**OneBlade 360 / QP4530**](https://www.usa.philips.com/c-p/QP4530_90/oneblade-360-with-connectivity-face) | Groomer | :white_check_mark: | :white_check_mark: | Maintainer |
 
 Other BLE-enabled Philips shavers and groomers using the same GATT services may also work. The integration auto-detects available services and capabilities during setup — entities are only created for features your device supports.
-
-The integration connects to your shaver via **Bluetooth Low Energy (BLE)** to provide status, usage, and advanced telemetry data. It automatically detects the capabilities of your specific model during setup to only show relevant entities.
-
-![Device overview in Home Assistant](./images/device.png)
-
-Two connection methods are supported:
-
-1.  **Direct Bluetooth** — connects from the HA host's Bluetooth adapter. Uses a persistent live connection with a poll fallback.
-2.  **ESP32 BLE Bridge** — an ESP32 running ESPHome acts as a wireless BLE relay. Ideal when the shaver is out of Bluetooth range of the HA host. See the [ESP Bridge Setup Guide](ESP_BRIDGE_SETUP.md) for instructions.
 
 ---
 
@@ -101,12 +122,6 @@ This integration creates a new device for your shaver and provides the following
 
 ---
 
-## Example Automations
-
-See **[AUTOMATIONS.md](docs/AUTOMATIONS.md)** for ready-to-use automation examples, including low battery alerts, smart plug charging, usage reminders, and maintenance notifications.
-
----
-
 ## Prerequisites
 
 * A compatible Philips Shaver (see [Tested Models](#tested-models) above).
@@ -142,14 +157,8 @@ The integration supports two connection methods:
 | **[Option B](#option-b-esp32-ble-bridge)** | **ESP32 BLE Bridge** | Shaver is out of range — an ESP32 relays BLE over WiFi |
 
 > [!IMPORTANT]
-> The shaver must be **fully unpaired** before connecting to Home Assistant. This is a **two-step process**:
->
-> **Step 1 — Unpair from your phone:** Remove the shaver from your phone's Bluetooth settings **and** from the [GroomTribe](https://www.philips.at/c-w/malegrooming/products/groomtribe-app.html) / [OneBlade](https://www.philips.com/c-w/country-selectorpage/myoneblade.html) app.
->
-> **Step 2 — Unpair on the device itself:** The shaver stores its own pairing bond. App-only unpairing is **not enough** — you must also reset the pairing on the device:
-> - **S7000 series**: Press and hold the on/off button for at least **10 seconds** until the notification symbol lights up 4 times briefly. Note: ~5 seconds activates travel mode — keep holding. ([Manual, p. 57](https://www.documents.philips.com/assets/20230524/321aee78595d447cb224b00c008c2dda.pdf))
-> - **i9000 / S-series shavers**: Press the menu button until you reach the Bluetooth menu, hold it until a cross and checkmark appear, then press again to select the checkmark. ([Manual](https://www.manualslib.com/guide/4036443/philips-i9000-prestige-xp9205-05-xp9204-30-xp9203-32-xp9202-20-manual.html#unpair-the-shaver-and-smartphone))
-> - **OneBlade 360**: Hold the power button for **10 seconds** until the light ring starts flashing blue. ([Philips Support](https://www.usa.philips.com/c-t/XC000020493/my-oneblade-360-connected-is-not-pairing-with-my-phone))
+> The shaver must be **fully unpaired** (from your phone **and** the device itself) before connecting to Home Assistant.
+> Follow the [Unpairing Guide](docs/UNPAIRING.md) for step-by-step instructions.
 
 ### Option A: Direct Bluetooth (Pairing)
 
@@ -225,6 +234,12 @@ This is **not** a standard ESPHome Bluetooth Proxy — it is a custom component 
 A single ESP32 can bridge **multiple devices** (e.g. a shaver and an OneBlade simultaneously).
 
 For the complete setup guide, see **[ESP Bridge Setup Guide](ESP_BRIDGE_SETUP.md)**.
+
+---
+
+## Example Automations
+
+See **[AUTOMATIONS.md](docs/AUTOMATIONS.md)** for ready-to-use automation examples, including low battery alerts, smart plug charging, usage reminders, and maintenance notifications.
 
 ---
 

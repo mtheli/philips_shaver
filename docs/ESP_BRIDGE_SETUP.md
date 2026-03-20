@@ -184,6 +184,14 @@ and connection status. Each device is added as a separate integration entry.
 
 ## Troubleshooting
 
+### Unpairing before switching to the ESP32 Bridge
+
+The shaver can only be paired with **one device at a time**. If it is currently paired with
+your phone or your HA host via Direct Bluetooth, you must unpair it first before the ESP32
+bridge can connect.
+
+Follow the [Unpairing Guide](UNPAIRING.md) for step-by-step instructions.
+
 ### Pairing fails (no `auth success` in logs)
 
 - Ensure the shaver is **not connected to your phone** (disconnect Bluetooth or
