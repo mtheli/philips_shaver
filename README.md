@@ -23,6 +23,7 @@ See [Configuration](#configuration) for setup instructions.
 
 - [Tested Models](#tested-models)
 - [Lovelace Card](#lovelace-card)
+- [Community](#community)
 - [Features](#features)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
@@ -58,6 +59,12 @@ A dedicated dashboard card is available: **[Philips Shaver Card](https://github.
 ![Philips Shaver Card](./images/card_shaving.png)
 
 The card automatically switches between standby, shaving, charging, and cleaning modes with live pressure gauge, battery status, and session stats.
+
+---
+
+## Community
+
+- [Smartes Badezimmer? So hilft dir ein Shelly Wall Display beim Zähneputzen & Rasieren!](https://www.youtube.com/watch?v=ROI91x2Swv8) — Video by smartmatic showing the integration and card on a Shelly Wall Display with XP9405 and ESP32 Bridge (German)
 
 ---
 
