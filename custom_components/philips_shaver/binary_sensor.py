@@ -31,7 +31,10 @@ async def async_setup_entry(
     ]
 
     # System notification binary sensors (bit 0–4)
+    has_cleaning = coordinator.capabilities.cleaning_mode or coordinator.capabilities.unit_cleaning
     for bit, key, icon_on, icon_off in NOTIFICATION_BITS:
+        if key == "notification_clean_reminder" and not has_cleaning:
+            continue
         entities.append(
             PhilipsNotificationBinarySensor(coordinator, entry, bit, key, icon_on, icon_off)
         )
@@ -99,6 +102,9 @@ NOTIFICATION_BITS = [
 
 class PhilipsNotificationBinarySensor(PhilipsShaverEntity, BinarySensorEntity):
     """Binary sensor for a single system notification bit."""
+
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
         self,

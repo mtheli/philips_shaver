@@ -6,6 +6,14 @@ This guide covers service actions for debugging and advanced use cases.
 
 The integration provides service actions accessible via **Developer Tools > Actions** in Home Assistant.
 
+| Action | Description |
+| :--- | :--- |
+| [`philips_shaver.read_characteristic`](#read-characteristic-parsed) | Read characteristics and return parsed values |
+| [`philips_shaver.read_characteristic_raw`](#read-characteristic-raw) | Read characteristics and return raw hex values |
+| [`philips_shaver.fetch_history`](#fetch-shaving-history) | Fetch shaving session history from the device |
+| [`philips_shaver.acknowledge_notification`](#acknowledge-notification) | Clear a specific system notification |
+| [`philips_shaver.write_characteristic`](#write-characteristic) | Write a hex value to a characteristic |
+
 ### Read Characteristic (Parsed)
 
 Reads one or more BLE GATT characteristics and returns both the raw hex value and the parsed representation used internally by the integration.
@@ -90,6 +98,54 @@ data: {}
 
 ---
 
+### Acknowledge Notification
+
+Clears a specific system notification on the shaver by clearing the corresponding bit in the notification register (`0x0110`) via read-modify-write.
+
+**Action:** `philips_shaver.acknowledge_notification`
+
+```yaml
+action: philips_shaver.acknowledge_notification
+data:
+  notification: notification_clean_reminder
+```
+
+**Available notification values:**
+
+| Value | Description |
+| :--- | :--- |
+| `notification_motor_blocked` | Motor blocked |
+| `notification_clean_reminder` | Cleaning required |
+| `notification_head_replacement` | Replace shaving head |
+| `notification_battery_overheated` | Battery overheated |
+| `notification_unplug_required` | Unplug before use |
+
+---
+
+### Write Characteristic
+
+Writes a hex value to a BLE GATT characteristic. Use with caution — writing incorrect values can change device settings.
+
+**Action:** `philips_shaver.write_characteristic`
+
+```yaml
+action: philips_shaver.write_characteristic
+data:
+  characteristic_uuid: "0x0110"
+  value: "00000000"
+```
+
+**Example:** Clear all system notifications:
+
+```yaml
+action: philips_shaver.write_characteristic
+data:
+  characteristic_uuid: "0x0110"
+  value: "00000000"
+```
+
+---
+
 ## Characteristic UUID Format
 
 All characteristics use the Philips UUID template:
@@ -110,6 +166,7 @@ You can use the **short form** (e.g. `0x0319` or `0319`) — the integration aut
 | `0x010A` | Device State | uint8 | 1=off, 2=shaving, 3=charging |
 | `0x010C` | Travel Lock | uint8 | 0=unlocked, 1=locked |
 | `0x010F` | Shaving Time | uint16 LE | Last session duration (seconds) |
+| `0x0110` | System Notifications | uint32 LE | Bitfield: bit 0=motor blocked, 1=clean reminder, 2=head replacement, 3=battery overheated, 4=unplug required |
 | `0x0302` | Capabilities | uint32 LE | Capability bitfield |
 | `0x0305` | Motion Type | uint8 | 0=none, 1=small circle, 4=large stroke |
 | `0x030C` | Pressure | uint16 LE | Current pressure value |

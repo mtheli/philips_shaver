@@ -433,7 +433,7 @@ class PhilipsDeviceStateSensor(PhilipsShaverEntity, SensorEntity):
 class PhilipsDeviceActivitySensor(PhilipsShaverEntity, SensorEntity):
     _attr_translation_key = "activity"
     _attr_device_class = SensorDeviceClass.ENUM
-    _attr_options = ["off", "shaving", "charging", "cleaning", "locked"]
+    _attr_options = ["initializing", "off", "shaving", "charging", "cleaning", "locked"]
     _attr_icon = "mdi:state-machine"
 
     def __init__(
@@ -443,8 +443,17 @@ class PhilipsDeviceActivitySensor(PhilipsShaverEntity, SensorEntity):
         self._attr_unique_id = f"{self._device_id}_activity"
 
     @property
+    def available(self) -> bool:
+        """Always available — shows 'initializing' when no data yet."""
+        return True
+
+    @property
     def native_value(self) -> str:
         data = self.coordinator.data
+
+        # 0. No data yet — still loading
+        if not data or data.get("device_state") is None:
+            return "initializing"
 
         # 1. check for travel locking
         if data.get("travel_lock", False):
@@ -469,6 +478,7 @@ class PhilipsDeviceActivitySensor(PhilipsShaverEntity, SensorEntity):
     @property
     def icon(self) -> str:
         return {
+            "initializing": "mdi:loading",
             "off": "mdi:power-standby",
             "shaving": "mdi:face-man-shimmer",
             "charging": "mdi:battery-charging-outline",

@@ -13,12 +13,19 @@ Bluetooth access from the HA host.
 > a Bluetooth Proxy, you still need to flash this custom component — the proxy
 > alone will fail with `ESP_GATT_CONN_FAIL_ESTABLISH`.
 
+## Tested Hardware
+
+| Board | Status |
+|-------|--------|
+| [M5Stack Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) (ESP32-PICO) | Confirmed working (used by maintainer) |
+| Generic ESP32-DevKit | Should work (same SoC) |
+| ESP32-S3 / ESP32-C3 | Untested — BLE stack should be compatible |
+
 ## Prerequisites
 
-- **ESP32 board** — tested with [M5Stack Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite),
-  any ESP32 with BLE should work (ESP32-S3, ESP32-C3, etc.)
+- **ESP32 board** — see [Tested Hardware](#tested-hardware) above
 - **ESPHome** — installed as Home Assistant add-on or standalone
-- **Philips Shaver or OneBlade** — tested with XP9201 (shaver) and QP4530 (OneBlade 360), see [Tested Models](../README.md#tested-models)
+- **Philips Shaver or OneBlade** — see [Tested Models](../README.md#tested-models)
 
 ## Step 1: Find Your Shaver's MAC Address
 
@@ -184,6 +191,14 @@ and connection status. Each device is added as a separate integration entry.
 
 ## Troubleshooting
 
+### Unpairing before switching to the ESP32 Bridge
+
+The shaver can only be paired with **one device at a time**. If it is currently paired with
+your phone or your HA host via Direct Bluetooth, you must unpair it first before the ESP32
+bridge can connect.
+
+Follow the [Unpairing Guide](UNPAIRING.md) for step-by-step instructions.
+
 ### Pairing fails (no `auth success` in logs)
 
 - Ensure the shaver is **not connected to your phone** (disconnect Bluetooth or
@@ -238,11 +253,3 @@ If data still doesn't flow:
   `ble_write_char`, `ble_unsubscribe`, `ble_get_info`) with service and characteristic UUIDs
 - **Diagnostics**: `ble_get_info` returns bridge version, uptime, free heap, pairing status,
   and active subscription count — used during config flow and for troubleshooting
-
-## Tested Hardware
-
-| Board | Status |
-|-------|--------|
-| [M5Stack Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) (ESP32-PICO) | Confirmed working (used by maintainer) |
-| Generic ESP32-DevKit | Should work (same SoC) |
-| ESP32-S3 / ESP32-C3 | Untested — BLE stack should be compatible |

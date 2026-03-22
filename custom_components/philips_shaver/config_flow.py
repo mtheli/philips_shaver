@@ -969,8 +969,10 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         # Determine shaver name for display
         if self.discovery_info:
             shaver_name = self.discovery_info.name or self.discovery_info.address
+        elif info.get("ble_name"):
+            shaver_name = info["ble_name"]
         elif info.get("mac") and info["mac"] != "00:00:00:00:00:00":
-            shaver_name = info["mac"]
+            shaver_name = f"Philips device ({info['mac']})"
         else:
             shaver_name = "Unknown device"
 
@@ -1147,9 +1149,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         groomer_cap = self.fetched_data.get("groomer_capabilities")
         capabilities_text = self._get_capabilities_text(cap_val, groomer_cap)
 
-        # Connection info suffix (e.g. " via ESP Bridge")
+        # Connection info suffix
         esp_name = self.fetched_esp_device_name
-        bridge_info = " via ESP Bridge" if esp_name else ""
+        bridge_info = " via **ESP32 Bridge**" if esp_name else " via **Direct Bluetooth**"
 
         return self.async_show_form(
             step_id="show_capabilities",
