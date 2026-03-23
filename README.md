@@ -64,7 +64,7 @@ The card automatically switches between standby, shaving, charging, and cleaning
 
 ## Community
 
-- [Smartes Badezimmer? So hilft dir ein Shelly Wall Display beim Zähneputzen & Rasieren!](https://www.youtube.com/watch?v=ROI91x2Swv8) — Video by smartmatic showing the integration and card on a Shelly Wall Display with XP9405 and ESP32 Bridge (German)
+- [Smartes Badezimmer? So hilft dir ein Shelly Wall Display beim Zähneputzen & Rasieren!](https://www.youtube.com/watch?v=ROI91x2Swv8) — Video by [@smartmatic](https://github.com/smartmatic) showing the integration and card on a Shelly Wall Display with XP9405 and ESP32 Bridge (German)
 
 ---
 
