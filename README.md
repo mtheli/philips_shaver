@@ -279,6 +279,10 @@ For debug service actions (reading arbitrary BLE characteristics via Developer T
 | :---: | :---: | :---: | :---: |
 | ![Discovery](./images/discovery.png) | ![Capabilities](./images/capabilities.png) | ![Device](./images/device.png) | ![Diagnostics](./images/diagnostic.png) |
 
+## Disclaimer
+
+This is an independent community project and is not affiliated with, endorsed by, or sponsored by Philips. All product names, trademarks, and registered trademarks are property of their respective owners.
+
 ## License
 
 [MIT](LICENSE)
