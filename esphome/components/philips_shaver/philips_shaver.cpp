@@ -264,6 +264,14 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
       if (param->read.status != ESP_GATT_OK) {
         ESP_LOGW(TAG, "Read failed for %s, status=%d",
                  this->pending_char_uuid_.c_str(), param->read.status);
+        this->fire_homeassistant_event(
+            "esphome.philips_shaver_ble_data",
+            {
+                {"uuid", this->pending_char_uuid_},
+                {"payload", ""},
+                {"error", "read_failed"},
+                {"mac", this->get_shaver_mac_()},
+            });
         this->pending_handle_ = 0;
         break;
       }
@@ -285,6 +293,16 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
             });
 
         this->pending_handle_ = 0;
+      }
+      break;
+    }
+
+    case ESP_GATTC_WRITE_CHAR_EVT: {
+      if (param->write.status == ESP_GATT_OK) {
+        ESP_LOGI(TAG, "Write confirmed for handle 0x%04X", param->write.handle);
+      } else {
+        ESP_LOGW(TAG, "Write FAILED for handle 0x%04X, status=%d",
+                 param->write.handle, param->write.status);
       }
       break;
     }
@@ -604,8 +622,8 @@ void PhilipsShaver::gap_event_handler(esp_gap_ble_cb_event_t event,
                                        esp_ble_gap_cb_param_t *param) {
   switch (event) {
     case ESP_GAP_BLE_NC_REQ_EVT:
-      ESP_LOGI(TAG, "Numeric Comparison request — auto-confirming (passkey: %lu)",
-               param->ble_security.key_notif.passkey);
+      ESP_LOGI(TAG, "Numeric Comparison request — auto-confirming (passkey %06lu)",
+               (unsigned long) param->ble_security.key_notif.passkey);
       esp_ble_confirm_reply(param->ble_security.key_notif.bd_addr, true);
       break;
 

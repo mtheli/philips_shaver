@@ -230,7 +230,10 @@ async def async_pair_and_trust(mac: str) -> None:
                     "bond from a previous system. Try turning the shaver "
                     "off and back on, then retry."
                 ) from err
-            raise PairingError(f"BlueZ pairing error: {msg}") from err
+            if "AlreadyExists" in msg:
+                _LOGGER.info("Device %s already paired", mac)
+            else:
+                raise PairingError(f"BlueZ pairing error: {msg}") from err
 
         _LOGGER.info("Pairing successful for %s", mac)
 
