@@ -75,6 +75,7 @@ class PhilipsShaver : public ble_client::BLEClientNode,
 
   void apply_smp_params_();
   void resubscribe_all_();
+  uint16_t find_cccd_handle_(uint16_t char_handle);
 
   // Auth tracking for stale bond detection
   bool auth_completed_{false};

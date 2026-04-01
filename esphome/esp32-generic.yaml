@@ -55,14 +55,7 @@ ble_client:
     auto_connect: true
     on_connect:
       then:
-        - logger.log: "Connected to shaver, attempting pairing..."
-        - lambda: |-
-            // ESPHome's pair() uses ESP_BLE_SEC_ENCRYPT which the shaver
-            // rejects (disconnect 0x13).  The shaver requires Secure
-            // Connections (LE SC) — confirmed via btmon capture of a
-            // successful Linux pairing.  ESP_BLE_SEC_ENCRYPT_MITM triggers
-            // the SC handshake together with the SMP params set in setup().
-            esp_ble_set_encryption(id(philips_shaver_ble).get_remote_bda(), ESP_BLE_SEC_ENCRYPT_MITM);
+        - logger.log: "Connected to shaver"
     on_disconnect:
       then:
         - logger.log: "Disconnected from shaver"

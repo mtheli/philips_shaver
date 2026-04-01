@@ -71,9 +71,7 @@ ble_client:
     auto_connect: true
     on_connect:
       then:
-        - logger.log: "Connected to shaver, attempting pairing..."
-        - lambda: |-
-            esp_ble_set_encryption(id(shaver_ble).get_remote_bda(), ESP_BLE_SEC_ENCRYPT_MITM);
+        - logger.log: "Connected to shaver"
         - light.turn_on:
             id: status_led
             red: 0%
@@ -92,9 +90,7 @@ ble_client:
     auto_connect: true
     on_connect:
       then:
-        - logger.log: "Connected to OneBlade, attempting pairing..."
-        - lambda: |-
-            esp_ble_set_encryption(id(oneblade_ble).get_remote_bda(), ESP_BLE_SEC_ENCRYPT_MITM);
+        - logger.log: "Connected to OneBlade"
     on_disconnect:
       then:
         - logger.log: "OneBlade disconnected"
