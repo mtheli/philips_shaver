@@ -13,6 +13,7 @@ from homeassistant.config_entries import (
     OptionsFlowWithReload,
 )
 from homeassistant.core import callback
+from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.components.bluetooth import (
     BluetoothServiceInfoBleak,
     async_ble_device_from_address,
@@ -370,6 +371,44 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 await client.disconnect()
 
         return capabilities
+
+    async def async_step_zeroconf(
+        self, discovery_info: ZeroconfServiceInfo
+    ) -> ConfigFlowResult:
+        """Handle Zeroconf discovery of ESPHome devices.
+
+        Checks if the discovered ESPHome device has our Shaver bridge
+        services registered. If not, aborts silently.
+        """
+        host = discovery_info.hostname or ""
+        device_name = host.rstrip(".").removesuffix(".local").replace("-", "_")
+        if not device_name:
+            return self.async_abort(reason="not_supported")
+
+        # Wait for ESPHome to register services (may not be ready yet)
+        for _ in range(10):
+            device_ids = self._detect_esp_device_ids(device_name)
+            if device_ids:
+                break
+            await asyncio.sleep(3)
+        else:
+            return self.async_abort(reason="not_supported")
+
+        # Found a Shaver bridge — check if already configured
+        self.fetched_esp_device_name = device_name
+        self.fetched_esp_device_ids = device_ids
+
+        unique_id = f"esp_{device_name}_{device_ids[0]}" if device_ids[0] else f"esp_{device_name}"
+        await self.async_set_unique_id(unique_id)
+        self._abort_if_unique_id_configured()
+
+        _LOGGER.info("Zeroconf: found Shaver bridge on ESP device '%s'", device_name)
+        self.context["title_placeholders"] = {"name": device_name.replace("_", "-")}
+
+        if len(device_ids) > 1:
+            return await self.async_step_esp_select_device()
+        self.fetched_esp_device_id = device_ids[0]
+        return await self._esp_bridge_health_check()
 
     async def async_step_bluetooth(
         self, discovery_info: BluetoothServiceInfoBleak
