@@ -60,10 +60,10 @@ esp32_ble_tracker:
 # You can find the MAC in the Philips app or via a BLE scanner.
 #
 # Single device: use one ble_client entry and one philips_shaver entry
-# (without device_id).
+# (without bridge_id).
 #
 # Dual device: use two ble_client entries and two philips_shaver entries
-# (each with a unique device_id).
+# (each with a unique bridge_id).
 
 ble_client:
   - mac_address: "AA:BB:CC:DD:EE:01"          # Replace with your shaver's MAC
@@ -106,14 +106,14 @@ external_components:
     refresh: 0s
     components: [philips_shaver]
 
-# Each device needs a unique device_id when using multiple devices.
-# For a single device, omit the device_id line entirely.
+# Each device needs a unique bridge_id when using multiple devices.
+# For a single device, omit the bridge_id line entirely.
 philips_shaver:
   - ble_client_id: shaver_ble
-    device_id: "shaver"
+    bridge_id: "shaver"
 
   - ble_client_id: oneblade_ble
-    device_id: "oneblade"
+    bridge_id: "oneblade"
 
 # --- Hardware: M5Stack Atom Lite ---
 

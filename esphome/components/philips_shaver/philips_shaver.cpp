@@ -71,7 +71,7 @@ void PhilipsShaver::setup() {
                           this->svc_name_("ble_set_throttle"), {"throttle_ms"});
   this->register_service(&PhilipsShaver::on_get_info,
                           this->svc_name_("ble_get_info"), {});
-  ESP_LOGI(TAG, "Services registered (suffix: '%s')", this->device_id_.c_str());
+  ESP_LOGI(TAG, "Services registered (bridge_id: '%s')", this->bridge_id_.c_str());
 }
 
 void PhilipsShaver::loop() {
@@ -101,7 +101,7 @@ void PhilipsShaver::loop() {
     // before the HA API stream is up — the SEARCH_CMPL "ready" is lost.
     // This keeps signalling every heartbeat until HA subscribes
     // (notify_map_ becomes non-empty → self-terminating).
-    if (this->connected_ && this->notify_map_.empty()) {
+    if (this->connected_ && this->services_discovered_ && this->notify_map_.empty()) {
       ESP_LOGI(TAG, "BLE connected, no subscriptions — re-firing ready");
       this->fire_homeassistant_event(
           "esphome.philips_shaver_ble_status",
@@ -123,15 +123,15 @@ std::string PhilipsShaver::get_shaver_mac_() {
 }
 
 std::string PhilipsShaver::svc_name_(const std::string &action) {
-  if (this->device_id_.empty())
+  if (this->bridge_id_.empty())
     return action;
-  return action + "_" + this->device_id_;
+  return action + "_" + this->bridge_id_;
 }
 
 void PhilipsShaver::dump_config() {
   ESP_LOGCONFIG(TAG, "Philips Shaver BLE Bridge v%s", PHILIPS_SHAVER_VERSION);
-  if (!this->device_id_.empty())
-    ESP_LOGCONFIG(TAG, "  Device ID: %s", this->device_id_.c_str());
+  if (!this->bridge_id_.empty())
+    ESP_LOGCONFIG(TAG, "  Bridge ID: %s", this->bridge_id_.c_str());
 }
 
 void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
@@ -187,6 +187,7 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
                param->disconnect.reason,
                this->desired_subscriptions_.size());
       this->connected_ = false;
+      this->services_discovered_ = false;
       if (this->connected_sensor_ != nullptr)
         this->connected_sensor_->publish_state(false);
       this->pending_handle_ = 0;
@@ -210,6 +211,7 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
 
     case ESP_GATTC_SEARCH_CMPL_EVT: {
       ESP_LOGI(TAG, "Service discovery complete");
+      this->services_discovered_ = true;
       // Initiate encryption — all Philips shavers require BLE bonding.
       // Previously done via YAML on_connect lambda, now self-contained.
       esp_ble_set_encryption(this->parent()->get_remote_bda(),
@@ -448,6 +450,13 @@ void PhilipsShaver::on_subscribe(std::string service_uuid,
     return;
   }
 
+  // Check if already subscribed (e.g., restored after reconnect)
+  if (this->notify_map_.count(chr->handle)) {
+    ESP_LOGD(TAG, "Already subscribed to %s (handle 0x%04X), skipping",
+             characteristic_uuid.c_str(), chr->handle);
+    return;
+  }
+
   uint16_t cccd_handle = this->find_cccd_handle_(chr->handle);
   this->cccd_map_[chr->handle] = cccd_handle;
 
@@ -600,6 +609,7 @@ void PhilipsShaver::on_get_info() {
   std::map<std::string, std::string> info = {
       {"status", "info"},
       {"version", PHILIPS_SHAVER_VERSION},
+      {"bridge_id", this->bridge_id_},
       {"ble_connected", this->connected_ ? "true" : "false"},
       {"mac", this->get_shaver_mac_()},
       {"uptime_s", std::string(uptime_str)},
