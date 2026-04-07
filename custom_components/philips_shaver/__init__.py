@@ -17,7 +17,8 @@ from .const import (
     CONF_TRANSPORT_TYPE,
     TRANSPORT_ESP_BRIDGE,
     CONF_ESP_DEVICE_NAME,
-    CONF_ESP_DEVICE_ID,
+    CONF_ESP_BRIDGE_ID,
+    CONF_ESP_DEVICE_ID_LEGACY,
     CHAR_SYSTEM_NOTIFICATIONS,
 )
 from .coordinator import PhilipsShaverCoordinator
@@ -114,15 +115,34 @@ def _async_link_via_esp_device(hass: HomeAssistant, entry: ConfigEntry) -> None:
         dev_reg.async_update_device(bridge_device.id, via_device_id=esp_device.id)
 
 
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate config entry to current version."""
+    if entry.version == 1 and entry.minor_version < 3:
+        # v1.2 → v1.3: rename esp_device_id → esp_bridge_id
+        new_data = {**entry.data}
+        if CONF_ESP_DEVICE_ID_LEGACY in new_data:
+            new_data[CONF_ESP_BRIDGE_ID] = new_data.pop(CONF_ESP_DEVICE_ID_LEGACY)
+            hass.config_entries.async_update_entry(
+                entry, data=new_data, minor_version=3,
+            )
+            _LOGGER.info(
+                "Migrated config entry %s: esp_device_id → esp_bridge_id",
+                entry.entry_id,
+            )
+        else:
+            hass.config_entries.async_update_entry(entry, minor_version=3)
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Philips Shaver from a config entry."""
     # Create transport based on config
     transport_type = entry.data.get(CONF_TRANSPORT_TYPE)
     if transport_type == TRANSPORT_ESP_BRIDGE:
         esp_device_name = entry.data[CONF_ESP_DEVICE_NAME]
-        esp_device_id = entry.data.get(CONF_ESP_DEVICE_ID, "")
+        esp_bridge_id = entry.data.get(CONF_ESP_BRIDGE_ID, "")
         address = entry.data.get(CONF_ADDRESS, "")
-        transport = EspBridgeTransport(hass, address, esp_device_name, esp_device_id)
+        transport = EspBridgeTransport(hass, address, esp_device_name, esp_bridge_id)
     else:
         address = entry.data["address"]
         transport = BleakTransport(hass, address)
@@ -132,16 +152,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {"coordinator": coordinator}
 
+    # Non-blocking: shaver sleeps most of the time, don't block HA startup.
+    # Sensors will show "Unknown" briefly until the device wakes up.
+    coordinator.async_set_updated_data(coordinator.data or {})
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Link shaver device to ESP bridge device via device registry
     if transport_type == TRANSPORT_ESP_BRIDGE:
         _async_link_via_esp_device(hass, entry)
 
-    # Start polling/live monitoring after platforms are registered
+    # Start event-driven live monitoring after platforms are registered
     await coordinator.async_start()
-    if transport_type != TRANSPORT_ESP_BRIDGE:
-        coordinator._start_advertisement_callback()
 
     # Register services (only once)
     if not hass.services.has_service(DOMAIN, SERVICE_FETCH_HISTORY):

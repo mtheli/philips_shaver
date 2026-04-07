@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 
 from .coordinator import PhilipsShaverCoordinator
-from .const import DOMAIN, CONF_ADDRESS, CONF_TRANSPORT_TYPE, TRANSPORT_ESP_BRIDGE, CONF_ESP_DEVICE_NAME
+from .const import DOMAIN, CONF_ADDRESS, CONF_TRANSPORT_TYPE, TRANSPORT_ESP_BRIDGE, CONF_ESP_DEVICE_NAME, CONF_ESP_BRIDGE_ID
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -101,9 +101,11 @@ class PhilipsBridgeEntity(PhilipsShaverEntity):
         super().__init__(coordinator, entry)
         # Override device_info to register on the bridge sub-device.
         # Linking to the ESPHome parent device is done in __init__.py.
+        bridge_id = entry.data.get(CONF_ESP_BRIDGE_ID, "")
+        bridge_name = f"ESP Bridge ({bridge_id})" if bridge_id else "ESP Bridge"
         self._attr_device_info = dr.DeviceInfo(
             identifiers={(DOMAIN, f"{self._device_id}_bridge")},
-            name="ESP Bridge",
+            name=bridge_name,
             manufacturer="Espressif",
         )
 

@@ -12,7 +12,7 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     OptionsFlowWithReload,
 )
-from homeassistant.core import callback
+from homeassistant.core import Event, callback
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.components.bluetooth import (
     BluetoothServiceInfoBleak,
@@ -32,7 +32,6 @@ from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
-    BooleanSelector,
     SelectSelector,
     SelectSelectorConfig,
     SelectOptionDict,
@@ -57,13 +56,7 @@ from .const import (
     SVC_CONTROL,
     SVC_SERIAL,
     SVC_GROOMER,
-    DEFAULT_POLL_INTERVAL,
-    DEFAULT_ENABLE_LIVE_UPDATES,
-    MIN_POLL_INTERVAL,
-    MAX_POLL_INTERVAL,
     CONF_ADDRESS,
-    CONF_POLL_INTERVAL,
-    CONF_ENABLE_LIVE_UPDATES,
     CONF_CAPABILITIES,
     CONF_SERVICES,
     CONF_DEVICE_TYPE,
@@ -71,7 +64,7 @@ from .const import (
     TRANSPORT_BLEAK,
     TRANSPORT_ESP_BRIDGE,
     CONF_ESP_DEVICE_NAME,
-    CONF_ESP_DEVICE_ID,
+    CONF_ESP_BRIDGE_ID,
     CONF_NOTIFY_THROTTLE,
     DEFAULT_NOTIFY_THROTTLE,
     MIN_NOTIFY_THROTTLE,
@@ -105,28 +98,14 @@ class PhilipsShaverOptionsFlow(OptionsFlowWithReload):
         )
 
         if user_input is not None:
-            entry_data = {
-                CONF_POLL_INTERVAL: user_input[CONF_POLL_INTERVAL],
-                CONF_ENABLE_LIVE_UPDATES: user_input[CONF_ENABLE_LIVE_UPDATES],
-            }
+            entry_data = {}
             if is_esp and CONF_NOTIFY_THROTTLE in user_input:
                 entry_data[CONF_NOTIFY_THROTTLE] = int(
                     user_input[CONF_NOTIFY_THROTTLE]
                 )
             return self.async_create_entry(data=entry_data)
 
-        schema_fields: dict = {
-            vol.Required(CONF_POLL_INTERVAL): NumberSelector(
-                NumberSelectorConfig(
-                    min=MIN_POLL_INTERVAL,
-                    max=MAX_POLL_INTERVAL,
-                    step=1,
-                    unit_of_measurement="s",
-                    mode=NumberSelectorMode.BOX,
-                )
-            ),
-            vol.Required(CONF_ENABLE_LIVE_UPDATES): BooleanSelector(),
-        }
+        schema_fields: dict = {}
 
         if is_esp:
             schema_fields[vol.Required(CONF_NOTIFY_THROTTLE)] = NumberSelector(
@@ -139,18 +118,13 @@ class PhilipsShaverOptionsFlow(OptionsFlowWithReload):
                 )
             )
 
+        if not schema_fields:
+            # Direct BLE: no configurable options currently
+            return self.async_create_entry(data={})
+
         data_schema = vol.Schema(schema_fields)
 
-        suggested_values = {
-            CONF_POLL_INTERVAL: self.config_entry.options.get(
-                CONF_POLL_INTERVAL,
-                DEFAULT_POLL_INTERVAL,
-            ),
-            CONF_ENABLE_LIVE_UPDATES: self.config_entry.options.get(
-                CONF_ENABLE_LIVE_UPDATES,
-                DEFAULT_ENABLE_LIVE_UPDATES,
-            ),
-        }
+        suggested_values = {}
         if is_esp:
             suggested_values[CONF_NOTIFY_THROTTLE] = self.config_entry.options.get(
                 CONF_NOTIFY_THROTTLE,
@@ -162,11 +136,6 @@ class PhilipsShaverOptionsFlow(OptionsFlowWithReload):
             data_schema=self.add_suggested_values_to_schema(
                 data_schema, suggested_values
             ),
-            description_placeholders={
-                "min_int": str(MIN_POLL_INTERVAL),
-                "max_int": str(MAX_POLL_INTERVAL),
-                "rec_int": str(DEFAULT_POLL_INTERVAL),
-            },
             errors=errors,
         )
 
@@ -175,7 +144,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     """Config flow for Philips Shaver."""
 
     VERSION = 1
-    MINOR_VERSION = 2
+    MINOR_VERSION = 3
 
     discovery_info: BluetoothServiceInfoBleak | None = None
 
@@ -387,27 +356,69 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
         # Wait for ESPHome to register services (may not be ready yet)
         for _ in range(10):
-            device_ids = self._detect_esp_device_ids(device_name)
-            if device_ids:
+            bridge_ids = self._detect_esp_bridge_ids(device_name)
+            if bridge_ids:
                 break
             await asyncio.sleep(3)
         else:
             return self.async_abort(reason="not_supported")
 
-        # Found a Shaver bridge — check if already configured
+        # Found bridges — probe to verify they are OURS (not Sonicare etc.)
+        # by calling ble_get_info and listening on our event name.
         self.fetched_esp_device_name = device_name
-        self.fetched_esp_device_ids = device_ids
+        self._esp_bridge_ids = bridge_ids
 
-        unique_id = f"esp_{device_name}_{device_ids[0]}" if device_ids[0] else f"esp_{device_name}"
-        await self.async_set_unique_id(unique_id)
-        self._abort_if_unique_id_configured()
+        configured_macs = {
+            entry.unique_id.upper()
+            for entry in self._async_current_entries()
+            if entry.unique_id
+        }
+
+        unconfigured = False
+        found_any = False
+        for did in bridge_ids:
+            svc_name = f"{device_name}_ble_get_info"
+            if did:
+                svc_name += f"_{did}"
+            info_future: asyncio.Future[dict[str, str]] = self.hass.loop.create_future()
+
+            @callback
+            def _on_status(event: Event, _did=did) -> None:
+                if (event.data.get("status") == "info"
+                        and event.data.get("bridge_id", "") == _did
+                        and not info_future.done()):
+                    info_future.set_result(dict(event.data))
+
+            unsub = self.hass.bus.async_listen(
+                "esphome.philips_shaver_ble_status", _on_status
+            )
+            try:
+                await self.hass.services.async_call(
+                    "esphome", svc_name, {}, blocking=True
+                )
+                info = await asyncio.wait_for(info_future, timeout=3.0)
+                found_any = True
+                mac = info.get("mac", "")
+                if not mac or mac.upper() not in configured_macs:
+                    unconfigured = True
+                    break
+            except (asyncio.TimeoutError, Exception):
+                pass  # Not our bridge type or not responding — skip
+            finally:
+                unsub()
+
+        if not found_any:
+            # No bridge responded on our event — not a Shaver bridge
+            return self.async_abort(reason="not_supported")
+        if not unconfigured:
+            return self.async_abort(reason="already_configured")
 
         _LOGGER.info("Zeroconf: found Shaver bridge on ESP device '%s'", device_name)
         self.context["title_placeholders"] = {"name": device_name.replace("_", "-")}
 
-        if len(device_ids) > 1:
+        if len(bridge_ids) > 1:
             return await self.async_step_esp_select_device()
-        self.fetched_esp_device_id = device_ids[0]
+        self.fetched_esp_bridge_id = bridge_ids[0]
         return await self._esp_bridge_health_check()
 
     async def async_step_bluetooth(
@@ -438,7 +449,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                     self.discovery_info.address,
                 )
                 self.fetched_esp_device_name = esp["device_name"]
-                self.fetched_esp_device_id = esp.get("device_id", "")
+                self.fetched_esp_bridge_id = esp.get("bridge_id", "")
                 self.fetched_bridge_info = esp["info"]
                 return await self.async_step_esp_bridge_status()
 
@@ -452,7 +463,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             if not device_name:
                 continue
             esp_name = device_name.replace("-", "_")
-            device_ids = self._detect_esp_device_ids(esp_name)
+            device_ids = self._detect_esp_bridge_ids(esp_name)
             for did in device_ids:
                 transport = EspBridgeTransport(
                     self.hass, mac, esp_name, did
@@ -463,7 +474,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                     if info and info.get("mac", "").upper() == mac.upper():
                         return {
                             "device_name": esp_name,
-                            "device_id": did,
+                            "bridge_id": did,
                             "info": info,
                         }
                 except Exception:
@@ -644,10 +655,10 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         self,
         address: str,
         esp_device_name: str,
-        esp_device_id: str = "",
+        esp_bridge_id: str = "",
     ) -> dict[str, Any]:
         """Read capabilities and probe services via ESP32 bridge."""
-        transport = EspBridgeTransport(self.hass, address, esp_device_name, esp_device_id)
+        transport = EspBridgeTransport(self.hass, address, esp_device_name, esp_bridge_id)
         try:
             await transport.connect()
 
@@ -740,7 +751,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
         return options
 
-    def _detect_esp_device_ids(self, esp_device_name: str) -> list[str]:
+    def _detect_esp_bridge_ids(self, esp_device_name: str) -> list[str]:
         """Detect available device_id suffixes on an ESP bridge.
 
         Returns [""] for single-device (no suffix) or ["shaver", "oneblade", ...]
@@ -769,20 +780,20 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             esp_device_name = user_input["esp_device_name"].strip().replace("-", "_")
 
             # Detect available device_ids (single vs multi-device)
-            device_ids = self._detect_esp_device_ids(esp_device_name)
+            device_ids = self._detect_esp_bridge_ids(esp_device_name)
             if not device_ids:
                 _LOGGER.error("No philips_shaver services found on %s", esp_device_name)
                 errors["base"] = "cannot_connect"
             else:
                 self.fetched_esp_device_name = esp_device_name
-                self._esp_device_ids = device_ids
+                self._esp_bridge_ids = device_ids
 
                 if len(device_ids) > 1:
                     # Multiple devices — let user pick
                     return await self.async_step_esp_select_device()
 
                 # Single device (or single suffixed device)
-                self.fetched_esp_device_id = device_ids[0]
+                self.fetched_esp_bridge_id = device_ids[0]
                 return await self._esp_bridge_health_check()
 
         esp_options = self._get_esphome_device_options()
@@ -815,11 +826,12 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Let user pick which device on a multi-device ESP bridge."""
         if user_input is not None:
-            self.fetched_esp_device_id = user_input["esp_device_id"]
+            selected = user_input["esp_bridge_id"]
+            if selected.startswith("✅ "):
+                return self.async_abort(reason="already_configured")
+            self.fetched_esp_bridge_id = selected
             # Store bridge info from the probe if available
-            self.fetched_bridge_info = self._esp_device_info.get(
-                user_input["esp_device_id"]
-            )
+            self.fetched_bridge_info = self._esp_device_info.get(selected)
             return await self._esp_bridge_health_check()
 
         # Collect MACs already configured for this integration
@@ -829,10 +841,11 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             if entry.unique_id
         }
 
-        # Probe each device_id to get MAC and connection status
+        # Probe each bridge_id to get MAC and connection status
         self._esp_device_info: dict[str, dict] = {}
         options: list[SelectOptionDict] = []
-        for did in self._esp_device_ids:
+        has_available = False
+        for did in self._esp_bridge_ids:
             transport = EspBridgeTransport(
                 self.hass, self.fetched_esp_device_name,
                 self.fetched_esp_device_name, did,
@@ -848,32 +861,37 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
             self._esp_device_info[did] = info or {}
             mac = (info or {}).get("mac", "")
-            ble = (info or {}).get("ble_connected", "false") == "true"
+            mac_suffix = f" — {mac}" if mac and mac != "00:00:00:00:00:00" else ""
 
-            # Skip devices that are already configured
             if mac and mac.upper() in configured_macs:
-                continue
-
-            if mac and mac != "00:00:00:00:00:00":
-                label = f"{did} — {mac} ({'connected' if ble else 'disconnected'})"
+                options.append(SelectOptionDict(
+                    value=f"✅ {did}",
+                    label=f"✅ {did}{mac_suffix}",
+                ))
             else:
-                label = did
-            options.append(SelectOptionDict(value=did, label=label))
+                has_available = True
+                options.append(SelectOptionDict(
+                    value=did,
+                    label=f"{did}{mac_suffix}" if did else mac or "default",
+                ))
 
         if not options:
+            return self.async_abort(reason="no_devices_found")
+        if not has_available:
             return self.async_abort(reason="already_configured")
 
-        # Auto-select if only one device left
-        if len(options) == 1:
-            self.fetched_esp_device_id = options[0]["value"]
-            self.fetched_bridge_info = self._esp_device_info.get(options[0]["value"])
+        # Auto-select if only one unconfigured device
+        unconfigured = [o for o in options if not o["value"].startswith("✅ ")]
+        if len(unconfigured) == 1 and len(options) == 1:
+            self.fetched_esp_bridge_id = unconfigured[0]["value"]
+            self.fetched_bridge_info = self._esp_device_info.get(unconfigured[0]["value"])
             return await self._esp_bridge_health_check()
 
         return self.async_show_form(
             step_id="esp_select_device",
             data_schema=vol.Schema(
                 {
-                    vol.Required("esp_device_id"): SelectSelector(
+                    vol.Required("esp_bridge_id"): SelectSelector(
                         SelectSelectorConfig(options=options)
                     ),
                 }
@@ -887,17 +905,17 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             return await self.async_step_esp_bridge_status()
 
         esp_device_name = self.fetched_esp_device_name
-        esp_device_id = self.fetched_esp_device_id
+        esp_bridge_id = self.fetched_esp_bridge_id
 
         transport = EspBridgeTransport(
-            self.hass, esp_device_name, esp_device_name, esp_device_id
+            self.hass, esp_device_name, esp_device_name, esp_bridge_id
         )
         bridge_info = None
         try:
             await transport.connect()
             bridge_info = await transport.get_bridge_info()
         except TransportError:
-            _LOGGER.error("ESP bridge not reachable: %s (device_id=%s)", esp_device_name, esp_device_id)
+            _LOGGER.error("ESP bridge not reachable: %s (bridge_id=%s)", esp_device_name, esp_bridge_id)
             return self.async_show_form(
                 step_id="esp_bridge",
                 data_schema=vol.Schema({vol.Required("esp_device_name"): str}),
@@ -927,7 +945,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             try:
                 capabilities = await self._async_fetch_capabilities_esp(
                     esp_device_name, esp_device_name,
-                    getattr(self, "fetched_esp_device_id", ""),
+                    getattr(self, "fetched_esp_bridge_id", ""),
                 )
 
                 shaver_mac = capabilities.get("shaver_mac")
@@ -964,12 +982,12 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
 
         # Refresh bridge info to get current BLE connection status
-        esp_device_id = getattr(self, "fetched_esp_device_id", "")
+        esp_bridge_id = getattr(self, "fetched_esp_bridge_id", "")
         transport = EspBridgeTransport(
             self.hass,
             self.fetched_esp_device_name,
             self.fetched_esp_device_name,
-            esp_device_id,
+            esp_bridge_id,
         )
         try:
             await transport.connect()
@@ -1162,9 +1180,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             if self.fetched_transport_type == TRANSPORT_ESP_BRIDGE:
                 entry_data[CONF_TRANSPORT_TYPE] = TRANSPORT_ESP_BRIDGE
                 entry_data[CONF_ESP_DEVICE_NAME] = self.fetched_esp_device_name
-                esp_device_id = getattr(self, "fetched_esp_device_id", "")
-                if esp_device_id:
-                    entry_data[CONF_ESP_DEVICE_ID] = esp_device_id
+                esp_bridge_id = getattr(self, "fetched_esp_bridge_id", "")
+                if esp_bridge_id:
+                    entry_data[CONF_ESP_BRIDGE_ID] = esp_bridge_id
                 if self.fetched_address:
                     entry_data[CONF_ADDRESS] = self.fetched_address
             else:
@@ -1173,10 +1191,6 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(
                 title=f"Philips Shaver ({self.fetched_name})",
                 data=entry_data,
-                options={
-                    CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL,
-                    CONF_ENABLE_LIVE_UPDATES: DEFAULT_ENABLE_LIVE_UPDATES,
-                },
             )
 
         device_type = self.fetched_data.get("device_type", "")

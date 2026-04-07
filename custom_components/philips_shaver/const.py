@@ -503,12 +503,7 @@ POLL_READ_CHARS = [
 # Characteristics for initial reading of live thread (same as poll)
 LIVE_READ_CHARS = POLL_READ_CHARS
 
-DEFAULT_POLL_INTERVAL = 60
-DEFAULT_ENABLE_LIVE_UPDATES = True
-
 CONF_ADDRESS = "address"
-CONF_POLL_INTERVAL = "poll_interval"
-CONF_ENABLE_LIVE_UPDATES = "enable_live_updates"
 CONF_CAPABILITIES = "capabilities"
 CONF_SERVICES = "services"
 CONF_DEVICE_TYPE = "device_type"
@@ -519,13 +514,12 @@ TRANSPORT_BLEAK = "bleak"
 TRANSPORT_ESP_BRIDGE = "esp_bridge"
 
 CONF_ESP_DEVICE_NAME = "esp_device_name"
-CONF_ESP_DEVICE_ID = "esp_device_id"
+CONF_ESP_BRIDGE_ID = "esp_bridge_id"
+# Legacy key — used for migration from v1.2 → v1.3
+CONF_ESP_DEVICE_ID_LEGACY = "esp_device_id"
 
 # Minimum ESP bridge component version required for full functionality
 MIN_BRIDGE_VERSION = "1.5.1"
-
-MIN_POLL_INTERVAL = 30
-MAX_POLL_INTERVAL = 300
 
 CONF_NOTIFY_THROTTLE = "notify_throttle_ms"
 DEFAULT_NOTIFY_THROTTLE = 500

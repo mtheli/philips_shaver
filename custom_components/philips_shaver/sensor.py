@@ -14,14 +14,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import EntityCategory
-from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.const import UnitOfTime, PERCENTAGE
 from homeassistant.components.bluetooth import async_last_service_info
 from .coordinator import PhilipsShaverCoordinator
 
 from .const import (
-    DOMAIN, CONF_ENABLE_LIVE_UPDATES, DEFAULT_ENABLE_LIVE_UPDATES,
+    DOMAIN,
     CONF_TRANSPORT_TYPE, TRANSPORT_ESP_BRIDGE, CONF_SERVICES,
     SVC_CONTROL, SVC_GROOMER,
     CARTRIDGE_CAPACITY, EVAPORATION_RATE, CLEANING_CONSTANTS, CLEANING_CONSTANT_DEFAULT,
@@ -35,9 +34,6 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    enable_live = entry.options.get(
-        CONF_ENABLE_LIVE_UPDATES, DEFAULT_ENABLE_LIVE_UPDATES
-    )
 
     entities: list[PhilipsShaverEntity] = [
         PhilipsBatterySensor(coordinator, entry),
@@ -110,35 +106,6 @@ async def async_setup_entry(
         entities.append(PhilipsBridgeVersionSensor(coordinator, entry))
 
     async_add_entities(entities)
-
-    # Enable/disable live-only entities based on option
-    await _update_live_entity_visibility(hass, coordinator.address, enable_live)
-
-
-async def _update_live_entity_visibility(
-    hass: HomeAssistant, address: str, enable_live: bool
-) -> None:
-    """Enable or disable live-only entities based on the live updates option."""
-    ent_reg = er.async_get(hass)
-
-    live_unique_ids = [
-        f"{address}_cleaning_progress",
-        f"{address}_motor_rpm",
-        f"{address}_motor_current",
-        f"{address}_pressure",
-    ]
-
-    for unique_id in live_unique_ids:
-        entity_id = ent_reg.async_get_entity_id("sensor", DOMAIN, unique_id)
-        if entity_id:
-            if enable_live:
-                # re-enable sensor
-                ent_reg.async_update_entity(entity_id, disabled_by=None)
-            else:
-                # disabling sensors
-                ent_reg.async_update_entity(
-                    entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
-                )
 
 
 # =============================================================================
@@ -450,9 +417,11 @@ class PhilipsDeviceActivitySensor(PhilipsShaverEntity, SensorEntity):
     @property
     def native_value(self) -> str:
         data = self.coordinator.data
+        if not data:
+            return "off"
 
-        # 0. No data yet — still loading
-        if not data or data.get("device_state") is None:
+        # 0. Connecting — show initializing while reading data
+        if data.get("_connecting"):
             return "initializing"
 
         # 1. check for travel locking

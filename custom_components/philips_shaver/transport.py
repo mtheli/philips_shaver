@@ -119,7 +119,7 @@ class BleakTransport(ShaverTransport):
             raise TransportError(f"Device {self._address} not in range")
 
         def _on_disconnect(_client):
-            _LOGGER.info("BleakTransport: connection lost")
+            _LOGGER.info("%s: connection lost", self._address)
             self._client = None
             if self._disconnect_cb:
                 self._disconnect_cb()
@@ -179,7 +179,7 @@ class BleakTransport(ShaverTransport):
                 except Exception as e:
                     _LOGGER.debug("Read failed for %s: %s", uuid, e)
         except Exception as err:
-            _LOGGER.error("BLE poll error: %s", err)
+            _LOGGER.debug("BLE poll error (device likely sleeping): %s", err)
         finally:
             if client and client.is_connected:
                 try:
@@ -236,12 +236,12 @@ class EspBridgeTransport(ShaverTransport):
         hass: HomeAssistant,
         address: str,
         esphome_device_name: str,
-        esp_device_id: str = "",
+        esp_bridge_id: str = "",
     ) -> None:
         self._hass = hass
         self._address = address
         self._device_name = esphome_device_name  # e.g. "atom_lite"
-        self._esp_device_id = esp_device_id  # e.g. "shaver" — suffix for multi-device ESP
+        self._esp_bridge_id = esp_bridge_id  # e.g. "shaver" — suffix for multi-device ESP
         self._setup_done = False  # event listeners registered
         self._shaver_connected = False  # ESP↔Shaver BLE link active
         self._esp_alive = False  # heartbeat received from ESP
@@ -258,12 +258,13 @@ class EspBridgeTransport(ShaverTransport):
         self._bridge_version: str | None = None
         self._pending_info: asyncio.Future[dict[str, str]] | None = None
         self._needs_resubscribe = False
+        self._ready_event = asyncio.Event()
 
     def _svc_name(self, action: str) -> str:
         """Full ESPHome service name, e.g. 'atom_lite_ble_read_char_shaver'."""
         base = f"{self._device_name}_{action}"
-        if self._esp_device_id:
-            return f"{base}_{self._esp_device_id}"
+        if self._esp_bridge_id:
+            return f"{base}_{self._esp_bridge_id}"
         return base
 
     @staticmethod
@@ -436,8 +437,15 @@ class EspBridgeTransport(ShaverTransport):
                     self._shaver_connected = True
                     _LOGGER.info("ESP↔Shaver BLE: %s", status)
                 if status == "ready":
-                    self._needs_resubscribe = True
-                    _LOGGER.info("ESP ready — subscriptions need (re-)setup")
+                    self._ready_event.set()
+                    # Only flag resubscribe if HA has no active subscriptions.
+                    # The bridge re-fires "ready" on every heartbeat when it
+                    # has no subscriptions — ignore if HA already subscribed.
+                    if not self._notify_callbacks:
+                        self._needs_resubscribe = True
+                        _LOGGER.info("ESP ready — subscriptions need (re-)setup")
+                elif status == "connected":
+                    pass  # GATT discovery still in progress
                 if self._disconnect_cb:
                     self._disconnect_cb()  # trigger entity update
             elif status == "disconnected":
@@ -448,6 +456,17 @@ class EspBridgeTransport(ShaverTransport):
                     if self._disconnect_cb:
                         self._disconnect_cb()
             elif status == "info":
+                # Filter by bridge_id if present (multi-device ESP)
+                event_bridge_id = event.data.get("bridge_id", "")
+                if event_bridge_id and self._esp_bridge_id and event_bridge_id != self._esp_bridge_id:
+                    return
+                # Only set _detected_mac from info events (bridge_id filtered)
+                # to avoid cross-contamination from other instances' heartbeats
+                if mac and not self._detected_mac:
+                    self._detected_mac = mac
+                ble_connected = event.data.get("ble_connected")
+                if ble_connected is not None:
+                    self._shaver_connected = ble_connected == "true"
                 if self._pending_info and not self._pending_info.done():
                     self._pending_info.set_result(dict(event.data))
 
@@ -477,10 +496,44 @@ class EspBridgeTransport(ShaverTransport):
         )
 
         self._setup_done = True
-        # Start pessimistic — first heartbeat or status event confirms ESP is alive
-        _LOGGER.info("EspBridgeTransport: event listeners registered, waiting for ESP heartbeat")
-        if self._disconnect_cb:
-            self._disconnect_cb()  # force entity update with initial (pessimistic) state
+
+        # Wait until the ESP bridge reports alive and BLE device connected
+        if self.is_connected:
+            return
+        self._ready_event.clear()
+        _LOGGER.debug("%s: Waiting for ESP bridge ready event...", self._address)
+        # Trigger immediate info event instead of waiting for next heartbeat
+        try:
+            await self._hass.services.async_call(
+                "esphome", self._svc_name("ble_get_info"), {}, blocking=True,
+            )
+        except Exception:
+            pass
+        # Wait up to 10s for ESP to report alive
+        for _ in range(10):
+            await asyncio.sleep(1)
+            if self._esp_alive:
+                break
+        if not self._esp_alive:
+            raise TransportError("ESP bridge did not respond within 10s")
+        if self.is_connected:
+            _LOGGER.info(
+                "ESP bridge ready (mac=%s, version=%s)",
+                self._detected_mac,
+                self._bridge_version,
+            )
+            return
+        # ESP alive but device not connected — wait for "ready" event
+        _LOGGER.debug(
+            "%s: ESP bridge alive, waiting for BLE device to connect...",
+            self._address,
+        )
+        await self._ready_event.wait()
+        _LOGGER.info(
+            "ESP bridge ready (mac=%s, version=%s)",
+            self._detected_mac,
+            self._bridge_version,
+        )
 
     async def disconnect(self) -> None:
         if self._event_unsub:
@@ -495,6 +548,7 @@ class EspBridgeTransport(ShaverTransport):
         self._setup_done = False
         self._shaver_connected = False
         self._esp_alive = False
+        self._ready_event.clear()
         self._pending_reads.clear()
         self._notify_callbacks.clear()
 
@@ -592,7 +646,7 @@ class EspBridgeTransport(ShaverTransport):
 
     async def unsubscribe(self, char_uuid: str) -> None:
         self._notify_callbacks.pop(char_uuid, None)
-        if not self._setup_done:
+        if not self._setup_done or not self._shaver_connected:
             return
 
         service_uuid = self._get_service_uuid(char_uuid)
@@ -607,6 +661,10 @@ class EspBridgeTransport(ShaverTransport):
             pass
 
     async def unsubscribe_all(self) -> None:
+        if not self._shaver_connected:
+            # Device already gone — just clear local callbacks
+            self._notify_callbacks.clear()
+            return
         for char_uuid in list(self._notify_callbacks.keys()):
             await self.unsubscribe(char_uuid)
 

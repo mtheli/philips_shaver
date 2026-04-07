@@ -10,15 +10,11 @@
       "init": {
         "title": "Philips Shaver Settings",
         "data": {
-          "poll_interval": "Polling Interval",
-          "enable_live_updates": "Live Update",
           "notify_throttle_ms": "Notification Throttle"
         },
         "data_description": {
-          "poll_interval": "The recommended interval is {rec_int} seconds and a maximum of {max_int} seconds.",
           "notify_throttle_ms": "Minimum interval between BLE notification events forwarded by the ESP bridge (in milliseconds). Lower values give faster updates but may overload the ESP API buffer. Only applies to ESP32 bridge connections."
-        },
-        "description": "The polling interval determines the time between requests to update the device information if Live Update is not enabled."
+        }
       }
     }
   },
@@ -52,13 +48,13 @@
       },
       "bluetooth_confirm": {
         "title": "Confirm detected device",
-        "description": "Do you want to add the detected Philips Shaver **{name}** to Home Assistant?\n\nℹ️ **Before continuing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **unpaired** from your phone\n   — Remove from Bluetooth settings **and** GroomTribe / OneBlade app\n3. ⬜ Shaver is **paired** with this system via `bluetoothctl`\n\nClicking Submit will connect to the device to verify pairing and read hardware capabilities. This may take a few seconds."
+        "description": "Do you want to add the detected Philips Shaver **{name}** to Home Assistant?\n\nℹ️ **Before continuing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **unpaired** from your phone\n   — Remove from Bluetooth settings **and** GroomTribe / OneBlade app\n\nPairing will be handled automatically during setup. Clicking Submit will connect to the device to read hardware capabilities. This may take a few seconds."
       },
       "esp_select_device": {
         "title": "Select BLE Device",
         "description": "This ESP bridge has multiple Philips devices connected. Select the device you want to add to Home Assistant.",
         "data": {
-          "esp_device_id": "BLE Device"
+          "esp_bridge_id": "BLE Device"
         }
       },
       "esp_bridge_status": {

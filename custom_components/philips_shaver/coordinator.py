@@ -2,20 +2,28 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import logging
 from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr, issue_registry as ir
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.config_entries import ConfigEntry
 
 from homeassistant.components.bluetooth import (
     BluetoothCallbackMatcher,
     BluetoothScanningMode,
+    async_last_service_info,
     async_register_callback,
 )
+
+try:
+    from dbus_fast.aio import MessageBus
+    from dbus_fast import BusType, Message, MessageType
+    HAS_DBUS_FAST = True
+except ImportError:
+    HAS_DBUS_FAST = False
 
 from .transport import BleakTransport, EspBridgeTransport, ShaverTransport
 from .exceptions import TransportError
@@ -73,12 +81,8 @@ from .const import (
     CONF_ESP_DEVICE_NAME,
     CONF_TRANSPORT_TYPE,
     TRANSPORT_ESP_BRIDGE,
-    CONF_POLL_INTERVAL,
-    CONF_ENABLE_LIVE_UPDATES,
     CONF_NOTIFY_THROTTLE,
-    DEFAULT_ENABLE_LIVE_UPDATES,
     DEFAULT_NOTIFY_THROTTLE,
-    DEFAULT_POLL_INTERVAL,
     POLL_READ_CHARS,
     LIVE_READ_CHARS,
     CHAR_SERVICE_MAP,
@@ -139,14 +143,6 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         cap_int = entry.data.get(CONF_CAPABILITIES, 0)
         self.capabilities = parse_capabilities(cap_int)
 
-        # read options
-        options = entry.options
-        poll_interval = options.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL)
-        self.poll_interval_seconds = poll_interval
-        self.enable_live_updates = options.get(
-            CONF_ENABLE_LIVE_UPDATES, DEFAULT_ENABLE_LIVE_UPDATES
-        )
-
         # Filter characteristics by available services (avoids "not found" for
         # devices that lack certain services, e.g. OneBlade without SVC_CONTROL)
         self.available_services = {
@@ -165,23 +161,27 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._live_chars = list(LIVE_READ_CHARS)
             self._notify_chars = list(NOTIFICATION_CHARS)
 
+        self._is_esp_bridge = isinstance(transport, EspBridgeTransport)
         self._connection_lock = asyncio.Lock()
         self._live_task: asyncio.Task | None = None
         self._live_setup_done = False
+        self._full_read_done = False
+        self._dbus_bus: MessageBus | None = None
         self._wake_event = asyncio.Event()
         self._unsub_advertisement = None
 
         _LOGGER.debug(
-            "Initializing coordinator for %s with poll interval %s seconds (live updates: %s)",
+            "Initializing coordinator for %s (transport: %s)",
             self.address,
-            self.poll_interval_seconds,
-            self.enable_live_updates,
+            "ESP" if isinstance(transport, EspBridgeTransport) else "Direct BLE",
         )
+        # Event-driven: no polling. Connect on ADV/D-Bus (Direct BLE)
+        # or ESP "ready" event (ESP bridge).
         super().__init__(
             hass,
             _LOGGER,
             name=f"Philips Shaver {self.address}",
-            update_interval=timedelta(seconds=self.poll_interval_seconds),
+            update_interval=None,
         )
 
         # Initial empty dataset
@@ -193,7 +193,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "head_remaining": None,
             "days_since_last_used": None,
             "shaving_time": None,
-            "device_state": None,
+            "device_state": "off",
             "travel_lock": None,
             "cleaning_progress": 100,
             "cleaning_cycles": None,
@@ -228,92 +228,130 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_start(self) -> None:
         """Start live monitoring. Call after setup is complete."""
-        if self.enable_live_updates:
-            self._live_task = self.entry.async_create_background_task(
-                self.hass, self._start_live_monitoring(), "philips_shaver_monitoring"
-            )
-        else:
-            _LOGGER.info("Live updates disabled – polling only")
+        if not self._is_esp_bridge:
+            self._start_advertisement_callback()
+            await self._start_dbus_rssi_listener()
+            # If device is already advertising (e.g., on charger during HA restart),
+            # trigger wake immediately — the ADV callback may have fired with stale
+            # cached RSSI (-127) which we filter, and habluetooth deduplicates
+            # subsequent identical advertisements.
+            service_info = async_last_service_info(self.hass, self.address)
+            if service_info:
+                _LOGGER.info("Device already known at startup — triggering wake")
+                self._handle_wake()
+        self._live_task = self.entry.async_create_background_task(
+            self.hass, self._start_live_monitoring(), "philips_shaver_monitoring"
+        )
+
+    def _handle_wake(self) -> None:
+        """Handle device wake — set activity to initializing and trigger connect."""
+        if not self.transport.is_connected and self.data:
+            self.data["_connecting"] = True
+            self.async_set_updated_data(self.data)
+        self._wake_event.set()
 
     def _start_advertisement_callback(self) -> None:
-        """Register BLE advertisement callback to wake monitoring loop and log."""
+        """Register HA bluetooth callback for advertisement detection.
+
+        Note: habluetooth filters identical advertisements, so this only fires
+        when advertisement DATA changes. For devices that send static data,
+        the D-Bus RSSI listener provides the fallback.
+        """
 
         @callback
         def _advertisement_callback(service_info, change):
-            self._wake_event.set()
-
-            if not _LOGGER.isEnabledFor(logging.DEBUG):
+            # Ignore stale/cached history data (fires on registration)
+            if service_info.rssi is not None and service_info.rssi <= -127:
+                _LOGGER.debug("ADV ignored (stale RSSI %s)", service_info.rssi)
                 return
-
-            adv = service_info.advertisement
-            _LOGGER.debug(
-                "ADVERTISEMENT %s | Name: %s | RSSI: %s dBm | "
-                "Mfr: %s | SvcData: %s | SvcUUIDs: %s",
-                service_info.address,
-                service_info.name or "unknown",
-                service_info.rssi,
-                (
-                    {k: v.hex() for k, v in adv.manufacturer_data.items()}
-                    if adv.manufacturer_data
-                    else "none"
-                ),
-                (
-                    {str(u): d.hex() for u, d in adv.service_data.items()}
-                    if adv.service_data
-                    else "none"
-                ),
-                adv.service_uuids or "none",
-            )
+            if not self.transport.is_connected:
+                _LOGGER.info(
+                    "Wake via ADV: %s | RSSI: %s dBm",
+                    service_info.address,
+                    service_info.rssi,
+                )
+            else:
+                _LOGGER.debug(
+                    "ADV while connected: %s | RSSI: %s dBm",
+                    service_info.address,
+                    service_info.rssi,
+                )
+            self._handle_wake()
 
         self._unsub_advertisement = async_register_callback(
             self.hass,
             _advertisement_callback,
             BluetoothCallbackMatcher(address=self.address),
-            BluetoothScanningMode.PASSIVE,
+            BluetoothScanningMode.ACTIVE,
+        )
+
+    async def _start_dbus_rssi_listener(self) -> None:
+        """Listen for BlueZ D-Bus RSSI changes to detect device advertisements.
+
+        habluetooth deduplicates advertisements with identical data.
+        RSSI changes with every packet due to signal fluctuation,
+        so BlueZ emits PropertiesChanged even when the ADV payload is identical.
+        """
+        if not HAS_DBUS_FAST:
+            _LOGGER.debug("dbus-fast not available — D-Bus RSSI listener disabled")
+            return
+
+        try:
+            self._dbus_bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+        except Exception as err:
+            _LOGGER.warning("D-Bus not available for RSSI wake detection: %s", err)
+            return
+
+        from .dbus_pairing import _find_device_path
+        device_path = await _find_device_path(self._dbus_bus, self.address)
+        if not device_path:
+            mac_path = self.address.upper().replace(":", "_")
+            device_path = f"/org/bluez/hci0/dev_{mac_path}"
+            _LOGGER.debug("Device not in BlueZ ObjectManager, using default path: %s", device_path)
+
+        def _on_message(msg: Message) -> None:
+            if msg.message_type != MessageType.SIGNAL:
+                return
+            if msg.member != "PropertiesChanged":
+                return
+            if msg.path != device_path:
+                return
+            body = msg.body
+            if len(body) >= 2 and "RSSI" in body[1]:
+                rssi = body[1]["RSSI"].value
+                if not self.transport.is_connected:
+                    _LOGGER.info("Wake via D-Bus RSSI: %s from %s", rssi, self.address)
+                else:
+                    _LOGGER.debug("D-Bus RSSI while connected: %s from %s", rssi, self.address)
+                self._handle_wake()
+
+        self._dbus_bus.add_message_handler(_on_message)
+
+        await self._dbus_bus.call(Message(
+            destination="org.freedesktop.DBus",
+            path="/org/freedesktop/DBus",
+            interface="org.freedesktop.DBus",
+            member="AddMatch",
+            signature="s",
+            body=[
+                f"type='signal',"
+                f"interface='org.freedesktop.DBus.Properties',"
+                f"member='PropertiesChanged',"
+                f"path='{device_path}'"
+            ],
+        ))
+
+        _LOGGER.info(
+            "D-Bus RSSI listener active for %s (%s)",
+            self.address, device_path,
         )
 
     # ------------------------------------------------------------------
-    # Called automatically by the coordinator (polling)
+    # Called automatically by the coordinator (no polling — event-driven)
     # ------------------------------------------------------------------
     async def _async_update_data(self) -> dict[str, Any]:
-        """Fetch data via polling fallback."""
-
-        # 1. Live connection active → skip polling but keep last_seen fresh
-        if self.transport.is_connected:
-            _LOGGER.debug("Live connection active – polling skipped")
-            data = self.data or {}
-            data["last_seen"] = datetime.now(timezone.utc)
-            return data
-
-        # 2. Live updates enabled + device seen → let live thread handle reconnect
-        if self.enable_live_updates and self._wake_event.is_set():
-            _LOGGER.debug("ADV received, live thread will handle reconnect – polling skipped")
-            return self.data or {}
-
-        if self.data is None:
-            self.data = {}
-
-        # 3. Recent data within poll interval → skip
-        last_seen = self.data.get("last_seen")
-        if last_seen:
-            age = (datetime.now(timezone.utc) - last_seen).total_seconds()
-
-            if age < self.poll_interval_seconds:
-                _LOGGER.debug(
-                    "Recent data (%ss < poll interval %ss) – polling skipped",
-                    age,
-                    self.poll_interval_seconds,
-                )
-                return self.data or {}
-
-        async with self._connection_lock:
-            try:
-                results = await self.transport.read_chars(self._poll_chars)
-                new_data = self._process_results(results)
-                self._update_device_registry(new_data)
-                return new_data
-            except Exception as err:
-                raise UpdateFailed(f"Error communicating with device: {err}") from err
+        """Return cached data — all updates come from live monitoring."""
+        return self.data or {}
 
     # ------------------------------------------------------------------
     # Shared processing for poll + live
@@ -513,24 +551,61 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
 
     async def _start_live_monitoring(self) -> None:
-        """Persistent live connection with notifications – exclusive and intelligent."""
-        backoff = 5
-        max_backoff = 300
+        """Persistent live connection with notifications.
+
+        Direct BLE: waits for advertisement (ADV callback or D-Bus RSSI).
+        ESP bridge: waits for ESP "ready" event (device auto-connected).
+
+        Both modes are event-driven — no blind retries.
+        """
+        MAX_QUICK_RETRIES = 2  # quick retries after unexpected disconnect (Direct BLE only)
 
         while True:
+            # ---- Wait for device to be available ----
+            # Direct BLE: wait for ADV/D-Bus signal
+            # ESP: skip — connect() below waits for "ready" event internally
+            if not self._is_esp_bridge and not self.transport.is_connected:
+                if self._wake_event.is_set():
+                    self._wake_event.clear()
+                    _LOGGER.info("Advertisement already pending — connecting to %s", self.address)
+                else:
+                    _LOGGER.debug("Waiting for advertisement from %s...", self.address)
+                    await self._wake_event.wait()
+                    self._wake_event.clear()
+                    _LOGGER.info("Advertisement received — connecting to %s", self.address)
+
+            # ---- Connect and set up live monitoring ----
             async with self._connection_lock:
                 try:
+                    # Check if ESP bridge needs resubscription (after ESP restart)
+                    if (
+                        self._is_esp_bridge
+                        and self.transport.needs_resubscribe
+                        and self._live_setup_done
+                    ):
+                        _LOGGER.info("ESP bridge requires resubscription")
+                        self.transport.acknowledge_resubscribe()
+                        self._live_setup_done = False
+
                     if self.transport.is_connected and self._live_setup_done:
                         await asyncio.sleep(5)
                         continue
 
                     def _on_state_change():
                         if self.transport.is_connected:
-                            _LOGGER.info("Transport state: connected")
+                            _LOGGER.info("%s: connected", self.address)
+                            # Show "initializing" while reading data
+                            if self.data:
+                                self.data["_connecting"] = True
+                            # Wake the loop to set up live monitoring
+                            self._wake_event.set()
                         else:
-                            _LOGGER.info("Transport state: disconnected")
+                            _LOGGER.info("%s: disconnected", self.address)
+                            # Clear state so Activity shows "off"
+                            if self.data:
+                                self.data["device_state"] = "off"
+                                self.data.pop("_connecting", None)
                         self.async_set_updated_data(self.data)
-                        self._wake_event.set()
 
                     self.transport.set_disconnect_callback(_on_state_change)
 
@@ -538,15 +613,23 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     await self.transport.connect()
 
                     # Send configured throttle to ESP bridge
-                    throttle_ms = self.entry.options.get(
-                        CONF_NOTIFY_THROTTLE, DEFAULT_NOTIFY_THROTTLE
-                    )
-                    await self.transport.set_notify_throttle(throttle_ms)
+                    if self._is_esp_bridge:
+                        throttle_ms = self.entry.options.get(
+                            CONF_NOTIFY_THROTTLE, DEFAULT_NOTIFY_THROTTLE
+                        )
+                        await self.transport.set_notify_throttle(throttle_ms)
 
-                    # Read all characteristics first (reads are GATT activity
-                    # that keeps the connection alive, same as CCCD writes)
+                    # Read characteristics first, then subscribe.
+                    # First connect: read ALL chars (incl. static data like
+                    # model, firmware). Subsequent: dynamic only.
+                    read_chars = (
+                        self._poll_chars
+                        if not self._full_read_done
+                        else self._live_chars
+                    )
+
                     results = {}
-                    for uuid in self._live_chars:
+                    for uuid in read_chars:
                         if not self.transport.is_connected:
                             break
                         try:
@@ -558,7 +641,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             )
 
                     # For ESP bridge: if ALL reads failed, bridge is not ready
-                    if isinstance(self.transport, EspBridgeTransport):
+                    if self._is_esp_bridge:
                         if not any(v is not None for v in results.values()):
                             raise TransportError(
                                 "No characteristics could be read – bridge may not be ready"
@@ -566,53 +649,79 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                     if any(v is not None for v in results.values()):
                         new_data = self._process_results(results)
+                        new_data.pop("_connecting", None)
                         self._update_device_registry(new_data)
                         self.async_set_updated_data(new_data)
-
-                    # Reset backoff after successful reads
-                    backoff = 5
+                        if not self._full_read_done:
+                            self._full_read_done = True
+                            _LOGGER.info(
+                                "%s: full initial data read complete (%d chars)",
+                                self.address, len(results),
+                            )
+                        else:
+                            _LOGGER.info("%s: initial data read complete", self.address)
 
                     # Subscribe to notifications after reads
-                    await self._start_all_notifications()
+                    sub_count = await self._start_all_notifications()
+                    if sub_count == 0:
+                        raise TransportError("No notifications could be subscribed")
                     self._live_setup_done = True
-                    if isinstance(self.transport, EspBridgeTransport):
-                        self.transport.acknowledge_resubscribe()
-                        self._check_bridge_version()
-                    _LOGGER.info("Live monitoring active – polling paused")
+                    if self.data:
+                        self.data.pop("_connecting", None)
+                    _LOGGER.info("%s: live monitoring active (%d subscriptions)", self.address, sub_count)
 
-                except TransportError as err:
-                    _LOGGER.debug(
-                        "Transport error: %s – retrying in %ds", err, backoff
-                    )
-                    self._wake_event.clear()
-                    try:
-                        await asyncio.wait_for(self._wake_event.wait(), timeout=backoff)
-                        backoff = 5  # ESP came online — reset backoff
-                    except asyncio.TimeoutError:
-                        backoff = min(backoff * 2, max_backoff)
-                    continue
+                    if self._is_esp_bridge:
+                        self._check_bridge_version()
+                        if self.transport.needs_resubscribe:
+                            self.transport.acknowledge_resubscribe()
 
                 except Exception as err:
-                    _LOGGER.error(
-                        "Live monitoring error: %s – retrying in %ds", err, backoff
+                    err_msg = str(err).lower()
+                    is_unreachable = (
+                        "no longer reachable" in err_msg
+                        or "connection slot" in err_msg
+                        or "timeout" in err_msg
+                        or "not in range" in err_msg
                     )
+                    if is_unreachable:
+                        _LOGGER.debug(
+                            "%s: device not reachable: %s", self.address, err
+                        )
+                    else:
+                        _LOGGER.warning(
+                            "%s: live monitoring error: %s", self.address, err
+                        )
                     try:
                         await self.transport.disconnect()
                     except Exception:
                         pass
-                    self._wake_event.clear()
-                    try:
-                        await asyncio.wait_for(self._wake_event.wait(), timeout=backoff)
-                        backoff = 5
-                    except asyncio.TimeoutError:
-                        backoff = min(backoff * 2, max_backoff)
+
+                    if not self._is_esp_bridge:
+                        # Direct BLE: quick retries, then wait for ADV
+                        for attempt in range(MAX_QUICK_RETRIES):
+                            await asyncio.sleep(5)
+                            if self._wake_event.is_set():
+                                break
+                            _LOGGER.debug(
+                                "Quick retry %d/%d for %s...",
+                                attempt + 1, MAX_QUICK_RETRIES, self.address,
+                            )
+                            try:
+                                await self.transport.connect()
+                                break
+                            except Exception:
+                                try:
+                                    await self.transport.disconnect()
+                                except Exception:
+                                    pass
+                        # If still not connected, loop back to ADV wait
                     continue
 
-            # Outside the lock: wait until disconnect (or ESP reboot)
+            # ---- Connected: wait until disconnect (or ESP reboot) ----
             try:
                 while self.transport.is_connected:
                     if (
-                        isinstance(self.transport, EspBridgeTransport)
+                        self._is_esp_bridge
                         and self.transport.needs_resubscribe
                     ):
                         self.transport.acknowledge_resubscribe()
@@ -625,15 +734,13 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         pass
 
             except asyncio.CancelledError:
-                _LOGGER.error("Live connection was cancelled")
-                raise  # the task was cancelled from outside
+                raise
             except Exception as err:
                 _LOGGER.error("Unexpected error in live monitoring: %s", err)
             finally:
                 self._live_setup_done = False
                 await self.transport.unsubscribe_all()
-                _LOGGER.info("Live connection ended – polling will resume")
-                await asyncio.sleep(5)
+                _LOGGER.info("%s: live connection ended", self.address)
 
     def _make_live_callback(self):
         """Create a single notification callback for all subscribed characteristics."""
@@ -644,6 +751,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return
 
             new_data = self._process_results({char_uuid: data})
+            new_data.pop("_connecting", None)
             self._update_device_registry(new_data)
 
             if new_data == self.data:
@@ -653,18 +761,21 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return _callback
 
-    async def _start_all_notifications(self) -> None:
-        """Start GATT notifications for live updates."""
+    async def _start_all_notifications(self) -> int:
+        """Start GATT notifications for live updates. Returns subscription count."""
         if not self.transport.is_connected:
-            return
+            return 0
 
         cb = self._make_live_callback()
+        count = 0
         for char_uuid in self._notify_chars:
             try:
                 await self.transport.subscribe(char_uuid, cb)
-                _LOGGER.debug("Subscribed to %s", char_uuid)
+                count += 1
+                _LOGGER.debug("%s: subscribed to %s", self.address, char_uuid)
             except Exception as e:
                 _LOGGER.warning("Failed to subscribe %s: %s", char_uuid, e)
+        return count
 
     async def _stop_all_notifications(self) -> None:
         """Stop all GATT notifications."""
@@ -818,6 +929,10 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._unsub_advertisement:
             self._unsub_advertisement()
             self._unsub_advertisement = None
+
+        if self._dbus_bus:
+            self._dbus_bus.disconnect()
+            self._dbus_bus = None
 
         if self._live_task:
             self._live_task.cancel()
