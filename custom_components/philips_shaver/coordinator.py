@@ -924,8 +924,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_shutdown(self) -> None:
         """Called on unload – clean up everything."""
-        await self.transport.unsubscribe_all()
-
+        # Stop receiving external signals first
         if self._unsub_advertisement:
             self._unsub_advertisement()
             self._unsub_advertisement = None
@@ -933,6 +932,9 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._dbus_bus:
             self._dbus_bus.disconnect()
             self._dbus_bus = None
+
+        # Then unsubscribe from device
+        await self.transport.unsubscribe_all()
 
         if self._live_task:
             self._live_task.cancel()

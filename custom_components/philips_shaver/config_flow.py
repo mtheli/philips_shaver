@@ -841,26 +841,46 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             if entry.unique_id
         }
 
-        # Probe each bridge_id to get MAC and connection status
-        self._esp_device_info: dict[str, dict] = {}
+        # Probe all bridge_ids in parallel — filter by bridge_id in response
+        async def _probe(did: str) -> tuple[str, dict[str, str] | None]:
+            svc_name = f"{self.fetched_esp_device_name}_ble_get_info"
+            if did:
+                svc_name += f"_{did}"
+            info_future: asyncio.Future[dict[str, str]] = self.hass.loop.create_future()
+
+            @callback
+            def _on_info(event: Event) -> None:
+                if (event.data.get("status") == "info"
+                        and event.data.get("bridge_id", "") == did
+                        and not info_future.done()):
+                    info_future.set_result(dict(event.data))
+
+            unsub = self.hass.bus.async_listen(
+                "esphome.philips_shaver_ble_status", _on_info
+            )
+            try:
+                await self.hass.services.async_call(
+                    "esphome", svc_name, {}, blocking=True
+                )
+                return did, await asyncio.wait_for(info_future, timeout=3.0)
+            except (asyncio.TimeoutError, Exception):
+                return did, None
+            finally:
+                unsub()
+
+        results = await asyncio.gather(*[_probe(did) for did in self._esp_bridge_ids])
+
+        self._esp_device_info = {}
         options: list[SelectOptionDict] = []
         has_available = False
-        for did in self._esp_bridge_ids:
-            transport = EspBridgeTransport(
-                self.hass, self.fetched_esp_device_name,
-                self.fetched_esp_device_name, did,
-            )
-            info = None
-            try:
-                await transport.connect()
-                info = await transport.get_bridge_info()
-            except Exception:
-                pass
-            finally:
-                await transport.disconnect()
+        for did, info in results:
+            # Skip bridges that don't respond (e.g. Sonicare bridges
+            # fire a different event type that we never receive)
+            if info is None:
+                continue
 
-            self._esp_device_info[did] = info or {}
-            mac = (info or {}).get("mac", "")
+            self._esp_device_info[did] = info
+            mac = info.get("mac", "")
             mac_suffix = f" — {mac}" if mac and mac != "00:00:00:00:00:00" else ""
 
             if mac and mac.upper() in configured_macs:
@@ -908,7 +928,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         esp_bridge_id = self.fetched_esp_bridge_id
 
         transport = EspBridgeTransport(
-            self.hass, esp_device_name, esp_device_name, esp_bridge_id
+            self.hass, "", esp_device_name, esp_bridge_id
         )
         bridge_info = None
         try:
@@ -985,7 +1005,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         esp_bridge_id = getattr(self, "fetched_esp_bridge_id", "")
         transport = EspBridgeTransport(
             self.hass,
-            self.fetched_esp_device_name,
+            "",
             self.fetched_esp_device_name,
             esp_bridge_id,
         )
