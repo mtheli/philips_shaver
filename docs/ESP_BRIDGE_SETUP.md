@@ -152,36 +152,31 @@ configuration.
 ### Configuration
 
 Each device needs its own `ble_client` and `philips_shaver` entry. When using multiple
-devices, each `philips_shaver` entry **must** have a unique `device_id`:
+devices, each `philips_shaver` entry **must** have a unique `bridge_id`:
 
 ```yaml
 ble_client:
   - mac_address: "AA:BB:CC:DD:EE:01"   # Shaver MAC
     id: shaver_ble
     auto_connect: true
-    on_connect:
-      then:
-        - lambda: |-
-            esp_ble_set_encryption(id(shaver_ble).get_remote_bda(), ESP_BLE_SEC_ENCRYPT_MITM);
 
   - mac_address: "AA:BB:CC:DD:EE:02"   # OneBlade MAC
     id: oneblade_ble
     auto_connect: true
-    on_connect:
-      then:
-        - lambda: |-
-            esp_ble_set_encryption(id(oneblade_ble).get_remote_bda(), ESP_BLE_SEC_ENCRYPT_MITM);
 
 philips_shaver:
   - ble_client_id: shaver_ble
-    device_id: "shaver"
+    bridge_id: "shaver"
 
   - ble_client_id: oneblade_ble
-    device_id: "oneblade"
+    bridge_id: "oneblade"
 ```
 
-The `device_id` is used to namespace the ESPHome service calls (e.g. `ble_read_char_shaver`
-vs `ble_read_char_oneblade`). For a **single device**, you can omit `device_id` entirely.
+The `bridge_id` is used to namespace the ESPHome service calls (e.g. `ble_read_char_shaver`
+vs `ble_read_char_oneblade`). For a **single device**, you can omit `bridge_id` entirely.
+
+> **Note:** Encryption is handled automatically by the C++ component after service discovery —
+> no `on_connect` lambda needed. Old YAMLs with `device_id` still work (deprecated alias).
 
 ### Adding devices in Home Assistant
 

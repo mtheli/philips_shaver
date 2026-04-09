@@ -12,7 +12,7 @@ The integration connects to your shaver via **Bluetooth Low Energy (BLE)** to pr
 
 Two connection methods are supported:
 
-1.  **Direct Bluetooth** — connects from the HA host's Bluetooth adapter. Uses a persistent live connection with a poll fallback.
+1.  **Direct Bluetooth** — connects from the HA host's Bluetooth adapter. Event-driven: detects when the shaver wakes up via BLE advertisements, then establishes a persistent live connection.
 2.  **ESP32 BLE Bridge** — an ESP32 running ESPHome acts as a wireless BLE relay. Ideal when the shaver is out of Bluetooth range of the HA host.
 
 See [Configuration](#configuration) for setup instructions.
