@@ -213,9 +213,36 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
       ESP_LOGI(TAG, "Service discovery complete");
       this->services_discovered_ = true;
       // Initiate encryption — all Philips shavers require BLE bonding.
-      // Previously done via YAML on_connect lambda, now self-contained.
-      esp_ble_set_encryption(this->parent()->get_remote_bda(),
-                              ESP_BLE_SEC_ENCRYPT_MITM);
+      // Check if we already have a bond for this device.  If so, use
+      // SEC_ENCRYPT to re-encrypt with the stored LTK.  SEC_ENCRYPT_MITM
+      // would force re-pairing on devices whose bond was created via
+      // Just Works (no MITM) — e.g. OneBlade QP4530 — causing auth
+      // failure reason 82 on ESP32S3 (stricter BLE 5.0 stack).
+      // For fresh connections (no bond), SEC_ENCRYPT_MITM triggers proper
+      // LE Secure Connections pairing using the SMP params from setup().
+      bool already_bonded = false;
+      int bond_num = esp_ble_get_bond_device_num();
+      if (bond_num > 0) {
+        auto *bond_list = new esp_ble_bond_dev_t[bond_num];
+        esp_ble_get_bond_device_list(&bond_num, bond_list);
+        for (int i = 0; i < bond_num; i++) {
+          if (memcmp(bond_list[i].bd_addr,
+                     this->parent()->get_remote_bda(), 6) == 0) {
+            already_bonded = true;
+            break;
+          }
+        }
+        delete[] bond_list;
+      }
+      if (already_bonded) {
+        ESP_LOGI(TAG, "Device is bonded — re-encrypting with stored keys");
+        esp_ble_set_encryption(this->parent()->get_remote_bda(),
+                                ESP_BLE_SEC_ENCRYPT);
+      } else {
+        ESP_LOGI(TAG, "No bond found — initiating LE SC pairing");
+        esp_ble_set_encryption(this->parent()->get_remote_bda(),
+                                ESP_BLE_SEC_ENCRYPT_MITM);
+      }
       if (!this->desired_subscriptions_.empty()) {
         ESP_LOGI(TAG, "Restoring %d notification subscription(s)...",
                  this->desired_subscriptions_.size());
