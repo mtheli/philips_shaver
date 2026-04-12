@@ -33,6 +33,7 @@ SERVICE_READ_CHARACTERISTIC = "read_characteristic"
 SERVICE_READ_CHARACTERISTIC_RAW = "read_characteristic_raw"
 SERVICE_WRITE_CHARACTERISTIC = "write_characteristic"
 SERVICE_ACKNOWLEDGE_NOTIFICATION = "acknowledge_notification"
+SERVICE_SET_CARTRIDGE = "set_cartridge_remaining"
 
 NOTIFICATION_BIT_MAP = {
     "notification_motor_blocked": 0x01,
@@ -381,6 +382,38 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             }),
         )
 
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_CARTRIDGE):
+        async def handle_set_cartridge(call: ServiceCall) -> None:
+            """Set the cleaning cartridge remaining value."""
+            value = call.data["value"]
+            entry_id = call.data.get("entry_id")
+            sensor = None
+            if entry_id:
+                data = hass.data[DOMAIN].get(entry_id)
+                if data:
+                    sensor = data.get("remaining_cycles_sensor")
+            else:
+                for eid, data in hass.data[DOMAIN].items():
+                    s = data.get("remaining_cycles_sensor") if isinstance(data, dict) else None
+                    if s is not None:
+                        sensor = s
+                        break
+            if sensor is None:
+                _LOGGER.warning("set_cartridge_remaining: no remaining cycles sensor found")
+                return
+            sensor.set_cartridge_value(value)
+            _LOGGER.info("Cleaning cartridge remaining set to %.1f", value)
+
+        hass.services.async_register(
+            DOMAIN, SERVICE_SET_CARTRIDGE, handle_set_cartridge,
+            schema=vol.Schema({
+                vol.Required("value"): vol.All(
+                    vol.Coerce(float), vol.Range(min=0, max=30),
+                ),
+                vol.Optional("entry_id"): str,
+            }),
+        )
+
     device_id = entry.data.get("address") or entry.data.get(CONF_ESP_DEVICE_NAME)
     _LOGGER.info("Philips Shaver integration loaded – device: %s", device_id)
     return True
@@ -403,6 +436,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, SERVICE_READ_CHARACTERISTIC_RAW)
         hass.services.async_remove(DOMAIN, SERVICE_WRITE_CHARACTERISTIC)
         hass.services.async_remove(DOMAIN, SERVICE_ACKNOWLEDGE_NOTIFICATION)
+        hass.services.async_remove(DOMAIN, SERVICE_SET_CARTRIDGE)
 
     _LOGGER.info("Unloading philips shaver integration finished")
     return True

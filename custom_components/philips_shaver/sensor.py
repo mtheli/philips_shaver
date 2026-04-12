@@ -689,7 +689,12 @@ class PhilipsRemainingCleaningCyclesSensor(
 
     def reset_cartridge(self) -> None:
         """Reset remaining cycles to full cartridge capacity."""
-        self._stored_remaining = CARTRIDGE_CAPACITY
+        self.set_cartridge_value(CARTRIDGE_CAPACITY)
+
+    def set_cartridge_value(self, value: float) -> None:
+        """Set remaining cycles to a custom value (0–30)."""
+        value = max(0.0, min(CARTRIDGE_CAPACITY, value))
+        self._stored_remaining = value
         current = self.coordinator.data.get("cleaning_cycles")
         if current is not None:
             self._sync_cleaning_count = current

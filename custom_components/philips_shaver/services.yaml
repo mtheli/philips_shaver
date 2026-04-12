@@ -88,6 +88,32 @@ write_characteristic:
       selector:
         text:
 
+set_cartridge_remaining:
+  name: Set Cartridge Remaining
+  description: >-
+    Sets the cleaning cartridge remaining value to a custom number (0–30).
+    Useful when the counter was lost (e.g. after re-adding the integration)
+    and you want to restore it to the previous value from history.
+  fields:
+    value:
+      name: Remaining cycles
+      description: >-
+        The number of remaining cleaning cycles (0–30).
+      required: true
+      example: 20
+      selector:
+        number:
+          min: 0
+          max: 30
+          step: 1
+          mode: slider
+    entry_id:
+      name: Config Entry ID
+      description: The config entry ID of the shaver device. If omitted, uses the first available device.
+      required: false
+      selector:
+        text:
+
 acknowledge_notification:
   name: Acknowledge Notification
   description: >-
