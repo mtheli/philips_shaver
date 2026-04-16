@@ -81,6 +81,9 @@ class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
             service_info = async_last_service_info(self.hass, self._device_id)
             if service_info is not None:
                 return True
+        elif self.coordinator.transport.is_connected:
+            # ESP bridge: trust the bridge's live connection state
+            return True
 
         # ESP bridge / BLE fallback: check last_seen freshness (10 min timeout)
         last_seen = self.coordinator.data.get("last_seen") if self.coordinator.data else None
