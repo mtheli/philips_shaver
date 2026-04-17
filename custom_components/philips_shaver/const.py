@@ -519,7 +519,7 @@ CONF_ESP_BRIDGE_ID = "esp_bridge_id"
 CONF_ESP_DEVICE_ID_LEGACY = "esp_device_id"
 
 # Minimum ESP bridge component version required for full functionality
-MIN_BRIDGE_VERSION = "1.5.2"
+MIN_BRIDGE_VERSION = "1.6.1"
 
 CONF_NOTIFY_THROTTLE = "notify_throttle_ms"
 DEFAULT_NOTIFY_THROTTLE = 500

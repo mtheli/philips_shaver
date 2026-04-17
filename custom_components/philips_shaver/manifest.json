@@ -16,6 +16,6 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/mtheli/philips_shaver/issues",
   "requirements": ["bleak>=0.21.0", "bleak-retry-connector>=3.5.0"],
-  "version": "0.12.4",
+  "version": "0.12.5",
   "zeroconf": [{"type": "_esphomelib._tcp.local."}]
 }

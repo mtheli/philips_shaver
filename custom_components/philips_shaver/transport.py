@@ -585,13 +585,8 @@ class EspBridgeTransport(ShaverTransport):
         try:
             return await asyncio.wait_for(future, timeout=ESP_READ_TIMEOUT)
         except asyncio.TimeoutError:
-            _LOGGER.warning("ESP read timeout for %s — bridge not responding", char_uuid)
             self._pending_reads.pop(char_uuid, None)
-            self._cancel_pending_reads()
-            self._esp_alive = False
-            self._shaver_connected = False
-            if self._disconnect_cb:
-                self._disconnect_cb()
+            _LOGGER.debug("Read timeout for %s (other reads continue)", char_uuid)
             return None
 
     async def read_chars(self, char_uuids: list[str]) -> dict[str, bytes | None]:
