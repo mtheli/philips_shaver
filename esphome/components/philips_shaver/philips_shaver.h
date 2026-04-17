@@ -14,7 +14,7 @@
 namespace esphome {
 namespace philips_shaver {
 
-static const char *const PHILIPS_SHAVER_VERSION = "1.5.2";
+static const char *const PHILIPS_SHAVER_VERSION = "1.6.1";
 
 class PhilipsShaver : public ble_client::BLEClientNode,
                       public Component,
@@ -71,6 +71,8 @@ class PhilipsShaver : public ble_client::BLEClientNode,
   std::map<uint16_t, std::string> notify_map_;
   // char_handle → cccd_handle for writing notification enable
   std::map<uint16_t, uint16_t> cccd_map_;
+  // char_handle → properties (for notify-vs-indicate CCCD value selection)
+  std::map<uint16_t, uint8_t> char_props_map_;
   // Subscriptions that should be restored after reconnect (service_uuid, char_uuid)
   std::vector<std::pair<std::string, std::string>> desired_subscriptions_;
 
@@ -83,7 +85,10 @@ class PhilipsShaver : public ble_client::BLEClientNode,
   uint32_t connect_time_ms_{0};
   uint8_t rapid_disconnect_count_{0};
   static const uint8_t MAX_RAPID_DISCONNECTS = 3;
-  static const uint32_t RAPID_DISCONNECT_THRESHOLD_MS = 5000;
+  // Service discovery on XP9201 takes ~5.5s; 10s covers it with a small
+  // margin so a disconnect right after re-encrypt is still counted as
+  // rapid (the 5s previous threshold was too tight).
+  static const uint32_t RAPID_DISCONNECT_THRESHOLD_MS = 10000;
 
   // Auth failure backoff: disable reconnection after repeated failures
   uint8_t auth_fail_count_{0};

@@ -96,12 +96,13 @@ void PhilipsShaver::loop() {
             {"version", PHILIPS_SHAVER_VERSION},
         });
 
-    // If BLE is connected but no one has subscribed yet, re-fire "ready"
-    // so HA can set up subscriptions.  After OTA reboot, BLE connects
-    // before the HA API stream is up — the SEARCH_CMPL "ready" is lost.
+    // If BLE is connected and authenticated but no one has subscribed yet,
+    // re-fire "ready" so HA can set up subscriptions.  After OTA reboot, BLE
+    // connects before the HA API stream is up — the initial "ready" is lost.
     // This keeps signalling every heartbeat until HA subscribes
     // (notify_map_ becomes non-empty → self-terminating).
-    if (this->connected_ && this->services_discovered_ && this->notify_map_.empty()) {
+    if (this->connected_ && this->services_discovered_ && this->auth_completed_ &&
+        this->notify_map_.empty()) {
       ESP_LOGI(TAG, "BLE connected, no subscriptions — re-firing ready");
       this->fire_homeassistant_event(
           "esphome.philips_shaver_ble_status",
@@ -166,13 +167,16 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
       // Detect stale bond: if we keep disconnecting quickly without auth,
       // the stored bond keys are likely invalid (e.g. after OTA or shaver BT reset).
       // Clear the bond after repeated failures so the next connect starts fresh pairing.
+      uint32_t connect_duration_ms = millis() - this->connect_time_ms_;
       if (this->auth_completed_ ||
-          (millis() - this->connect_time_ms_) > RAPID_DISCONNECT_THRESHOLD_MS) {
+          connect_duration_ms > RAPID_DISCONNECT_THRESHOLD_MS) {
         this->rapid_disconnect_count_ = 0;
       } else {
         this->rapid_disconnect_count_++;
-        ESP_LOGD(TAG, "Rapid disconnect without auth (%d/%d)",
-                 this->rapid_disconnect_count_, MAX_RAPID_DISCONNECTS);
+        ESP_LOGD(TAG, "Rapid disconnect without auth after %ums (%d/%d), reason=0x%02X",
+                 connect_duration_ms,
+                 this->rapid_disconnect_count_, MAX_RAPID_DISCONNECTS,
+                 param->disconnect.reason);
         if (this->rapid_disconnect_count_ >= MAX_RAPID_DISCONNECTS) {
           ESP_LOGW(TAG, "Detected %d rapid disconnects without auth — "
                    "clearing stale bond for fresh pairing",
@@ -188,6 +192,7 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
                this->desired_subscriptions_.size());
       this->connected_ = false;
       this->services_discovered_ = false;
+      this->auth_completed_ = false;
       if (this->connected_sensor_ != nullptr)
         this->connected_sensor_->publish_state(false);
       this->pending_handle_ = 0;
@@ -196,6 +201,7 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
       // but keep desired_subscriptions_ for auto-resubscribe
       this->notify_map_.clear();
       this->cccd_map_.clear();
+      this->char_props_map_.clear();
       this->last_notify_ms_.clear();
       char reason_str[5];
       snprintf(reason_str, sizeof(reason_str), "0x%02X", param->disconnect.reason);
@@ -265,13 +271,9 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
           }
         }
       }
-      this->fire_homeassistant_event(
-          "esphome.philips_shaver_ble_status",
-          {
-              {"status", "ready"},
-              {"mac", this->get_shaver_mac_()},
-              {"version", PHILIPS_SHAVER_VERSION},
-          });
+      // "ready" is fired from AUTH_CMPL_EVT once encryption is established —
+      // firing here would cause HA to request reads before the bond is active,
+      // which can return stale GATT cache results (e.g. missing characteristics).
       break;
     }
 
@@ -341,20 +343,29 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
         ESP_LOGI(TAG, "Notify registered for handle 0x%04X",
                  param->reg_for_notify.handle);
 
-        // Write CCCD to tell the remote device to start sending notifications
+        // Write CCCD with the right bit: 0x0001 notify, 0x0002 indicate, 0x0003 both.
         auto it = this->cccd_map_.find(param->reg_for_notify.handle);
         if (it != this->cccd_map_.end()) {
-          uint16_t notify_en = 0x0001;
+          uint16_t cccd_val = 0x0001;  // default: notify
+          auto props_it = this->char_props_map_.find(param->reg_for_notify.handle);
+          if (props_it != this->char_props_map_.end()) {
+            bool has_notify = props_it->second & ESP_GATT_CHAR_PROP_BIT_NOTIFY;
+            bool has_indicate = props_it->second & ESP_GATT_CHAR_PROP_BIT_INDICATE;
+            if (has_indicate && has_notify)
+              cccd_val = 0x0003;
+            else if (has_indicate)
+              cccd_val = 0x0002;
+          }
           esp_ble_gattc_write_char_descr(
               gattc_if,
               this->parent()->get_conn_id(),
               it->second,
-              sizeof(notify_en),
-              (uint8_t *) &notify_en,
+              sizeof(cccd_val),
+              (uint8_t *) &cccd_val,
               ESP_GATT_WRITE_TYPE_RSP,
               ESP_GATT_AUTH_REQ_NO_MITM);
-          ESP_LOGI(TAG, "CCCD written for handle 0x%04X (descr 0x%04X)",
-                   param->reg_for_notify.handle, it->second);
+          ESP_LOGI(TAG, "CCCD written for handle 0x%04X (descr 0x%04X, value 0x%04X)",
+                   param->reg_for_notify.handle, it->second, cccd_val);
         }
       } else {
         ESP_LOGW(TAG, "Notify registration failed, status=%d",
@@ -380,7 +391,8 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
       std::string hex_payload =
           format_hex(param->notify.value, param->notify.value_len);
 
-      ESP_LOGD(TAG, "Notify %s: %s (%d bytes)",
+      ESP_LOGD(TAG, "%s %s: %s (%d bytes)",
+               param->notify.is_notify ? "Notify" : "Indicate",
                it->second.c_str(),
                hex_payload.c_str(), param->notify.value_len);
 
@@ -477,6 +489,15 @@ void PhilipsShaver::on_subscribe(std::string service_uuid,
     return;
   }
 
+  // Skip chars that advertise neither NOTIFY nor INDICATE — CCCD write
+  // would fail silently and no data would ever arrive.
+  if (!(chr->properties & (ESP_GATT_CHAR_PROP_BIT_NOTIFY |
+                            ESP_GATT_CHAR_PROP_BIT_INDICATE))) {
+    ESP_LOGW(TAG, "Characteristic %s has no NOTIFY/INDICATE property (props=0x%02X), skipping",
+             characteristic_uuid.c_str(), chr->properties);
+    return;
+  }
+
   // Check if already subscribed (e.g., restored after reconnect)
   if (this->notify_map_.count(chr->handle)) {
     ESP_LOGD(TAG, "Already subscribed to %s (handle 0x%04X), skipping",
@@ -486,6 +507,7 @@ void PhilipsShaver::on_subscribe(std::string service_uuid,
 
   uint16_t cccd_handle = this->find_cccd_handle_(chr->handle);
   this->cccd_map_[chr->handle] = cccd_handle;
+  this->char_props_map_[chr->handle] = chr->properties;
 
   this->notify_map_[chr->handle] = characteristic_uuid;
 
@@ -514,6 +536,7 @@ void PhilipsShaver::on_subscribe(std::string service_uuid,
     ESP_LOGW(TAG, "Subscribe failed: %d", status);
     this->notify_map_.erase(chr->handle);
     this->cccd_map_.erase(chr->handle);
+    this->char_props_map_.erase(chr->handle);
   }
 }
 
@@ -675,6 +698,15 @@ void PhilipsShaver::gap_event_handler(esp_gap_ble_cb_event_t event,
         this->auth_completed_ = true;
         this->rapid_disconnect_count_ = 0;
         this->auth_fail_count_ = 0;
+        // Fire "ready" now that encryption is established and the bonded
+        // GATT cache is fully visible.  See SEARCH_CMPL_EVT for rationale.
+        this->fire_homeassistant_event(
+            "esphome.philips_shaver_ble_status",
+            {
+                {"status", "ready"},
+                {"mac", this->get_shaver_mac_()},
+                {"version", PHILIPS_SHAVER_VERSION},
+            });
       } else {
         this->auth_fail_count_++;
         ESP_LOGW(TAG, "Auth failed (reason=%d, attempt %d/%d) — removing bond",
@@ -760,6 +792,7 @@ void PhilipsShaver::resubscribe_all_() {
 
     uint16_t cccd_handle = this->find_cccd_handle_(chr->handle);
     this->cccd_map_[chr->handle] = cccd_handle;
+    this->char_props_map_[chr->handle] = chr->properties;
     this->notify_map_[chr->handle] = chr_uuid_str;
 
     auto status = esp_ble_gattc_register_for_notify(
