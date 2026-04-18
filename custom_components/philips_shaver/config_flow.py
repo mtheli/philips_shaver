@@ -70,7 +70,7 @@ from .const import (
     MIN_NOTIFY_THROTTLE,
     MAX_NOTIFY_THROTTLE,
 )
-from .transport import EspBridgeTransport
+from .transport import EspBridgeTransport, describe_connection_path
 from .exceptions import (
     DeviceNotFoundException,
     CannotConnectException,
@@ -157,6 +157,50 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     fetched_bridge_info: dict[str, str] | None = None
     _pair_address: str | None = None  # MAC for D-Bus pairing step
 
+    @staticmethod
+    async def _read_with_auth_retry(
+        client: BleakClient,
+        char_uuid: str,
+        timeout: float = 10.0,
+    ) -> bytes | None:
+        """Read a GATT characteristic, retrying once after a short delay
+        on authentication errors.
+
+        ESPHome bluetooth_proxy negotiates SMP in the background on the
+        first read of a protected characteristic. That first read returns
+        status=0x05; auth finishes ~500-1000 ms later. A single retry
+        with a 2s grace period turns the transient failure into a
+        success without false-positive "not paired" errors.
+        """
+        try:
+            return await asyncio.wait_for(
+                client.read_gatt_char(char_uuid), timeout=timeout
+            )
+        except (BleakError, TimeoutError) as err:
+            err_msg = str(err).lower()
+            auth_error = any(
+                hint in err_msg
+                for hint in (
+                    "0x05",
+                    "0x0e",
+                    "0x0f",
+                    "unlikely error",
+                    "insufficient auth",
+                    "insufficient enc",
+                    "authentication",
+                )
+            )
+            if not auth_error or not client.is_connected:
+                raise
+            _LOGGER.info(
+                "Read on %s returned auth error — waiting for SMP to complete",
+                char_uuid,
+            )
+            await asyncio.sleep(2.0)
+            return await asyncio.wait_for(
+                client.read_gatt_char(char_uuid), timeout=timeout
+            )
+
     async def _async_fetch_capabilities(
         self,
         address,
@@ -178,6 +222,15 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 raise CannotConnectException("BLE connection failed")
             _LOGGER.info("Connected to %s, address=%s", device.name, address)
 
+            capabilities["connection_path"] = describe_connection_path(
+                self.hass, client, device
+            )
+            _LOGGER.info(
+                "%s: capabilities probe connected via %s",
+                address,
+                capabilities["connection_path"],
+            )
+
             _LOGGER.info("Reading services from %s...", address)
             services = client.services
             capabilities["services"] = [str(s.uuid) for s in services]
@@ -186,11 +239,17 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             # Any read failure here indicates the device is not paired —
             # BlueZ returns ATT errors (e.g. 0x0e "Unlikely Error") or
             # times out while attempting auto-pairing.
+            #
+            # Via ESPHome bluetooth_proxy: the first read on a protected
+            # char returns status=0x05 while the ESP is still negotiating
+            # SMP in the background. Auth completes a moment later and the
+            # retry succeeds. Without the retry we'd disconnect before the
+            # proxy has a chance to finish bonding.
             _LOGGER.info("Probing pairing status on %s...", address)
             if services.get_characteristic(CHAR_BATTERY_LEVEL):
                 try:
-                    raw_battery = await asyncio.wait_for(
-                        client.read_gatt_char(CHAR_BATTERY_LEVEL), timeout=10
+                    raw_battery = await self._read_with_auth_retry(
+                        client, CHAR_BATTERY_LEVEL, timeout=10
                     )
                     if raw_battery:
                         capabilities["battery"] = raw_battery[0]
@@ -245,7 +304,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             _LOGGER.info("Reading capabilities from %s...", address)
             if services.get_characteristic(CHAR_CAPABILITIES):
                 try:
-                    raw_cap = await client.read_gatt_char(CHAR_CAPABILITIES)
+                    raw_cap = await self._read_with_auth_retry(
+                        client, CHAR_CAPABILITIES, timeout=10
+                    )
                 except BleakError as err:
                     err_msg = str(err).lower()
                     if any(
@@ -1222,9 +1283,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         groomer_cap = self.fetched_data.get("groomer_capabilities")
         capabilities_text = self._get_capabilities_text(cap_val, groomer_cap)
 
-        # Connection info suffix
-        esp_name = self.fetched_esp_device_name
-        bridge_info = " via **ESP32 Bridge**" if esp_name else " via **Direct Bluetooth**"
+        # Connection info suffix — show adapter / bridge actually used
+        path = self.fetched_data.get("connection_path") or self.fetched_esp_device_name
+        bridge_info = f" via **{path}**" if path else ""
 
         return self.async_show_form(
             step_id="show_capabilities",

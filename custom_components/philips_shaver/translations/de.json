@@ -131,6 +131,9 @@
       "bridge_version": {
         "name": "Bridge Version"
       },
+      "adapter": {
+        "name": "Adapter"
+      },
       "battery": {
         "name": "Batterie"
       },

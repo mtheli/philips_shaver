@@ -25,7 +25,7 @@ from .const import (
     SVC_CONTROL, SVC_GROOMER,
     CARTRIDGE_CAPACITY, EVAPORATION_RATE, CLEANING_CONSTANTS, CLEANING_CONSTANT_DEFAULT,
 )
-from .entity import PhilipsBridgeEntity, PhilipsShaverEntity
+from .entity import PhilipsConnectionEntity, PhilipsShaverEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -96,12 +96,15 @@ async def async_setup_entry(
             "Shaver does not support motion sensing – skipping motion sensor"
         )
 
-    # RSSI sensor only for direct BLE (not available via ESP bridge)
+    # Connection sub-device: adapter works for both transports
+    entities.append(PhilipsAdapterSensor(coordinator, entry))
+
     is_esp = entry.data.get(CONF_TRANSPORT_TYPE) == TRANSPORT_ESP_BRIDGE
+    # RSSI sensor only for direct BLE (not available via ESP bridge)
     if not is_esp:
         entities.append(PhilipsRssiSensor(coordinator, entry))
 
-    # Bridge version sensor on the ESP Bridge sub-device
+    # Bridge version sensor only on ESP
     if is_esp:
         entities.append(PhilipsBridgeVersionSensor(coordinator, entry))
 
@@ -460,7 +463,7 @@ class PhilipsDeviceActivitySensor(PhilipsShaverEntity, SensorEntity):
 # =============================================================================
 # Last Seen
 # =============================================================================
-class PhilipsLastSeenSensor(PhilipsShaverEntity, RestoreEntity, SensorEntity):
+class PhilipsLastSeenSensor(PhilipsConnectionEntity, RestoreEntity, SensorEntity):
     _attr_translation_key = "last_seen"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -499,7 +502,7 @@ class PhilipsLastSeenSensor(PhilipsShaverEntity, RestoreEntity, SensorEntity):
 # =============================================================================
 # RSSI Sensor
 # =============================================================================
-class PhilipsRssiSensor(PhilipsShaverEntity, SensorEntity):
+class PhilipsRssiSensor(PhilipsConnectionEntity, SensorEntity):
     _attr_translation_key = "rssi"
     _attr_native_unit_of_measurement = "dBm"
     _attr_device_class = SensorDeviceClass.SIGNAL_STRENGTH
@@ -516,7 +519,12 @@ class PhilipsRssiSensor(PhilipsShaverEntity, SensorEntity):
     @property
     def native_value(self) -> int | None:
         service_info = async_last_service_info(self.hass, self._device_id)
-        return service_info.rssi if service_info else None
+        if service_info is None or service_info.rssi is None:
+            return None
+        # -127 is habluetooth/BlueZ sentinel for "no fresh advertisement"
+        if service_info.rssi <= -127:
+            return None
+        return service_info.rssi
 
 
 
@@ -1122,7 +1130,7 @@ class PhilipsSpeedVerdictSensor(PhilipsShaverEntity, SensorEntity):
         return "mdi:speedometer"
 
 
-class PhilipsBridgeVersionSensor(PhilipsBridgeEntity, SensorEntity):
+class PhilipsBridgeVersionSensor(PhilipsConnectionEntity, SensorEntity):
     """Sensor showing the ESP bridge component version."""
 
     _attr_translation_key = "bridge_version"
@@ -1138,3 +1146,21 @@ class PhilipsBridgeVersionSensor(PhilipsBridgeEntity, SensorEntity):
     @property
     def native_value(self) -> str | None:
         return self.coordinator.transport.bridge_version
+
+
+class PhilipsAdapterSensor(PhilipsConnectionEntity, SensorEntity):
+    """Adapter currently carrying the BLE connection."""
+
+    _attr_translation_key = "adapter"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:bluetooth-connect"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._device_id}_adapter"
+
+    @property
+    def native_value(self) -> str | None:
+        return self.coordinator.transport.connection_path
