@@ -17,9 +17,12 @@ Bluetooth access from the HA host.
 
 | Board | Status |
 |-------|--------|
-| [M5Stack Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) (ESP32-PICO) | Confirmed working (used by maintainer) |
+| [M5Stack Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) (ESP32-PICO) | Confirmed (maintainer, [#3](https://github.com/mtheli/philips_shaver/issues/3)) |
+| Lolin D32 (ESP32) | Confirmed ([forum](https://community.home-assistant.io/t/philips-bluetooth-shaver-monitoring/858822/)) |
+| [M5Stack NanoC6](https://docs.m5stack.com/en/core/M5NanoC6) (ESP32-C6) | Confirmed ([#7](https://github.com/mtheli/philips_shaver/issues/7)) |
+| ESP32-S3 DevKitC-1 | Partial — first pairing works, bond after reboot unstable ([#6](https://github.com/mtheli/philips_shaver/issues/6)) |
 | Generic ESP32-DevKit | Should work (same SoC) |
-| ESP32-S3 / ESP32-C3 | Untested — BLE stack should be compatible |
+| ESP32-C3 | Untested — BLE stack should be compatible |
 
 ## Prerequisites
 
