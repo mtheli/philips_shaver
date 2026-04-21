@@ -78,6 +78,20 @@ def describe_connection_path(
     to a best-effort label instead of breaking the connect flow.
     """
     try:
+        # Primary: habluetooth's HaBleakClientWrapper sets _connected_scanner
+        # on the client after a successful connect. This is the scanner that
+        # actually carried the connection — more reliable than backend
+        # introspection, and works for both host (BlueZ) and remote (ESPHome)
+        # scanners without branching on backend type.
+        connected_scanner = getattr(client, "_connected_scanner", None)
+        if connected_scanner is not None:
+            name = getattr(connected_scanner, "name", None)
+            if name:
+                return name
+            source = getattr(connected_scanner, "source", None)
+            if source:
+                return source
+
         backend = getattr(client, "_backend", None)
         if backend is None:
             return "unknown"
@@ -157,6 +171,17 @@ class ShaverTransport(abc.ABC):
         """Label of the adapter/bridge currently carrying the connection."""
         return None
 
+    @property
+    def connection_rssi(self) -> int | None:
+        """RSSI seen by the scanner currently carrying the connection.
+
+        Distinct from ``async_last_service_info`` which returns the RSSI from
+        whichever scanner has the freshest advertisement — that scanner may
+        differ from the one serving the active link when multiple scanners
+        see the device with different RSSI.
+        """
+        return None
+
     @abc.abstractmethod
     async def read_char(self, char_uuid: str) -> bytes | None:
         """Read a single GATT characteristic."""
@@ -205,6 +230,7 @@ class BleakTransport(ShaverTransport):
         self._disconnect_cb: Callable[[], None] | None = None
         self._last_read_errors: dict[str, str] = {}
         self._connection_path: str | None = None
+        self._connected_scanner = None
 
     @property
     def is_connected(self) -> bool:
@@ -213,6 +239,24 @@ class BleakTransport(ShaverTransport):
     @property
     def connection_path(self) -> str | None:
         return self._connection_path if self.is_connected else None
+
+    @property
+    def connection_rssi(self) -> int | None:
+        if not self.is_connected or self._connected_scanner is None:
+            return None
+        try:
+            result = self._connected_scanner.get_discovered_device_advertisement_data(
+                self._address
+            )
+        except Exception:  # noqa: BLE001
+            return None
+        if not result:
+            return None
+        _device, adv = result
+        rssi = getattr(adv, "rssi", None)
+        if rssi is None or rssi <= -127:
+            return None
+        return int(rssi)
 
     async def connect(self) -> None:
         service_info = async_last_service_info(self._hass, self._address)
@@ -223,6 +267,7 @@ class BleakTransport(ShaverTransport):
             _LOGGER.info("%s: connection lost", self._address)
             self._client = None
             self._connection_path = None
+            self._connected_scanner = None
             if self._disconnect_cb:
                 self._disconnect_cb()
 
@@ -233,6 +278,7 @@ class BleakTransport(ShaverTransport):
             disconnected_callback=_on_disconnect,
             timeout=15.0,
         )
+        self._connected_scanner = getattr(self._client, "_connected_scanner", None)
         self._connection_path = describe_connection_path(
             self._hass, self._client, service_info.device
         )
