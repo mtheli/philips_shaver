@@ -107,6 +107,7 @@ async def async_setup_entry(
     # Bridge version sensor only on ESP
     if is_esp:
         entities.append(PhilipsBridgeVersionSensor(coordinator, entry))
+        entities.append(PhilipsBridgeBootTimeSensor(coordinator, entry))
 
     async_add_entities(entities)
 
@@ -1152,6 +1153,25 @@ class PhilipsBridgeVersionSensor(PhilipsConnectionEntity, SensorEntity):
     @property
     def native_value(self) -> str | None:
         return self.coordinator.transport.bridge_version
+
+
+class PhilipsBridgeBootTimeSensor(PhilipsConnectionEntity, SensorEntity):
+    """Sensor showing when the ESP bridge was last booted."""
+
+    _attr_translation_key = "bridge_boot_time"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_icon = "mdi:restart"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._device_id}_bridge_boot_time"
+
+    @property
+    def native_value(self) -> datetime | None:
+        return self.coordinator.transport.bridge_boot_time
 
 
 class PhilipsAdapterSensor(PhilipsConnectionEntity, SensorEntity):

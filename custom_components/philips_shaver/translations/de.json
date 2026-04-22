@@ -131,6 +131,9 @@
       "bridge_version": {
         "name": "Bridge Version"
       },
+      "bridge_boot_time": {
+        "name": "Bridge letzter Start"
+      },
       "adapter": {
         "name": "Adapter"
       },

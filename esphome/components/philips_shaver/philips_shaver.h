@@ -14,7 +14,7 @@
 namespace esphome {
 namespace philips_shaver {
 
-static const char *const PHILIPS_SHAVER_VERSION = "1.6.1";
+static const char *const PHILIPS_SHAVER_VERSION = "1.6.2";
 
 class PhilipsShaver : public ble_client::BLEClientNode,
                       public Component,

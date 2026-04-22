@@ -87,6 +87,8 @@ void PhilipsShaver::loop() {
 
   if ((now - this->last_heartbeat_ms_) >= HEARTBEAT_INTERVAL_MS) {
     this->last_heartbeat_ms_ = now;
+    char uptime_str[16];
+    snprintf(uptime_str, sizeof(uptime_str), "%u", now / 1000);
     this->fire_homeassistant_event(
         "esphome.philips_shaver_ble_status",
         {
@@ -94,6 +96,7 @@ void PhilipsShaver::loop() {
             {"ble_connected", this->connected_ ? "true" : "false"},
             {"mac", this->get_shaver_mac_()},
             {"version", PHILIPS_SHAVER_VERSION},
+            {"uptime_s", std::string(uptime_str)},
         });
 
     // If BLE is connected and authenticated but no one has subscribed yet,
@@ -110,6 +113,7 @@ void PhilipsShaver::loop() {
               {"status", "ready"},
               {"mac", this->get_shaver_mac_()},
               {"version", PHILIPS_SHAVER_VERSION},
+              {"uptime_s", std::string(uptime_str)},
           });
     }
   }
