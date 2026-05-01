@@ -58,6 +58,11 @@ class PhilipsShaver : public ble_client::BLEClientNode,
   std::string svc_name_(const std::string &action);
 
   std::string bridge_id_;
+  // Per-instance log tag: "philips_shaver" (single-bridge) or
+  // "philips_shaver.<bridge_id>" (multi-bridge). Set in setup() and used
+  // by all ESP_LOG calls so each bridge's lines are distinguishable in
+  // the log stream and the logger: filter can target a single bridge.
+  std::string log_tag_;
 
   binary_sensor::BinarySensor *connected_sensor_{nullptr};
   bool connected_{false};
