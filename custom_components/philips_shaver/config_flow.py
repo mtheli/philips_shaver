@@ -798,18 +798,29 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             await transport.disconnect()
 
     def _get_esphome_device_options(self) -> list[SelectOptionDict]:
-        """Build a list of available ESPHome devices for the selector."""
+        """Build a list of ESPHome devices that host a philips_shaver bridge.
+
+        Filters via `_detect_esp_bridge_ids()` so that ESPs without the
+        philips_shaver component (e.g. plain bluetooth_proxy bridges) are
+        excluded — picking one of those would otherwise fail later with
+        a generic ``cannot_connect``. Note: device_name uses dashes
+        (``atom-lite``) while HA service names use underscores
+        (``atom_lite_ble_get_info``), so we substitute before the lookup.
+        """
         esphome_entries = self.hass.config_entries.async_entries("esphome")
         options: list[SelectOptionDict] = []
         for entry in esphome_entries:
             device_name = entry.data.get("device_name")
-            if device_name:
-                options.append(
-                    SelectOptionDict(
-                        value=device_name,
-                        label=f"{entry.title} ({device_name})",
-                    )
-                )
+            if not device_name:
+                continue
+            esp_service_id = device_name.replace("-", "_")
+            bridge_ids = self._detect_esp_bridge_ids(esp_service_id)
+            if not bridge_ids:
+                continue
+            label = f"{entry.title} ({device_name})"
+            if len(bridge_ids) > 1:
+                label = f"{label}, {len(bridge_ids)} bridges"
+            options.append(SelectOptionDict(value=device_name, label=label))
         return options
 
     def _detect_esp_bridge_ids(self, esp_device_name: str) -> list[str]:
