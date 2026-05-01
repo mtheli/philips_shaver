@@ -797,7 +797,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         finally:
             await transport.disconnect()
 
-    def _get_esphome_device_options(self) -> list[SelectOptionDict]:
+    async def _get_esphome_device_options(self) -> list[SelectOptionDict]:
         """Build a list of ESPHome devices that host a philips_shaver bridge.
 
         Filters via `_detect_esp_bridge_ids()` so that ESPs without the
@@ -806,6 +806,10 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         a generic ``cannot_connect``. Note: device_name uses dashes
         (``atom-lite``) while HA service names use underscores
         (``atom_lite_ble_get_info``), so we substitute before the lookup.
+
+        Probes each candidate ESP via ``ble_get_info`` to count paired vs
+        free bridge slots; falls back to a plain bridge count if the
+        probe times out or the ESP is offline.
         """
         esphome_entries = self.hass.config_entries.async_entries("esphome")
         options: list[SelectOptionDict] = []
@@ -817,11 +821,75 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             bridge_ids = self._detect_esp_bridge_ids(esp_service_id)
             if not bridge_ids:
                 continue
+            probe_results = await self._probe_shaver_bridges(
+                esp_service_id, bridge_ids
+            )
+            slot_info = ""
+            if probe_results:
+                paired = sum(
+                    1
+                    for info in probe_results
+                    if info.get("mac")
+                    and info["mac"] != "00:00:00:00:00:00"
+                )
+                free = len(probe_results) - paired
+                parts = []
+                if paired:
+                    parts.append(f"{paired} paired")
+                if free:
+                    parts.append(f"{free} free")
+                if parts:
+                    slot_info = f"{' / '.join(parts)} slots"
+            elif len(bridge_ids) > 1:
+                slot_info = f"{len(bridge_ids)} bridges"
             label = f"{entry.title} ({device_name})"
-            if len(bridge_ids) > 1:
-                label = f"{label}, {len(bridge_ids)} bridges"
+            if slot_info:
+                label = f"{label}, {slot_info}"
             options.append(SelectOptionDict(value=device_name, label=label))
         return options
+
+    async def _probe_shaver_bridges(
+        self, device_name: str, bridge_ids: list[str]
+    ) -> list[dict[str, str]]:
+        """Probe each bridge_id via ble_get_info, return list of info dicts.
+
+        Service-name detection alone (`_detect_esp_bridge_ids`) can't tell a
+        philips_shaver bridge from another component that registers the same
+        service name pattern; only a bridge that actually answers on
+        ``esphome.philips_shaver_ble_status`` counts. Best-effort: returns an
+        empty list if the probe times out or the ESP is offline, the caller
+        should then fall back to the plain bridge count.
+        """
+        results: list[dict[str, str]] = []
+        for did in bridge_ids:
+            svc_name = f"{device_name}_ble_get_info"
+            if did:
+                svc_name += f"_{did}"
+            info_future: asyncio.Future[dict[str, str]] = (
+                self.hass.loop.create_future()
+            )
+
+            @callback
+            def _on_status(event: Event, _did: str = did) -> None:
+                if (event.data.get("status") == "info"
+                        and event.data.get("bridge_id", "") == _did
+                        and not info_future.done()):
+                    info_future.set_result(dict(event.data))
+
+            unsub = self.hass.bus.async_listen(
+                "esphome.philips_shaver_ble_status", _on_status
+            )
+            try:
+                await self.hass.services.async_call(
+                    "esphome", svc_name, {}, blocking=True
+                )
+                info = await asyncio.wait_for(info_future, timeout=2.0)
+                results.append(info)
+            except (asyncio.TimeoutError, Exception):
+                pass
+            finally:
+                unsub()
+        return results
 
     def _detect_esp_bridge_ids(self, esp_device_name: str) -> list[str]:
         """Detect available device_id suffixes on an ESP bridge.
@@ -868,7 +936,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 self.fetched_esp_bridge_id = device_ids[0]
                 return await self._esp_bridge_health_check()
 
-        esp_options = self._get_esphome_device_options()
+        esp_options = await self._get_esphome_device_options()
 
         if esp_options:
             data_schema = vol.Schema(
@@ -1125,12 +1193,23 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         else:
             shaver_name = "Unknown device"
 
+        # Multi-bridge ESPs ("shaver" + "oneblade" on the same atom-s3r) need
+        # the bridge_id in the dialog so the user knows which bridge they're
+        # configuring. {target} == "<device_name> / <bridge_id>" if a bridge_id
+        # is set, otherwise just "<device_name>".
+        bridge_id = self.fetched_esp_bridge_id or ""
+        target = (
+            f"{self.fetched_esp_device_name} / {bridge_id}"
+            if bridge_id
+            else self.fetched_esp_device_name
+        )
         return self.async_show_form(
             step_id="esp_bridge_status",
             data_schema=vol.Schema({}),
             description_placeholders={
                 "device_name": self.fetched_esp_device_name,
                 "shaver_name": shaver_name,
+                "target": target,
                 "status": status_text,
             },
             errors=errors,

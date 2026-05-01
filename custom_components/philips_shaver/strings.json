@@ -48,7 +48,8 @@
       },
       "bluetooth_confirm": {
         "title": "Confirm detected device",
-        "description": "Do you want to add the detected Philips Shaver **{name}** to Home Assistant?\n\nℹ️ **Before continuing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **unpaired** from your phone\n   — Remove from Bluetooth settings **and** GroomTribe / OneBlade app\n\nPairing will be handled automatically during setup. Clicking Submit will connect to the device to read hardware capabilities. This may take a few seconds."
+        "description": "Do you want to add the detected Philips Shaver **{name}** to Home Assistant?\n\nℹ️ **Before continuing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **unpaired** from your phone\n   — Remove from Bluetooth settings **and** GroomTribe / OneBlade app\n\nPairing will be handled automatically during setup. The integration will then connect to the device to read hardware capabilities. This may take a few seconds.",
+        "submit": "Read capabilities"
       },
       "esp_select_device": {
         "title": "Select BLE Device",
@@ -59,19 +60,23 @@
       },
       "esp_bridge_status": {
         "title": "Connection via ESP32 Bridge",
-        "description": "Setting up **{shaver_name}** via **ESP32 Bridge**.\n\n✅ Bridge **{device_name}** is reachable.\n\n{status}\n\nClick Submit to read shaver capabilities."
+        "description": "Setting up **{shaver_name}** via **ESP32 Bridge**.\n\n✅ Bridge **{target}** is reachable.\n\n{status}",
+        "submit": "Read capabilities"
       },
       "pair": {
         "title": "Pair Device",
-        "description": "**{name}** needs to be paired with this system.\n\nℹ️ **Before pairing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **not connected** to your phone\n   — Remove from Bluetooth settings **and** GroomTribe / OneBlade app\n\nClick **Submit** to start automatic Bluetooth pairing."
+        "description": "**{name}** needs to be paired with this system.\n\nℹ️ **Before pairing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **not connected** to your phone\n   — Remove from Bluetooth settings **and** GroomTribe / OneBlade app",
+        "submit": "Start pairing"
       },
       "not_paired": {
         "title": "Pairing Required",
-        "description": "**{name}** is not paired with this system.\n\n{pairing_help}\n\n`{pair_cmd}`\n\nThe script will scan for nearby Philips devices and guide you through the pairing process.\n\nAfter pairing, click **Submit** to retry."
+        "description": "**{name}** is not paired with this system.\n\n{pairing_help}\n\n`{pair_cmd}`\n\nThe script will scan for nearby Philips devices and guide you through the pairing process.",
+        "submit": "Retry"
       },
       "show_capabilities": {
         "title": "Hardware Capabilities detected",
-        "description": "Successfully connected to **{name}** {bridge_info}.\n\n**Hardware Capabilities:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legend:**\n✅ Service found & supported\n❌ Expected service missing\n❔ Unknown service from device\n\nClick Submit to finish the setup."
+        "description": "Successfully connected to **{name}** {bridge_info}.\n\n**Hardware Capabilities:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legend:**\n✅ Service found & supported\n❌ Expected service missing\n❔ Unknown service from device",
+        "submit": "Set up"
       }
     },
     "error": {

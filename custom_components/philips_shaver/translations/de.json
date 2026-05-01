@@ -48,7 +48,8 @@
       },
       "bluetooth_confirm": {
         "title": "Erkanntes Gerät bestätigen",
-        "description": "Möchten Sie den erkannten Philips Shaver **{name}** zu Home Assistant hinzufügen?\n\nℹ️ **Bitte vor dem Fortfahren prüfen:**\n1. ⬜ Rasierer ist **eingeschaltet** oder auf der **Ladestation**\n2. ⬜ Rasierer ist **entkoppelt** vom Handy\n   — Aus Bluetooth-Einstellungen **und** GroomTribe / OneBlade App entfernen\n\nDas Pairing wird automatisch während der Einrichtung durchgeführt. Nach dem Absenden wird eine Verbindung zum Gerät hergestellt, um die Hardware-Fähigkeiten zu lesen. Dies kann einige Sekunden dauern."
+        "description": "Möchten Sie den erkannten Philips Shaver **{name}** zu Home Assistant hinzufügen?\n\nℹ️ **Bitte vor dem Fortfahren prüfen:**\n1. ⬜ Rasierer ist **eingeschaltet** oder auf der **Ladestation**\n2. ⬜ Rasierer ist **entkoppelt** vom Handy\n   — Aus Bluetooth-Einstellungen **und** GroomTribe / OneBlade App entfernen\n\nDas Pairing wird automatisch während der Einrichtung durchgeführt. Anschließend verbindet sich die Integration mit dem Gerät, um die Hardware-Fähigkeiten zu lesen. Dies kann einige Sekunden dauern.",
+        "submit": "Fähigkeiten auslesen"
       },
       "esp_select_device": {
         "title": "BLE-Gerät auswählen",
@@ -59,19 +60,23 @@
       },
       "esp_bridge_status": {
         "title": "Verbindung über ESP32 Bridge",
-        "description": "Einrichtung von **{shaver_name}** über **ESP32 Bridge**.\n\n✅ Bridge **{device_name}** ist erreichbar.\n\n{status}\n\nKlicken Sie auf Absenden, um die Rasierer-Fähigkeiten zu lesen."
+        "description": "Einrichtung von **{shaver_name}** über **ESP32 Bridge**.\n\n✅ Bridge **{target}** ist erreichbar.\n\n{status}",
+        "submit": "Fähigkeiten auslesen"
       },
       "pair": {
         "title": "Gerät koppeln",
-        "description": "**{name}** muss mit diesem System gekoppelt werden.\n\nℹ️ **Bitte vor der Kopplung prüfen:**\n1. ⬜ Rasierer ist **eingeschaltet** oder auf der **Ladestation**\n2. ⬜ Rasierer ist **nicht** mit dem Handy verbunden\n   — Aus Bluetooth-Einstellungen **und** GroomTribe / OneBlade App entfernen\n\nKlicken Sie auf **Absenden**, um die automatische Bluetooth-Kopplung zu starten."
+        "description": "**{name}** muss mit diesem System gekoppelt werden.\n\nℹ️ **Bitte vor der Kopplung prüfen:**\n1. ⬜ Rasierer ist **eingeschaltet** oder auf der **Ladestation**\n2. ⬜ Rasierer ist **nicht** mit dem Handy verbunden\n   — Aus Bluetooth-Einstellungen **und** GroomTribe / OneBlade App entfernen",
+        "submit": "Pairing starten"
       },
       "not_paired": {
         "title": "Pairing erforderlich",
-        "description": "**{name}** ist nicht mit diesem System gepairt.\n\n{pairing_help}\n\n`{pair_cmd}`\n\nDas Script sucht nach Philips-Geräten in der Nähe und führt durch den Pairing-Prozess.\n\nNach dem Pairing auf **Absenden** klicken, um es erneut zu versuchen."
+        "description": "**{name}** ist nicht mit diesem System gepairt.\n\n{pairing_help}\n\n`{pair_cmd}`\n\nDas Script sucht nach Philips-Geräten in der Nähe und führt durch den Pairing-Prozess.",
+        "submit": "Erneut versuchen"
       },
       "show_capabilities": {
         "title": "Hardware-Fähigkeiten erkannt",
-        "description": "Erfolgreich mit **{name}** {bridge_info} verbunden.\n\n**Hardware-Fähigkeiten:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legende:**\n✅ Service gefunden & unterstützt\n❌ Erwarteter Service fehlt\n❔ Unbekannter Service vom Gerät\n\nKlicken Sie auf Absenden, um die Einrichtung abzuschließen."
+        "description": "Erfolgreich mit **{name}** {bridge_info} verbunden.\n\n**Hardware-Fähigkeiten:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legende:**\n✅ Service gefunden & unterstützt\n❌ Erwarteter Service fehlt\n❔ Unbekannter Service vom Gerät",
+        "submit": "Einrichten"
       }
     },
     "error": {
