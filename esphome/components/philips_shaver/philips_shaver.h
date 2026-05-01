@@ -90,6 +90,9 @@ class PhilipsShaver : public ble_client::BLEClientNode,
   bool encryption_requested_{false};
   bool retry_read_after_auth_{false};
   uint16_t probe_handle_{0};
+  // Idempotent ready-event fire: ensures start_post_auth_setup_() runs
+  // exactly once per connection regardless of how many code paths reach it.
+  bool ready_fired_{false};
 
   // Auth tracking for stale bond detection
   bool auth_completed_{false};

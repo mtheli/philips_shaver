@@ -200,6 +200,7 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
       this->encryption_requested_ = false;
       this->retry_read_after_auth_ = false;
       this->probe_handle_ = 0;
+      this->ready_fired_ = false;
       if (this->connected_sensor_ != nullptr)
         this->connected_sensor_->publish_state(false);
       this->pending_handle_ = 0;
@@ -769,6 +770,8 @@ void PhilipsShaver::gap_event_handler(esp_gap_ble_cb_event_t event,
         this->rapid_disconnect_count_ = 0;
         this->auth_fail_count_ = 0;
         if (this->retry_read_after_auth_ && this->probe_handle_ != 0) {
+          // Path A: probe returned INSUF_AUTH, our explicit set_encryption()
+          // triggered SMP, encryption is now up — retry the probe.
           this->retry_read_after_auth_ = false;
           ESP_LOGI(TAG, "Auth complete — retrying probe read on handle 0x%04X",
                    this->probe_handle_);
@@ -782,10 +785,18 @@ void PhilipsShaver::gap_event_handler(esp_gap_ble_cb_event_t event,
             this->probe_handle_ = 0;
             this->start_post_auth_setup_();
           }
-          // Success path: READ_CHAR_EVT will fire ready on probe-OK
-        } else {
-          // Fallback path (no probe in use): fire ready directly
+          // Success path: READ_CHAR_EVT fires ready on probe-OK
+        } else if (this->services_discovered_ && this->probe_handle_ == 0) {
+          // Path B: SEARCH_CMPL already done and no probe pending — either
+          // probe-char missing (fallback proactive encrypt) or probe already
+          // resolved. Safe to fire ready (start_post_auth_setup_ is idempotent).
           this->start_post_auth_setup_();
+        } else {
+          // Path C: AUTH_CMPL fired before SEARCH_CMPL (Bluedroid auto-encrypt
+          // common case) OR probe is in flight without retry flag. Don't fire
+          // ready prematurely — the probe issued in/from SEARCH_CMPL will
+          // emit ready when it resolves.
+          ESP_LOGD(TAG, "Auth complete — deferring ready to probe-OK");
         }
       } else {
         this->auth_fail_count_++;
@@ -921,6 +932,11 @@ void PhilipsShaver::fire_ready_event_() {
 }
 
 void PhilipsShaver::start_post_auth_setup_() {
+  if (this->ready_fired_) {
+    ESP_LOGD(TAG, "start_post_auth_setup_: ready already fired this connection");
+    return;
+  }
+  this->ready_fired_ = true;
   this->fire_ready_event_();
   if (!this->desired_subscriptions_.empty()) {
     ESP_LOGI(TAG, "Restoring %d notification subscription(s)...",
