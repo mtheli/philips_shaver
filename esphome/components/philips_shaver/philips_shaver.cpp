@@ -197,6 +197,9 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
       this->connected_ = false;
       this->services_discovered_ = false;
       this->auth_completed_ = false;
+      this->encryption_requested_ = false;
+      this->retry_read_after_auth_ = false;
+      this->probe_handle_ = 0;
       if (this->connected_sensor_ != nullptr)
         this->connected_sensor_->publish_state(false);
       this->pending_handle_ = 0;
@@ -222,42 +225,7 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
     case ESP_GATTC_SEARCH_CMPL_EVT: {
       ESP_LOGI(TAG, "Service discovery complete");
       this->services_discovered_ = true;
-      // Initiate encryption — all Philips shavers require BLE bonding.
-      // Check if we already have a bond for this device.  If so, use
-      // SEC_ENCRYPT to re-encrypt with the stored LTK.  SEC_ENCRYPT_MITM
-      // would force re-pairing on devices whose bond was created via
-      // Just Works (no MITM) — e.g. OneBlade QP4530 — causing auth
-      // failure reason 82 on ESP32S3 (stricter BLE 5.0 stack).
-      // For fresh connections (no bond), SEC_ENCRYPT_MITM triggers proper
-      // LE Secure Connections pairing using the SMP params from setup().
-      bool already_bonded = false;
-      int bond_num = esp_ble_get_bond_device_num();
-      if (bond_num > 0) {
-        auto *bond_list = new esp_ble_bond_dev_t[bond_num];
-        esp_ble_get_bond_device_list(&bond_num, bond_list);
-        for (int i = 0; i < bond_num; i++) {
-          if (memcmp(bond_list[i].bd_addr,
-                     this->parent()->get_remote_bda(), 6) == 0) {
-            already_bonded = true;
-            break;
-          }
-        }
-        delete[] bond_list;
-      }
-      if (already_bonded) {
-        ESP_LOGI(TAG, "Device is bonded — re-encrypting with stored keys");
-        esp_ble_set_encryption(this->parent()->get_remote_bda(),
-                                ESP_BLE_SEC_ENCRYPT);
-      } else {
-        ESP_LOGI(TAG, "No bond found — initiating LE SC pairing");
-        esp_ble_set_encryption(this->parent()->get_remote_bda(),
-                                ESP_BLE_SEC_ENCRYPT_MITM);
-      }
-      if (!this->desired_subscriptions_.empty()) {
-        ESP_LOGI(TAG, "Restoring %d notification subscription(s)...",
-                 this->desired_subscriptions_.size());
-        this->resubscribe_all_();
-      }
+
       // Read GAP Device Name (0x2A00) for display in HA config flow
       if (this->remote_name_.empty()) {
         auto gap_svc = espbt::ESPBTUUID::from_uint16(0x1800);
@@ -275,9 +243,54 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
           }
         }
       }
-      // "ready" is fired from AUTH_CMPL_EVT once encryption is established —
-      // firing here would cause HA to request reads before the bond is active,
-      // which can return stale GATT cache results (e.g. missing characteristics).
+
+      // Lazy encryption: instead of proactively calling
+      // esp_ble_set_encryption() (which on cache-hit reconnects can race
+      // BTM rehydrate → reason=97 → bond cleared, see Issue #6), issue a
+      // probe read on a Philips proprietary characteristic that requires
+      // auth. The READ_CHAR_EVT handler then either confirms the
+      // connection is encrypted (status OK) or triggers SMP via
+      // INSUF_AUTH/INSUF_ENCR.
+      auto philips_svc = espbt::ESPBTUUID::from_raw(
+          "8d560100-3cb9-4387-a7e8-b79d826a7025");
+      auto probe_chr = espbt::ESPBTUUID::from_raw(
+          "8d560117-3cb9-4387-a7e8-b79d826a7025");
+      auto *chr = this->parent()->get_characteristic(philips_svc, probe_chr);
+      if (chr) {
+        this->probe_handle_ = chr->handle;
+        auto status = esp_ble_gattc_read_char(
+            this->parent()->get_gattc_if(),
+            this->parent()->get_conn_id(),
+            chr->handle, ESP_GATT_AUTH_REQ_NONE);
+        if (status != ESP_GATT_OK) {
+          ESP_LOGD(TAG, "Probe read request failed, status=%d", status);
+          this->probe_handle_ = 0;
+        } else {
+          ESP_LOGD(TAG, "Probe read issued for handle 0x%04X — waiting on result",
+                   chr->handle);
+        }
+      }
+
+      if (this->probe_handle_ == 0) {
+        // Fallback for unknown models without the probe char: keep the
+        // legacy proactive-encrypt path. SEC_ENCRYPT (no MITM) for
+        // bonded devices preserves the v1.5.2 fix; SEC_ENCRYPT_MITM
+        // for fresh pairing.
+        bool already_bonded = this->is_already_bonded_();
+        this->encryption_requested_ = true;
+        if (already_bonded) {
+          ESP_LOGI(TAG, "No probe char — proactively re-encrypting bonded device");
+          esp_ble_set_encryption(this->parent()->get_remote_bda(),
+                                  ESP_BLE_SEC_ENCRYPT);
+        } else {
+          ESP_LOGI(TAG, "No probe char and no bond — initiating LE SC pairing");
+          esp_ble_set_encryption(this->parent()->get_remote_bda(),
+                                  ESP_BLE_SEC_ENCRYPT_MITM);
+        }
+      }
+      // "ready" + resubscribe are deferred to start_post_auth_setup_(),
+      // called from probe-success in READ_CHAR_EVT or from
+      // AUTH_CMPL_EVT.success on the fallback path.
       break;
     }
 
@@ -296,7 +309,60 @@ void PhilipsShaver::gattc_event_handler(esp_gattc_cb_event_t event,
         break;
       }
 
+      // Probe read dispatch (lazy-encrypt path)
+      if (this->probe_handle_ != 0 && param->read.handle == this->probe_handle_) {
+        if (param->read.status == ESP_GATT_OK) {
+          ESP_LOGI(TAG, "Probe OK — connection encrypted, ready");
+          this->probe_handle_ = 0;
+          this->retry_read_after_auth_ = false;
+          this->start_post_auth_setup_();
+        } else if (param->read.status == ESP_GATT_INSUF_AUTHENTICATION ||
+                   param->read.status == ESP_GATT_INSUF_ENCRYPTION) {
+          if (!this->encryption_requested_) {
+            bool already_bonded = this->is_already_bonded_();
+            ESP_LOGI(TAG, "Probe needs encryption (status=%d, %s) — initiating",
+                     param->read.status,
+                     already_bonded ? "bonded" : "fresh pair");
+            this->encryption_requested_ = true;
+            this->retry_read_after_auth_ = true;
+            esp_ble_set_encryption(this->parent()->get_remote_bda(),
+                already_bonded ? ESP_BLE_SEC_ENCRYPT
+                               : ESP_BLE_SEC_ENCRYPT_MITM);
+            // probe_handle_ stays set — retry happens in AUTH_CMPL.success
+          } else {
+            ESP_LOGW(TAG, "Probe still failing after encrypt (status=%d) — "
+                     "firing ready as fallback",
+                     param->read.status);
+            this->probe_handle_ = 0;
+            this->retry_read_after_auth_ = false;
+            this->start_post_auth_setup_();
+          }
+        } else {
+          ESP_LOGD(TAG, "Probe read returned status=%d — firing ready anyway",
+                   param->read.status);
+          this->probe_handle_ = 0;
+          this->retry_read_after_auth_ = false;
+          this->start_post_auth_setup_();
+        }
+        break;
+      }
+
       if (param->read.status != ESP_GATT_OK) {
+        // Insufficient Authentication / Encryption on a HA-driven read:
+        // initiate encryption and let HA retry the read.  Avoids the
+        // proactive set_encryption() race with BTM rehydrate.
+        if ((param->read.status == ESP_GATT_INSUF_AUTHENTICATION ||
+             param->read.status == ESP_GATT_INSUF_ENCRYPTION) &&
+            !this->encryption_requested_) {
+          bool already_bonded = this->is_already_bonded_();
+          ESP_LOGI(TAG, "Read requires encryption (status=%d) — initiating (%s)",
+                   param->read.status,
+                   already_bonded ? "bonded" : "fresh pair");
+          this->encryption_requested_ = true;
+          esp_ble_set_encryption(this->parent()->get_remote_bda(),
+              already_bonded ? ESP_BLE_SEC_ENCRYPT
+                             : ESP_BLE_SEC_ENCRYPT_MITM);
+        }
         ESP_LOGW(TAG, "Read failed for %s, status=%d",
                  this->pending_char_uuid_.c_str(), param->read.status);
         this->fire_homeassistant_event(
@@ -702,15 +768,25 @@ void PhilipsShaver::gap_event_handler(esp_gap_ble_cb_event_t event,
         this->auth_completed_ = true;
         this->rapid_disconnect_count_ = 0;
         this->auth_fail_count_ = 0;
-        // Fire "ready" now that encryption is established and the bonded
-        // GATT cache is fully visible.  See SEARCH_CMPL_EVT for rationale.
-        this->fire_homeassistant_event(
-            "esphome.philips_shaver_ble_status",
-            {
-                {"status", "ready"},
-                {"mac", this->get_shaver_mac_()},
-                {"version", PHILIPS_SHAVER_VERSION},
-            });
+        if (this->retry_read_after_auth_ && this->probe_handle_ != 0) {
+          this->retry_read_after_auth_ = false;
+          ESP_LOGI(TAG, "Auth complete — retrying probe read on handle 0x%04X",
+                   this->probe_handle_);
+          auto status = esp_ble_gattc_read_char(
+              this->parent()->get_gattc_if(),
+              this->parent()->get_conn_id(),
+              this->probe_handle_, ESP_GATT_AUTH_REQ_NONE);
+          if (status != ESP_OK) {
+            ESP_LOGW(TAG, "Probe retry failed (status=%d) — firing ready anyway",
+                     status);
+            this->probe_handle_ = 0;
+            this->start_post_auth_setup_();
+          }
+          // Success path: READ_CHAR_EVT will fire ready on probe-OK
+        } else {
+          // Fallback path (no probe in use): fire ready directly
+          this->start_post_auth_setup_();
+        }
       } else {
         this->auth_fail_count_++;
         ESP_LOGW(TAG, "Auth failed (reason=%d, attempt %d/%d) — removing bond",
@@ -813,6 +889,43 @@ void PhilipsShaver::resubscribe_all_() {
       this->notify_map_.erase(chr->handle);
       this->cccd_map_.erase(chr->handle);
     }
+  }
+}
+
+bool PhilipsShaver::is_already_bonded_() {
+  int bond_num = esp_ble_get_bond_device_num();
+  if (bond_num <= 0)
+    return false;
+  auto *bond_list = new esp_ble_bond_dev_t[bond_num];
+  esp_ble_get_bond_device_list(&bond_num, bond_list);
+  bool found = false;
+  for (int i = 0; i < bond_num; i++) {
+    if (memcmp(bond_list[i].bd_addr,
+               this->parent()->get_remote_bda(), 6) == 0) {
+      found = true;
+      break;
+    }
+  }
+  delete[] bond_list;
+  return found;
+}
+
+void PhilipsShaver::fire_ready_event_() {
+  this->fire_homeassistant_event(
+      "esphome.philips_shaver_ble_status",
+      {
+          {"status", "ready"},
+          {"mac", this->get_shaver_mac_()},
+          {"version", PHILIPS_SHAVER_VERSION},
+      });
+}
+
+void PhilipsShaver::start_post_auth_setup_() {
+  this->fire_ready_event_();
+  if (!this->desired_subscriptions_.empty()) {
+    ESP_LOGI(TAG, "Restoring %d notification subscription(s)...",
+             this->desired_subscriptions_.size());
+    this->resubscribe_all_();
   }
 }
 

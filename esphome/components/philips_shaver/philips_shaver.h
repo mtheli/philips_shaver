@@ -14,7 +14,7 @@
 namespace esphome {
 namespace philips_shaver {
 
-static const char *const PHILIPS_SHAVER_VERSION = "1.6.2";
+static const char *const PHILIPS_SHAVER_VERSION = "1.7.0";
 
 class PhilipsShaver : public ble_client::BLEClientNode,
                       public Component,
@@ -79,6 +79,17 @@ class PhilipsShaver : public ble_client::BLEClientNode,
   void apply_smp_params_();
   void resubscribe_all_();
   uint16_t find_cccd_handle_(uint16_t char_handle);
+  void fire_ready_event_();
+  bool is_already_bonded_();
+  void start_post_auth_setup_();
+
+  // Lazy encryption: don't proactively call set_encryption() on bonded
+  // reconnect. SEARCH_CMPL issues a probe read; if it returns
+  // INSUF_AUTH/INSUF_ENCR, set_encryption() is triggered then. This
+  // avoids racing BTM-rehydrate on cache-hit reconnects (Issue #6).
+  bool encryption_requested_{false};
+  bool retry_read_after_auth_{false};
+  uint16_t probe_handle_{0};
 
   // Auth tracking for stale bond detection
   bool auth_completed_{false};
