@@ -1,5 +1,35 @@
 # ESP Bridge Changelog
 
+## v1.7.0 — 2026-05-01
+
+- **Fix BLE re-encrypt race on ESP32-S3 with hot GATT cache (Issue #6).**
+  Bonded reconnects on ESP32-S3 could fail with auth `reason=97`
+  (`SMP_ENC_FAIL`) when `SEARCH_CMPL_EVT` fires before BTM has
+  rehydrated the bonded device record from NVS. The proactive
+  `esp_ble_set_encryption()` call then ran while BTM still reported
+  "Device not found", and the 3-strike auto-clean nuked the otherwise
+  valid bond. Replaced with a lazy-encrypt pattern: `SEARCH_CMPL` issues
+  a probe read on a Philips proprietary characteristic with
+  `ESP_GATT_AUTH_REQ_NONE`. Bluedroid's automatic peer-encryption
+  handles the bonded path transparently; if the probe surfaces
+  `INSUF_AUTH`/`INSUF_ENCR`, encryption is initiated then and the read
+  is retried after `AUTH_CMPL.success`. Fallback path for unknown
+  models without the probe characteristic preserves the previous v1.5.2
+  behaviour.
+- **Defer `ready` event when `AUTH_CMPL.success` fires before
+  `SEARCH_CMPL_EVT`.** When Bluedroid auto-encrypts on bonded
+  reconnect, the auth event arrives before service discovery completes;
+  firing `ready` from there raced with the probe-OK path and produced
+  duplicate events. Three-way logic now distinguishes (a) probe-retry
+  pending, (b) probe done or absent, and (c) discovery not yet
+  complete. The new `start_post_auth_setup_()` helper is guarded by a
+  per-connection `ready_fired_` flag.
+- **Per-instance log tag for multi-bridge YAMLs.** Each
+  `philips_shaver:` entry now uses `philips_shaver.<bridge_id>` as its
+  ESP-IDF log tag, so dual-bridge setups (e.g. OneBlade + XP9201 on the
+  same AtomS3R) produce unambiguous lines. Logger filter can target a
+  single bridge by suffix.
+
 ## v1.6.2 — 2026-04-22
 
 - Include `uptime_s` in `heartbeat` and `ready` events (previously only
