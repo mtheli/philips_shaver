@@ -965,21 +965,24 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Let user pick which device on a multi-device ESP bridge."""
-        if user_input is not None:
-            selected = user_input["esp_bridge_id"]
-            if selected.startswith("✅ "):
-                return self.async_abort(reason="already_configured")
-            self.fetched_esp_bridge_id = selected
-            # Store bridge info from the probe if available
-            self.fetched_bridge_info = self._esp_device_info.get(selected)
-            return await self._esp_bridge_health_check()
-
         # Collect MACs already configured for this integration
         configured_macs = {
             entry.unique_id.upper()
             for entry in self._async_current_entries()
             if entry.unique_id
         }
+
+        if user_input is not None:
+            selected = user_input["esp_bridge_id"]
+            # Re-derive state from stored info instead of parsing the value
+            # (was a fragile "✅ "-prefix hack before).
+            info = self._esp_device_info.get(selected) or {}
+            mac = info.get("mac", "").upper()
+            if mac and mac in configured_macs:
+                return self.async_abort(reason="already_configured")
+            self.fetched_esp_bridge_id = selected
+            self.fetched_bridge_info = info
+            return await self._esp_bridge_health_check()
 
         # Probe all bridge_ids in parallel — filter by bridge_id in response
         async def _probe(did: str) -> tuple[str, dict[str, str] | None]:
@@ -1012,40 +1015,64 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
         self._esp_device_info = {}
         options: list[SelectOptionDict] = []
-        has_available = False
+        states_present: set[str] = set()
+        unconfigured_dids: list[str] = []
         for did, info in results:
-            # Skip bridges that don't respond (e.g. Sonicare bridges
-            # fire a different event type that we never receive)
+            label_did = did or "default"
             if info is None:
+                # ESP slot didn't answer on our event channel — likely
+                # offline, sleeping, or a different component (Sonicare
+                # bridge sharing service names but firing a different
+                # event). Show but don't allow selecting; the user can
+                # see which slot needs attention.
+                states_present.add("offline")
+                options.append(SelectOptionDict(
+                    value=did,
+                    label=f"⚪ {label_did}",
+                ))
                 continue
 
             self._esp_device_info[did] = info
-            mac = info.get("mac", "")
-            mac_suffix = f" — {mac}" if mac and mac != "00:00:00:00:00:00" else ""
+            mac = info.get("mac", "").upper()
+            has_mac = bool(mac) and mac != "00:00:00:00:00:00"
+            mac_suffix = f" — {mac}" if has_mac else ""
 
-            if mac and mac.upper() in configured_macs:
-                options.append(SelectOptionDict(
-                    value=f"✅ {did}",
-                    label=f"✅ {did}{mac_suffix}",
-                ))
-            else:
-                has_available = True
+            if has_mac and mac in configured_macs:
+                states_present.add("configured")
                 options.append(SelectOptionDict(
                     value=did,
-                    label=f"{did}{mac_suffix}" if did else mac or "default",
+                    label=f"✅ {label_did}{mac_suffix}",
+                ))
+            else:
+                states_present.add("available")
+                unconfigured_dids.append(did)
+                options.append(SelectOptionDict(
+                    value=did,
+                    label=f"🟢 {label_did}{mac_suffix}",
                 ))
 
         if not options:
             return self.async_abort(reason="no_devices_found")
-        if not has_available:
+        if not unconfigured_dids:
             return self.async_abort(reason="already_configured")
 
-        # Auto-select if only one unconfigured device
-        unconfigured = [o for o in options if not o["value"].startswith("✅ ")]
-        if len(unconfigured) == 1 and len(options) == 1:
-            self.fetched_esp_bridge_id = unconfigured[0]["value"]
-            self.fetched_bridge_info = self._esp_device_info.get(unconfigured[0]["value"])
+        # Auto-select if exactly one unconfigured slot is available
+        # (regardless of how many configured slots also exist).
+        if len(unconfigured_dids) == 1:
+            sole = unconfigured_dids[0]
+            self.fetched_esp_bridge_id = sole
+            self.fetched_bridge_info = self._esp_device_info.get(sole)
             return await self._esp_bridge_health_check()
+
+        # Build a dynamic legend showing only states present in the list.
+        legend_entries: list[str] = []
+        if "available" in states_present:
+            legend_entries.append("🟢 available")
+        if "configured" in states_present:
+            legend_entries.append("✅ already configured")
+        if "offline" in states_present:
+            legend_entries.append("⚪ offline")
+        legend = "  •  ".join(legend_entries) if legend_entries else ""
 
         return self.async_show_form(
             step_id="esp_select_device",
@@ -1056,6 +1083,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                     ),
                 }
             ),
+            description_placeholders={"legend": legend},
         )
 
     async def _esp_bridge_health_check(self) -> ConfigFlowResult:
@@ -1174,9 +1202,14 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 f"<tr><td><b>Paired</b></td><td>{pair_status}</td></tr>",
             ]
             if mac and mac != "00:00:00:00:00:00":
-                rows.append(f"<tr><td><b>MAC</b></td><td><code>{mac}</code></td></tr>")
+                rows.append(
+                    f"<tr><td><b>Shaver MAC</b></td>"
+                    f"<td><code>{mac.upper()}</code></td></tr>"
+                )
 
-            status_text = "<table>" + "".join(rows) + "</table>"
+            # Wrap rows in <tbody> so HA's markdown→HTML pass doesn't insert
+            # an empty <thead> (causes a blank header row in the rendered UI).
+            status_text = f"<table><tbody>{''.join(rows)}</tbody></table>"
         else:
             status_text = (
                 "⚠️ Diagnostic details not available. "
@@ -1434,7 +1467,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if not rows:
             return "No advanced capabilities detected (basic monitoring only)"
-        return "<table>" + "".join(rows) + "</table>"
+        return f"<table><tbody>{''.join(rows)}</tbody></table>"
 
     # Standard BLE services present on every device — hide from display
     _STANDARD_BLE_SERVICES = {
@@ -1503,4 +1536,4 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
 
         rows = found_rows + missing_rows + unknown_rows
-        return "<table>" + "".join(rows) + "</table>"
+        return f"<table><tbody>{''.join(rows)}</tbody></table>"

@@ -53,7 +53,7 @@
       },
       "esp_select_device": {
         "title": "Select BLE Device",
-        "description": "This ESP bridge has multiple Philips devices connected. Select the device you want to add to Home Assistant.",
+        "description": "This ESP bridge has multiple Philips devices connected. Select the one you want to add to Home Assistant.\n\n{legend}",
         "data": {
           "esp_bridge_id": "BLE Device"
         }
