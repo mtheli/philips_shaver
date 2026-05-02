@@ -240,11 +240,11 @@ If data still doesn't flow:
 ## Architecture
 
 ```
-┌──────────┐   BLE    ┌─────────┐  WiFi/API  ┌─────────────────┐
+┌──────────┐   BLE    ┌─────────┐  WiFi/API  ┌──────────────────┐
 │  Shaver  │◄────────►│  ESP32  │◄──────────►│ Home Assistant   │
 │          │  paired  │  Bridge │  ESPHome   │ Philips Shaver   │
 └──────────┘          └─────────┘  services  │ Integration      │
-                                              └─────────────────┘
+                                             └──────────────────┘
 ```
 
 - **ESP32 → HA**: fires `esphome.philips_shaver_ble_data` events with characteristic
