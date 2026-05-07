@@ -1199,8 +1199,19 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         finally:
             await transport.disconnect()
 
-        # Format bridge status display
+        # Mode B unpaired: skip the bridge-status form entirely and route
+        # straight to request_pair. The status-form's "BLE Disconnected /
+        # Paired No" rows look like an error to the user, when actually
+        # the bridge is just waiting for ble_pair_mode.
         info = self.fetched_bridge_info or {}
+        if (
+            info.get("pair_capable") == "true"
+            and info.get("identity_source", "") == "none"
+            and info.get("paired") != "true"
+        ):
+            return await self.async_step_request_pair()
+
+        # Format bridge status display
         if info:
             version = info.get("version", "?")
             ble_connected = info.get("ble_connected", "false") == "true"
