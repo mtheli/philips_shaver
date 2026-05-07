@@ -2,127 +2,40 @@
 
 #include "esphome/core/component.h"
 #include "esphome/components/ble_client/ble_client.h"
-#include "esphome/components/esp32_ble_tracker/esp32_ble_tracker.h"
-#include "esphome/components/api/custom_api_device.h"
-#include "esphome/components/binary_sensor/binary_sensor.h"
 
-#include <map>
-#include <string>
-#include <utility>
-#include <vector>
+#include "coordinator.h"
 
 namespace esphome {
 namespace philips_shaver {
 
-static const char *const PHILIPS_SHAVER_VERSION = "1.7.0";
-
-class PhilipsShaver : public ble_client::BLEClientNode,
-                      public Component,
-                      public api::CustomAPIDevice {
+// Mode A worker: thin BLEClientNode adapter that forwards GATT/GAP events
+// to the ShaverCoordinator. Used when an external `ble_client:` block is
+// referenced via `ble_client_id`. All GATT logic lives in the Coordinator.
+class PhilipsShaver : public ble_client::BLEClientNode, public Component {
  public:
   void setup() override;
-  void loop() override;
   void dump_config() override;
   float get_setup_priority() const override {
     return setup_priority::AFTER_BLUETOOTH;
   }
 
-  void gattc_event_handler(esp_gattc_cb_event_t event,
-                            esp_gatt_if_t gattc_if,
-                            esp_ble_gattc_cb_param_t *param) override;
-
-  void gap_event_handler(esp_gap_ble_cb_event_t event,
-                          esp_ble_gap_cb_param_t *param) override;
-
-  void on_read_characteristic(std::string service_uuid,
-                               std::string characteristic_uuid);
-  void on_subscribe(std::string service_uuid,
-                     std::string characteristic_uuid);
-  void on_unsubscribe(std::string service_uuid,
-                       std::string characteristic_uuid);
-  void on_write_characteristic(std::string service_uuid,
-                                std::string characteristic_uuid,
-                                std::string hex_data);
-
-  void on_set_throttle(std::string throttle_ms);
-  void on_get_info();
-
-  void set_connected_sensor(binary_sensor::BinarySensor *sensor) {
-    this->connected_sensor_ = sensor;
+  void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
+                            esp_ble_gattc_cb_param_t *param) override {
+    if (this->coord_ != nullptr)
+      this->coord_->on_gattc_event(event, gattc_if, param);
   }
-  void set_notify_throttle(uint32_t ms) { this->notify_throttle_ms_ = ms; }
-  void set_bridge_id(const std::string &id) { this->bridge_id_ = id; }
+  void gap_event_handler(esp_gap_ble_cb_event_t event,
+                          esp_ble_gap_cb_param_t *param) override {
+    if (this->coord_ != nullptr)
+      this->coord_->on_gap_event(event, param);
+  }
+
+  void set_coordinator(ShaverCoordinator *coord) { this->coord_ = coord; }
+  void set_log_tag(const std::string &tag) { this->log_tag_ = tag; }
 
  protected:
-  std::string get_shaver_mac_();
-  std::string svc_name_(const std::string &action);
-
-  std::string bridge_id_;
-  // Per-instance log tag: "philips_shaver" (single-bridge) or
-  // "philips_shaver.<bridge_id>" (multi-bridge). Set in setup() and used
-  // by all ESP_LOG calls so each bridge's lines are distinguishable in
-  // the log stream and the logger: filter can target a single bridge.
+  ShaverCoordinator *coord_{nullptr};
   std::string log_tag_;
-
-  binary_sensor::BinarySensor *connected_sensor_{nullptr};
-  bool connected_{false};
-  bool services_discovered_{false};
-  uint16_t pending_handle_{0};
-  std::string pending_char_uuid_;
-  // Cached BLE device name (read from GAP 0x2A00 after service discovery)
-  uint16_t name_handle_{0};
-  std::string remote_name_;
-  // handle → char_uuid for active notification subscriptions
-  std::map<uint16_t, std::string> notify_map_;
-  // char_handle → cccd_handle for writing notification enable
-  std::map<uint16_t, uint16_t> cccd_map_;
-  // char_handle → properties (for notify-vs-indicate CCCD value selection)
-  std::map<uint16_t, uint8_t> char_props_map_;
-  // Subscriptions that should be restored after reconnect (service_uuid, char_uuid)
-  std::vector<std::pair<std::string, std::string>> desired_subscriptions_;
-
-  void apply_smp_params_();
-  void resubscribe_all_();
-  uint16_t find_cccd_handle_(uint16_t char_handle);
-  void fire_ready_event_();
-  bool is_already_bonded_();
-  void start_post_auth_setup_();
-
-  // Lazy encryption: don't proactively call set_encryption() on bonded
-  // reconnect. SEARCH_CMPL issues a probe read; if it returns
-  // INSUF_AUTH/INSUF_ENCR, set_encryption() is triggered then. This
-  // avoids racing BTM-rehydrate on cache-hit reconnects (Issue #6).
-  bool encryption_requested_{false};
-  bool retry_read_after_auth_{false};
-  uint16_t probe_handle_{0};
-  // Idempotent ready-event fire: ensures start_post_auth_setup_() runs
-  // exactly once per connection regardless of how many code paths reach it.
-  bool ready_fired_{false};
-
-  // Auth tracking for stale bond detection
-  bool auth_completed_{false};
-  uint32_t connect_time_ms_{0};
-  uint8_t rapid_disconnect_count_{0};
-  static const uint8_t MAX_RAPID_DISCONNECTS = 3;
-  // Service discovery on XP9201 takes ~5.5s; 10s covers it with a small
-  // margin so a disconnect right after re-encrypt is still counted as
-  // rapid (the 5s previous threshold was too tight).
-  static const uint32_t RAPID_DISCONNECT_THRESHOLD_MS = 10000;
-
-  // Auth failure backoff: disable reconnection after repeated failures
-  uint8_t auth_fail_count_{0};
-  uint32_t backoff_until_ms_{0};
-  static const uint8_t MAX_AUTH_FAILURES = 3;
-  static const uint32_t AUTH_BACKOFF_MS = 60000;  // 60 seconds
-
-  // Notification throttle: min interval between events per characteristic
-  uint32_t notify_throttle_ms_{500};
-  std::map<uint16_t, uint32_t> last_notify_ms_;
-
-  // Heartbeat: periodic status event to HA
-  static const uint32_t HEARTBEAT_INTERVAL_MS = 15000;
-  uint32_t last_heartbeat_ms_{0};
-
 };
 
 }  // namespace philips_shaver
