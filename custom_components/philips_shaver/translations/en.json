@@ -95,6 +95,7 @@
       "pairing_failed": "Bluetooth pairing failed. Ensure the shaver is powered on and not connected to another device. If the problem persists, try turning the shaver off and back on, or pair manually via terminal.",
       "service_call_failed": "Could not arm pair-mode on the ESP bridge. The bridge may be offline or a too-old firmware version. Update the bridge to v1.8.0 or newer and retry.",
       "pair_timeout": "No shaver appeared during the 60-second pair-mode window. Make sure the shaver is on and advertising, and try again.",
+      "pair_failed_stale_bond": "Pairing failed with repeated auth errors. The shaver still holds the previous bond on its side and is rejecting fresh pairing. Clear Bluetooth on the shaver (model-specific: long-press the power button until the BT LED clears, or unpair via the GroomTribe / OneBlade app), then retry.",
       "unknown": "Unexpected error. Please check the logs."
     },
     "abort": {

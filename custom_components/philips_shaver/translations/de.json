@@ -95,6 +95,7 @@
       "pairing_failed": "Bluetooth-Kopplung fehlgeschlagen. Stelle sicher, dass der Rasierer eingeschaltet und nicht mit einem anderen Gerät verbunden ist. Falls das Problem weiterhin besteht, schalte den Rasierer aus und wieder ein, oder kopple manuell per Terminal.",
       "service_call_failed": "Pair-Modus konnte nicht auf der ESP-Bridge aktiviert werden. Die Bridge ist möglicherweise offline oder läuft auf einer zu alten Firmware. Aktualisiere die Bridge auf v1.8.0 oder neuer und versuche es erneut.",
       "pair_timeout": "Im 60-Sekunden-Pair-Fenster wurde kein Rasierer erkannt. Stelle sicher, dass der Rasierer eingeschaltet ist und advertised, und versuche es erneut.",
+      "pair_failed_stale_bond": "Pairing schlug mit wiederholten Auth-Fehlern fehl. Der Rasierer hält das vorherige Pairing auf seiner Seite und lehnt neues Pairing ab. Lösche Bluetooth am Rasierer (modellabhängig: Power-Knopf lange gedrückt halten bis Bluetooth-LED erlischt, oder über die GroomTribe / OneBlade App entkoppeln), dann erneut versuchen.",
       "unknown": "Unerwarteter Fehler. Bitte prüfe die Systemprotokolle."
     },
     "abort": {

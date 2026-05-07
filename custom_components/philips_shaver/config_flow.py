@@ -1314,7 +1314,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             if event.data.get("bridge_id", "") != bridge_id:
                 return
             status = event.data.get("status")
-            if status not in ("pair_complete", "pair_timeout"):
+            if status not in ("pair_complete", "pair_timeout", "pair_failed"):
                 return
             if not pair_future.done():
                 pair_future.set_result(dict(event.data))
@@ -1359,11 +1359,24 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         finally:
             unsub()
 
-        if result.get("status") == "pair_timeout":
+        result_status = result.get("status")
+        if result_status in ("pair_timeout", "pair_failed"):
+            # Map the bridge's status to a translation key. pair_failed with
+            # reason=auth_max_failures means the shaver retained its half
+            # of the bond — user has to clear BT on the shaver before
+            # retrying. Generic pair_timeout just means no shaver showed
+            # up (or showed up too late).
+            if (
+                result_status == "pair_failed"
+                and result.get("reason") == "auth_max_failures"
+            ):
+                error_key = "pair_failed_stale_bond"
+            else:
+                error_key = "pair_timeout"
             return self.async_show_form(
                 step_id="request_pair",
                 data_schema=vol.Schema({}),
-                errors={"base": "pair_timeout"},
+                errors={"base": error_key},
                 description_placeholders={
                     "target": (
                         f"{esp_device_name} / {bridge_id}"

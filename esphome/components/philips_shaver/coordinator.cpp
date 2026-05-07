@@ -665,6 +665,29 @@ void ShaverCoordinator::on_gap_event(esp_gap_ble_cb_event_t event,
                           {"fail_count", std::string(fail_str)},
                           {"backoff_s", std::string(backoff_str)},
                       });
+          // If we hit auth-fail-MAX during pair-mode, the shaver almost
+          // certainly still has its half of the bond and is rejecting our
+          // fresh-pair attempts. Disarm pair-mode immediately and surface
+          // a specific pair_failed event — the user needs to clear BT on
+          // the shaver before retrying. Without this we'd wait the full
+          // 60 s pair-mode window only to time out with a misleading
+          // "no shaver appeared" message.
+          if (this->pair_mode_active_) {
+            ESP_LOGE(this->log_tag_.c_str(),
+                     "Pair-mode auth-fail-%d — disarming, emitting "
+                     "pair_failed (shaver likely retains stale bond)",
+                     this->auth_fail_count_);
+            this->pair_mode_active_ = false;
+            this->pair_mode_until_ms_ = 0;
+            this->target_mac_.clear();
+            this->emit_(EVENT_STATUS,
+                        {
+                            {"status", "pair_failed"},
+                            {"reason", "auth_max_failures"},
+                            {"mac", this->get_remote_mac()},
+                            {"version", PHILIPS_SHAVER_VERSION},
+                        });
+          }
         }
       }
       break;
