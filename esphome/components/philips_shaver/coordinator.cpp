@@ -1156,6 +1156,34 @@ void ShaverCoordinator::unpair() {
   this->unpair_drain_until_ms_ = millis() + UNPAIR_DRAIN_MS;
   if (this->set_enabled_cb_)
     this->set_enabled_cb_(false);
+  // Reset connection state explicitly. set_enabled_cb_(false) calls
+  // esp_ble_gattc_close(), which on a clean Mode-B disconnect can emit
+  // only CLOSE_EVT without a separate DISCONNECT_EVT. Without this reset
+  // the heartbeat would keep observing connected_=true and re-firing
+  // "ready" every 15 s until the next reboot. Mirrors the DISCONNECT_EVT
+  // cleanup so either event (or both) leaves the coord in the same
+  // post-disconnect state.
+  this->connected_ = false;
+  this->services_discovered_ = false;
+  this->auth_completed_ = false;
+  this->encryption_requested_ = false;
+  this->retry_read_after_auth_ = false;
+  this->probe_handle_ = 0;
+  this->ready_fired_ = false;
+  if (this->bridge_ != nullptr)
+    this->bridge_->publish_connected(false);
+  this->pending_handle_ = 0;
+  this->name_handle_ = 0;
+  this->notify_map_.clear();
+  this->cccd_map_.clear();
+  this->char_props_map_.clear();
+  this->last_notify_ms_.clear();
+  if (!this->pending_calls_.empty()) {
+    ESP_LOGD(this->log_tag_.c_str(),
+             "Discarding %u queued call(s) on unpair",
+             (unsigned) this->pending_calls_.size());
+    this->pending_calls_.clear();
+  }
   ESP_LOGI(this->log_tag_.c_str(),
            "Unpair initiated — drain window %ums, awaiting `unpaired` emit",
            UNPAIR_DRAIN_MS);
