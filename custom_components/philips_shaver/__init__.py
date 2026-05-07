@@ -440,3 +440,37 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _LOGGER.info("Unloading philips shaver integration finished")
     return True
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Best-effort cleanup on entry removal: drop the ESP bridge's BLE bond.
+
+    Fires only when the user explicitly removes the integration entry. For
+    Mode B (auto-discovery, NVS-persisted identity) this clears the bond so
+    the next setup starts fresh; for Mode A (YAML-pinned MAC) the bridge
+    re-bonds automatically on the next connect, so this is a no-op there.
+    Coord-side `unpair()` early-returns when mode != standalone, so calling
+    `ble_unpair` against a Mode A bridge is a harmless silent no-op.
+    """
+    if entry.data.get(CONF_TRANSPORT_TYPE) != TRANSPORT_ESP_BRIDGE:
+        return
+    esp_device_name = entry.data.get(CONF_ESP_DEVICE_NAME)
+    if not esp_device_name:
+        return
+    bridge_id = entry.data.get(CONF_ESP_BRIDGE_ID, "")
+    svc = f"{esp_device_name}_ble_unpair"
+    if bridge_id:
+        svc = f"{svc}_{bridge_id}"
+    try:
+        await hass.services.async_call("esphome", svc, {}, blocking=True)
+        _LOGGER.info(
+            "Called esphome.%s on entry removal — bridge NVS bond cleared "
+            "(Mode B) or no-op (Mode A)", svc,
+        )
+    except Exception as err:  # pylint: disable=broad-except
+        # Older bridge firmware (< 1.8.0) doesn't have ble_unpair registered;
+        # service-not-found is expected and harmless. Log at debug.
+        _LOGGER.debug(
+            "esphome.%s call failed on entry removal: %s "
+            "(safe to ignore on bridge < 1.8.0)", svc, err,
+        )

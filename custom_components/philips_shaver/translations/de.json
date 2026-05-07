@@ -63,6 +63,11 @@
         "description": "Einrichtung von **{shaver_name}** über **ESP32 Bridge**.\n\n✅ Bridge **{target}** ist erreichbar.\n\n{status}",
         "submit": "Fähigkeiten auslesen"
       },
+      "request_pair": {
+        "title": "Rasierer mit ESP Bridge koppeln",
+        "description": "Bridge **{target}** hat noch keinen Rasierer gekoppelt.\n\n1. Stelle sicher, dass der Rasierer **eingeschaltet** und **nicht mit dem Handy verbunden** ist (aus Bluetooth-Einstellungen und der GroomTribe / OneBlade App entfernen).\n2. Lege den Rasierer in die Nähe der Bridge.\n3. Klicke unten **Pairing starten** — die Bridge scannt **60 Sekunden** lang. Triggere den BLE-Advertise-Modus des Rasierers (modellabhängig: Power-Knopf gedrückt halten oder auf die Ladestation stellen).\n\nNach erfolgreichem Pairing werden die Fähigkeiten automatisch ausgelesen.",
+        "submit": "Pairing starten"
+      },
       "pair": {
         "title": "Gerät koppeln",
         "description": "**{name}** muss mit diesem System gekoppelt werden.\n\nℹ️ **Bitte vor der Kopplung prüfen:**\n1. ⬜ Rasierer ist **eingeschaltet** oder auf der **Ladestation**\n2. ⬜ Rasierer ist **nicht** mit dem Handy verbunden\n   — Aus Bluetooth-Einstellungen **und** GroomTribe / OneBlade App entfernen",
@@ -88,6 +93,8 @@
       "out_of_slots": "Kein Bluetooth-Adapter konnte das Gerät erreichen. Entweder sind alle Verbindungsslots belegt oder das Gerät ist außer Reichweite. Stelle sicher, dass der Rasierer eingeschaltet und in der Nähe des Bluetooth-Adapters ist, und entferne ggf. ungenutzte Bluetooth-Geräte.",
       "connection_aborted": "Verbindung wurde abgebrochen. Das Gerät ist möglicherweise außer Reichweite oder über einen nicht unterstützten Bluetooth-Proxy verbunden. Diese Integration benötigt direktes Bluetooth oder die dedizierte ESP32 BLE-Bridge — Standard-ESPHome-Bluetooth-Proxys werden nicht unterstützt.",
       "pairing_failed": "Bluetooth-Kopplung fehlgeschlagen. Stelle sicher, dass der Rasierer eingeschaltet und nicht mit einem anderen Gerät verbunden ist. Falls das Problem weiterhin besteht, schalte den Rasierer aus und wieder ein, oder kopple manuell per Terminal.",
+      "service_call_failed": "Pair-Modus konnte nicht auf der ESP-Bridge aktiviert werden. Die Bridge ist möglicherweise offline oder läuft auf einer zu alten Firmware. Aktualisiere die Bridge auf v1.8.0 oder neuer und versuche es erneut.",
+      "pair_timeout": "Im 60-Sekunden-Pair-Fenster wurde kein Rasierer erkannt. Stelle sicher, dass der Rasierer eingeschaltet ist und advertised, und versuche es erneut.",
       "unknown": "Unerwarteter Fehler. Bitte prüfe die Systemprotokolle."
     },
     "abort": {

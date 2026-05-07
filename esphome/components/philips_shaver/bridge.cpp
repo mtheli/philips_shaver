@@ -117,7 +117,15 @@ void ShaverBridge::dump_config() {
 
 void ShaverBridge::fire_event(const std::string &event_type,
                                const std::map<std::string, std::string> &data) {
-  this->fire_homeassistant_event(event_type, data);
+  // Auto-inject bridge_id so HA-side multi-bridge filtering works for every
+  // event (status, data, services, pair_complete, scan_result, …) without
+  // each emit-site having to set it. Empty bridge_id (single-bridge YAML)
+  // is fine — HA filters on `event_bridge_id == self_bridge_id` so empty
+  // == empty matches.
+  std::map<std::string, std::string> enriched = data;
+  if (!enriched.count("bridge_id"))
+    enriched["bridge_id"] = this->bridge_id_;
+  this->fire_homeassistant_event(event_type, enriched);
 }
 
 void ShaverBridge::publish_connected(bool connected) {

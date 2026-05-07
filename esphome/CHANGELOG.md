@@ -1,5 +1,35 @@
 # ESP Bridge Changelog
 
+## v1.8.0-rc.1 — 2026-05-07
+
+- **Mode B auto-discovery pair flow.** YAML configs without
+  `ble_client_id:` now define a self-contained `BLEClientBase` subclass
+  that pairs to the first `8d560100`-advertising shaver via the new
+  `ble_pair_mode` service, persists the bonded MAC in NVS, and
+  auto-reconnects on subsequent boots. Eliminates the manual
+  `pair.sh` round-trip for Bluetooth-Proxy-only setups.
+- **Component refactored to 3 classes** (`ShaverCoordinator`,
+  `ShaverBridge`, `PhilipsShaver` / `PhilipsShaverStandalone`). All
+  GATT logic lives in the mode-agnostic Coordinator; the Bridge owns
+  HA service registration; Workers are thin BLE-stack adapters. No
+  user-visible behavior change in Mode A — the existing
+  `ble_client_id`-based YAML configs flash and run unchanged.
+- **4 new HA services** (Mode B only — guarded inside the Coordinator):
+  - `ble_pair_mode(enabled, timeout_s)` — arm/disarm UUID-scan
+  - `ble_unpair()` — remove the bond + clear NVS identity
+  - `ble_scan(timeout_s)` — discovery-only; emits `scan_result` events
+  - `ble_pair_mac(mac, timeout_s)` — targeted pair to a specific MAC
+- **`ble_get_info` extended** with `mode`, `identity_source`
+  (yaml/nvs/none), `identity_address`, `pair_capable`. HA-side config
+  flow uses these to detect Mode B unpaired bridges and route to the
+  setup-dialog pair flow instead of attempting a doomed capability
+  fetch.
+- **Auto-injected `bridge_id` on every event.** `fire_event()` now
+  fills the `bridge_id` field if the emitting site didn't, so
+  HA-side multi-bridge filtering works for `pair_complete`,
+  `scan_result`, `unpaired`, etc. without each emit-site having to
+  remember to set it.
+
 ## v1.7.0 — 2026-05-01
 
 - **Fix BLE re-encrypt race on ESP32-S3 with hot GATT cache (Issue #6).**
