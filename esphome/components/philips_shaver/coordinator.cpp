@@ -88,6 +88,57 @@ void ShaverCoordinator::on_loop(uint32_t now) {
     if (this->set_enabled_cb_)
       this->set_enabled_cb_(true);
   }
+
+  // Pair-mode timeout — disarm and emit pair_timeout. Mode B only; in
+  // Mode A pair_mode_active_ is never set so this branch is dead.
+  if (this->pair_mode_active_ && this->pair_mode_until_ms_ != 0 &&
+      now >= this->pair_mode_until_ms_) {
+    ESP_LOGW(this->log_tag_.c_str(),
+             "Pair-mode timeout — no brush found in window");
+    this->pair_mode_active_ = false;
+    this->pair_mode_until_ms_ = 0;
+    this->target_mac_.clear();
+    this->emit_(EVENT_STATUS,
+                {
+                    {"status", "pair_timeout"},
+                    {"version", PHILIPS_SHAVER_VERSION},
+                });
+    if (this->set_enabled_cb_)
+      this->set_enabled_cb_(false);
+  }
+
+  // Scan-mode timeout — emit scan_complete + count.
+  if (this->scan_mode_active_ && this->scan_mode_until_ms_ != 0 &&
+      now >= this->scan_mode_until_ms_) {
+    char count_str[8];
+    snprintf(count_str, sizeof(count_str), "%d",
+             (int) this->scan_results_seen_.size());
+    ESP_LOGI(this->log_tag_.c_str(),
+             "Scan complete — %s unique result(s)", count_str);
+    this->scan_mode_active_ = false;
+    this->scan_mode_until_ms_ = 0;
+    this->emit_(EVENT_STATUS,
+                {
+                    {"status", "scan_complete"},
+                    {"count", std::string(count_str)},
+                    {"version", PHILIPS_SHAVER_VERSION},
+                });
+    this->scan_results_seen_.clear();
+    if (this->set_enabled_cb_ && !this->pair_mode_active_)
+      this->set_enabled_cb_(false);
+  }
+
+  // Unpair drain — fire `unpaired` after the BLE stack settled.
+  if (this->unpair_drain_until_ms_ != 0 &&
+      now >= this->unpair_drain_until_ms_) {
+    this->unpair_drain_until_ms_ = 0;
+    ESP_LOGI(this->log_tag_.c_str(), "Unpair drain complete");
+    this->emit_(EVENT_STATUS,
+                {
+                    {"status", "unpaired"},
+                    {"version", PHILIPS_SHAVER_VERSION},
+                });
+  }
 }
 
 std::map<std::string, std::string> ShaverCoordinator::collect_info_data() {
@@ -123,7 +174,14 @@ std::map<std::string, std::string> ShaverCoordinator::collect_info_data() {
       {"subscriptions", std::string(subs_str)},
       {"notify_throttle_ms", std::string(throttle_str)},
       {"paired", paired},
+      {"mode", this->mode_},
+      {"identity_source", this->identity_source_},
+      {"pair_capable",
+       this->mode_ == MODE_STANDALONE ? "true" : "false"},
   };
+  if (!this->identity_address_.empty()) {
+    data["identity_address"] = this->identity_address_;
+  }
   if (!this->remote_name_.empty()) {
     data["ble_name"] = this->remote_name_;
   }
@@ -515,6 +573,28 @@ void ShaverCoordinator::on_gap_event(esp_gap_ble_cb_event_t event,
         this->auth_completed_ = true;
         this->rapid_disconnect_count_ = 0;
         this->auth_fail_count_ = 0;
+        // Mode B: emit pair_complete on the AUTH_CMPL that ends the
+        // pair-mode window. The Worker has already persisted NVS +
+        // updated identity_source by the time we get here (it runs
+        // pre-forward inside its own gap_event_handler), so the values
+        // we report below are post-persist.
+        if (this->pair_mode_active_) {
+          ESP_LOGI(this->log_tag_.c_str(),
+                   "Pair complete — disarming pair-mode (identity_source=%s)",
+                   this->identity_source_.c_str());
+          this->pair_mode_active_ = false;
+          this->pair_mode_until_ms_ = 0;
+          this->target_mac_.clear();
+          this->emit_(EVENT_STATUS,
+                      {
+                          {"status", "pair_complete"},
+                          {"version", PHILIPS_SHAVER_VERSION},
+                          {"mac", this->get_remote_mac()},
+                          {"identity_address", this->identity_address_},
+                          {"identity_source", this->identity_source_},
+                          {"bonding", "bonded"},
+                      });
+        }
         if (this->retry_read_after_auth_ && this->probe_handle_ != 0) {
           // Path A: probe returned INSUF_AUTH, our explicit set_encryption()
           // triggered SMP, encryption is now up — retry the probe.
@@ -908,6 +988,162 @@ void ShaverCoordinator::start_post_auth_setup_() {
              this->desired_subscriptions_.size());
     this->resubscribe_all_();
   }
+}
+
+// ── Mode B: pair-mode / scan / unpair / pair-mac ─────────────────────────────
+
+void ShaverCoordinator::set_pair_mode(bool enable, uint32_t timeout_s) {
+  if (this->mode_ != MODE_STANDALONE) {
+    ESP_LOGW(this->log_tag_.c_str(),
+             "ble_pair_mode is Mode B only — ignoring (mode=%s)",
+             this->mode_.c_str());
+    return;
+  }
+  if (!enable) {
+    if (!this->pair_mode_active_)
+      return;
+    ESP_LOGI(this->log_tag_.c_str(), "Pair-mode disarmed by user");
+    this->pair_mode_active_ = false;
+    this->pair_mode_until_ms_ = 0;
+    this->target_mac_.clear();
+    if (this->set_enabled_cb_)
+      this->set_enabled_cb_(false);
+    return;
+  }
+  if (timeout_s == 0 || timeout_s > MAX_PAIR_MODE_TIMEOUT_S)
+    timeout_s = 60;
+  this->pair_mode_active_ = true;
+  this->pair_mode_until_ms_ = millis() + timeout_s * 1000;
+  ESP_LOGI(this->log_tag_.c_str(), "Pair-mode armed for %us%s", timeout_s,
+           this->target_mac_.empty()
+               ? ""
+               : (" (target " + this->target_mac_ + ")").c_str());
+  if (this->set_enabled_cb_)
+    this->set_enabled_cb_(true);
+  char timeout_str[8];
+  snprintf(timeout_str, sizeof(timeout_str), "%u", timeout_s);
+  std::map<std::string, std::string> data = {
+      {"status", "pair_mode_armed"},
+      {"version", PHILIPS_SHAVER_VERSION},
+      {"timeout_s", std::string(timeout_str)},
+  };
+  if (!this->target_mac_.empty())
+    data["target_mac"] = this->target_mac_;
+  this->emit_(EVENT_STATUS, data);
+}
+
+void ShaverCoordinator::unpair() {
+  if (this->mode_ != MODE_STANDALONE) {
+    ESP_LOGW(this->log_tag_.c_str(),
+             "ble_unpair is Mode B only — ignoring (mode=%s)",
+             this->mode_.c_str());
+    return;
+  }
+  // Best-effort bond removal for the current remote (if any). Workers'
+  // unpair_cb_ also clears NVS-persisted identity.
+  if (this->parent_ != nullptr) {
+    auto *bda = this->parent_->get_remote_bda();
+    bool any_set = false;
+    for (int i = 0; i < 6; i++) {
+      if (bda[i] != 0) {
+        any_set = true;
+        break;
+      }
+    }
+    if (any_set) {
+      esp_ble_remove_bond_device(const_cast<uint8_t *>(bda));
+      ESP_LOGI(this->log_tag_.c_str(), "Bond removed");
+    }
+  }
+  if (this->unpair_cb_)
+    this->unpair_cb_();
+  this->identity_source_ = IDENTITY_SOURCE_NONE;
+  this->identity_address_.clear();
+  this->unpair_drain_until_ms_ = millis() + UNPAIR_DRAIN_MS;
+  if (this->set_enabled_cb_)
+    this->set_enabled_cb_(false);
+  ESP_LOGI(this->log_tag_.c_str(),
+           "Unpair initiated — drain window %ums, awaiting `unpaired` emit",
+           UNPAIR_DRAIN_MS);
+}
+
+void ShaverCoordinator::set_scan_mode(uint32_t timeout_s) {
+  if (this->mode_ != MODE_STANDALONE) {
+    ESP_LOGW(this->log_tag_.c_str(),
+             "ble_scan is Mode B only — ignoring (mode=%s)",
+             this->mode_.c_str());
+    return;
+  }
+  if (timeout_s == 0 || timeout_s > MAX_SCAN_TIMEOUT_S)
+    timeout_s = 30;
+  this->scan_mode_active_ = true;
+  this->scan_mode_until_ms_ = millis() + timeout_s * 1000;
+  this->scan_results_seen_.clear();
+  ESP_LOGI(this->log_tag_.c_str(), "Scan-mode armed for %us", timeout_s);
+  if (this->set_enabled_cb_)
+    this->set_enabled_cb_(true);
+  char timeout_str[8];
+  snprintf(timeout_str, sizeof(timeout_str), "%u", timeout_s);
+  this->emit_(EVENT_STATUS,
+              {
+                  {"status", "scan_started"},
+                  {"timeout_s", std::string(timeout_str)},
+                  {"version", PHILIPS_SHAVER_VERSION},
+              });
+}
+
+void ShaverCoordinator::set_pair_mac(const std::string &mac,
+                                      uint32_t timeout_s) {
+  if (this->mode_ != MODE_STANDALONE) {
+    ESP_LOGW(this->log_tag_.c_str(),
+             "ble_pair_mac is Mode B only — ignoring (mode=%s)",
+             this->mode_.c_str());
+    return;
+  }
+  if (mac.size() != 17) {
+    ESP_LOGW(this->log_tag_.c_str(),
+             "ble_pair_mac: invalid MAC '%s' (expected AA:BB:CC:DD:EE:FF)",
+             mac.c_str());
+    return;
+  }
+  std::string upper = mac;
+  for (auto &c : upper)
+    c = toupper(static_cast<unsigned char>(c));
+  this->target_mac_ = upper;
+  ESP_LOGI(this->log_tag_.c_str(), "Pair-mac armed: target=%s",
+           this->target_mac_.c_str());
+  this->set_pair_mode(true, timeout_s);
+}
+
+void ShaverCoordinator::emit_scan_result(const std::string &mac,
+                                          const std::string &addr_type,
+                                          const std::string &local_name,
+                                          const std::string &mfr_data,
+                                          int rssi,
+                                          const std::string &service_uuid) {
+  if (this->scan_results_seen_.count(mac))
+    return;
+  this->scan_results_seen_.insert(mac);
+  char rssi_str[8];
+  snprintf(rssi_str, sizeof(rssi_str), "%d", rssi);
+  this->emit_(EVENT_STATUS,
+              {
+                  {"status", "scan_result"},
+                  {"mac", mac},
+                  {"addr_type", addr_type},
+                  {"local_name", local_name},
+                  {"mfr_data", mfr_data},
+                  {"rssi", std::string(rssi_str)},
+                  {"service_uuid", service_uuid},
+              });
+}
+
+void ShaverCoordinator::list_services() {
+  // Stub — Sonicare exposes this via `ble_list_services`; Shaver doesn't
+  // need it for the current HA flow (HA reads everything via `ble_get_info`
+  // and known service UUIDs). Leaving a no-op so the Bridge service
+  // registration compiles; revisit if a use-case appears.
+  ESP_LOGD(this->log_tag_.c_str(), "list_services: not implemented");
 }
 
 }  // namespace philips_shaver

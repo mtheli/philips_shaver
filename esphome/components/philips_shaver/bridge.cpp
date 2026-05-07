@@ -17,6 +17,20 @@ std::string ShaverBridge::svc_name_(const std::string &action) {
   return action + "_" + this->bridge_id_;
 }
 
+static uint32_t parse_timeout_s(const std::string &s, uint32_t fallback,
+                                 const char *field) {
+  if (s.empty())
+    return fallback;
+  char *endp = nullptr;
+  unsigned long parsed = strtoul(s.c_str(), &endp, 10);
+  if (endp == s.c_str() || *endp != '\0') {
+    ESP_LOGW(TAG, "Invalid %s '%s' — using %us", field, s.c_str(),
+             (unsigned) fallback);
+    return fallback;
+  }
+  return static_cast<uint32_t>(parsed);
+}
+
 void ShaverBridge::setup() {
   this->register_service(&ShaverBridge::on_read_characteristic,
                           this->svc_name_("ble_read_char"),
@@ -35,6 +49,16 @@ void ShaverBridge::setup() {
                           {"throttle_ms"});
   this->register_service(&ShaverBridge::on_get_info,
                           this->svc_name_("ble_get_info"), {});
+  this->register_service(&ShaverBridge::on_pair_mode,
+                          this->svc_name_("ble_pair_mode"),
+                          {"enabled", "timeout_s"});
+  this->register_service(&ShaverBridge::on_unpair,
+                          this->svc_name_("ble_unpair"), {});
+  this->register_service(&ShaverBridge::on_scan,
+                          this->svc_name_("ble_scan"), {"timeout_s"});
+  this->register_service(&ShaverBridge::on_pair_mac,
+                          this->svc_name_("ble_pair_mac"),
+                          {"mac", "timeout_s"});
   ESP_LOGI(this->log_tag_.c_str(), "Services registered (bridge_id: '%s')",
            this->bridge_id_.c_str());
 }
@@ -131,6 +155,31 @@ void ShaverBridge::on_set_throttle(std::string throttle_ms) {
     return;
   uint32_t ms = std::stoul(throttle_ms);
   this->coord_->set_throttle(ms);
+}
+
+void ShaverBridge::on_pair_mode(bool enabled, std::string timeout_s) {
+  if (this->coord_ == nullptr)
+    return;
+  this->coord_->set_pair_mode(enabled, parse_timeout_s(timeout_s, 60,
+                                                       "timeout_s"));
+}
+
+void ShaverBridge::on_unpair() {
+  if (this->coord_ != nullptr)
+    this->coord_->unpair();
+}
+
+void ShaverBridge::on_scan(std::string timeout_s) {
+  if (this->coord_ == nullptr)
+    return;
+  this->coord_->set_scan_mode(parse_timeout_s(timeout_s, 30, "timeout_s"));
+}
+
+void ShaverBridge::on_pair_mac(std::string mac, std::string timeout_s) {
+  if (this->coord_ == nullptr)
+    return;
+  this->coord_->set_pair_mac(mac,
+                              parse_timeout_s(timeout_s, 60, "timeout_s"));
 }
 
 void ShaverBridge::on_get_info() {

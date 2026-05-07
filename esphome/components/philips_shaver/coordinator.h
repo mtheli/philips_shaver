@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <map>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -17,9 +18,22 @@ namespace philips_shaver {
 
 class ShaverBridge;  // forward — defined in bridge.h
 
-static const char *const PHILIPS_SHAVER_VERSION = "1.7.1-rc.1";
+static const char *const PHILIPS_SHAVER_VERSION = "1.8.0-rc.1";
 static const char *const EVENT_STATUS = "esphome.philips_shaver_ble_status";
 static const char *const EVENT_DATA = "esphome.philips_shaver_ble_data";
+static const char *const EVENT_SERVICES = "esphome.philips_shaver_ble_services";
+
+// Bridge mode (reported in collect_info_data so HA can detect pair_capable)
+static const char *const MODE_EXTERNAL = "external";    // Mode A
+static const char *const MODE_STANDALONE = "standalone";  // Mode B
+
+// Identity-source values reported in collect_info_data + pair_complete event.
+// Mode A and Mode-B-with-YAML-MAC pin the identity in YAML; Mode-B
+// auto-discovery persists it in NVS; "none" means the bridge is unpaired
+// and ready for a new pair-mode arming.
+static const char *const IDENTITY_SOURCE_YAML = "yaml";
+static const char *const IDENTITY_SOURCE_NVS = "nvs";
+static const char *const IDENTITY_SOURCE_NONE = "none";
 
 // BLE/GATT logic for a single Philips shaver. Mode-agnostic: works with any
 // esp32_ble_client::BLEClientBase parent (an external ble_client::BLEClient
@@ -46,6 +60,58 @@ class ShaverCoordinator {
   // Per-instance log tag, set in to_code(): "philips_shaver" (single-bridge)
   // or "philips_shaver.<bridge_id>" (multi-bridge).
   void set_log_tag(const std::string &tag) { this->log_tag_ = tag; }
+  // Mode + identity reported in collect_info_data / heartbeat so HA can
+  // detect whether this bridge supports the pair-mode flow and what the
+  // bound brush is. set_mode is "external" (Mode A) or "standalone" (Mode B).
+  void set_mode(const std::string &mode) { this->mode_ = mode; }
+  void set_identity_source(const std::string &source) {
+    this->identity_source_ = source;
+  }
+  const std::string &get_identity_source() const {
+    return this->identity_source_;
+  }
+  void set_identity_address(const std::string &mac) {
+    this->identity_address_ = mac;
+  }
+
+  // ── Mode B service operations ─────────────────────────────────────────────
+  // Called by Bridge service `ble_pair_mode`. enable=true arms UUID-scan for
+  // timeout_s seconds; enable=false cancels. No-op outside Mode B.
+  void set_pair_mode(bool enable, uint32_t timeout_s);
+  bool is_pair_mode_active() const { return this->pair_mode_active_; }
+  // Called by Bridge service `ble_unpair`. Removes the BLE bond, clears
+  // any cached identity (Worker side via callback) and disconnects.
+  void unpair();
+  // Discovery-only: arm UUID-scan for timeout_s seconds, emit one
+  // scan_result event per unique MAC observed, then scan_complete.
+  // Does NOT connect.
+  void set_scan_mode(uint32_t timeout_s);
+  bool is_scan_mode_active() const { return this->scan_mode_active_; }
+  // Worker calls this for each UUID-matching advert during scan-mode.
+  // Internally deduplicates by MAC.
+  void emit_scan_result(const std::string &mac,
+                         const std::string &addr_type,
+                         const std::string &local_name,
+                         const std::string &mfr_data, int rssi,
+                         const std::string &service_uuid);
+  // Targeted pairing: arm pair-mode but only connect to one specific MAC
+  // (not the first UUID-match). MAC is normalized to "AA:BB:CC:DD:EE:FF".
+  void set_pair_mac(const std::string &mac, uint32_t timeout_s);
+  const std::string &get_target_mac() const { return this->target_mac_; }
+  // Emit the GATT service list (after a connect) as a one-shot event.
+  void list_services();
+
+  // Worker registers callbacks for Mode B-specific operations:
+  void set_unpair_cb(std::function<void()> cb) {
+    this->unpair_cb_ = std::move(cb);
+  }
+  // Open-GATT bond detection: fires in the rare path where AUTH_CMPL is
+  // skipped (e.g. some legacy brushes that auto-bond). Worker persists the
+  // currently-connected MAC as identity. Shaver bonding is the norm so
+  // this is mostly a safety hatch for symmetry with Sonicare.
+  void set_save_identity_cb(std::function<void()> cb) {
+    this->save_identity_cb_ = std::move(cb);
+  }
 
   // ── Lifecycle (driven by Bridge::loop()) ──────────────────────────────────
   // Drains time-based state (auth backoff). Idempotent — safe to call from
@@ -94,7 +160,33 @@ class ShaverCoordinator {
   esp32_ble_client::BLEClientBase *parent_{nullptr};
   ShaverBridge *bridge_{nullptr};
   std::function<void(bool)> set_enabled_cb_;
+  std::function<void()> unpair_cb_;
+  std::function<void()> save_identity_cb_;
   std::string log_tag_;  // fallback to file-scope TAG until set
+
+  // Mode + identity (set from to_code() / Worker setup)
+  std::string mode_{MODE_EXTERNAL};
+  std::string identity_source_{IDENTITY_SOURCE_YAML};
+  std::string identity_address_;
+
+  // Pair-mode state machine (Mode B)
+  bool pair_mode_active_{false};
+  uint32_t pair_mode_until_ms_{0};
+  std::string target_mac_;
+
+  // Scan-mode state machine (Mode B)
+  bool scan_mode_active_{false};
+  uint32_t scan_mode_until_ms_{0};
+  std::set<std::string> scan_results_seen_;  // dedup by MAC
+
+  // Unpair drain — short window after ble_unpair before the bridge is
+  // re-armed. Lets the BLE stack finish close+disconnect+bond_remove
+  // before we accept new connect attempts.
+  uint32_t unpair_drain_until_ms_{0};
+
+  static const uint32_t UNPAIR_DRAIN_MS = 2000;
+  static const uint32_t MAX_PAIR_MODE_TIMEOUT_S = 600;
+  static const uint32_t MAX_SCAN_TIMEOUT_S = 120;
 
   // Connection state
   bool connected_{false};
