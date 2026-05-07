@@ -98,6 +98,7 @@ async def async_setup_entry(
 
     # Connection sub-device: adapter works for both transports
     entities.append(PhilipsAdapterSensor(coordinator, entry))
+    entities.append(PhilipsAdapterTypeSensor(coordinator, entry))
 
     is_esp = entry.data.get(CONF_TRANSPORT_TYPE) == TRANSPORT_ESP_BRIDGE
     # RSSI sensor only for direct BLE (not available via ESP bridge)
@@ -533,6 +534,35 @@ class PhilipsRssiSensor(PhilipsConnectionEntity, SensorEntity):
             return None
         return service_info.rssi
 
+
+# =============================================================================
+# Adapter Type
+# =============================================================================
+class PhilipsAdapterTypeSensor(PhilipsConnectionEntity, SensorEntity):
+    """Classification of the active BLE transport.
+
+    Surfaces the same enum the coordinator uses internally to distinguish
+    direct-BLE / our-ESP-bridge / stock-bluetooth-proxy. Useful as a
+    diagnostic when troubleshooting connection quality on mixed-adapter
+    setups (e.g. multiple ESPs in range, or a host with both hci0 and a
+    proxy).
+    """
+
+    _attr_translation_key = "adapter_type"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["direct_ble", "esp_bridge", "stock_proxy", "unknown"]
+    _attr_icon = "mdi:transit-connection-variant"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._device_id}_adapter_type"
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.adapter_type
 
 
 # =============================================================================

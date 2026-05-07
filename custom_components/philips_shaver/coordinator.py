@@ -162,6 +162,11 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._notify_chars = list(NOTIFICATION_CHARS)
 
         self._is_esp_bridge = isinstance(transport, EspBridgeTransport)
+        # Sticky cache for adapter_type — backend object can become None on
+        # disconnect, but the diagnostic sensor should keep showing the last
+        # known classification rather than flickering to "unknown" every time
+        # the link goes down.
+        self._last_adapter_type: str | None = None
         self._connection_lock = asyncio.Lock()
         self._live_task: asyncio.Task | None = None
         self._live_setup_done = False
@@ -897,6 +902,46 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_set_updated_data(self.data)
 
         return sessions
+
+    @property
+    def adapter_type(self) -> str:
+        """Classify the active BLE transport.
+
+        Returned values:
+
+        - ``esp_bridge`` — our custom ESPHome ``philips_shaver`` component
+          (proactive ``esp_ble_set_encryption()`` on bonded devices, plus
+          the ble_pair_mode / ble_unpair / ble_scan / ble_pair_mac service
+          surface for Mode B auto-discovery).
+        - ``direct_ble`` — host BlueZ adapter via bleak (BlueZ encrypts
+          proactively when a bond exists; pair.sh is the manual route).
+        - ``stock_proxy`` — stock ESPHome ``bluetooth_proxy`` reached
+          via the habluetooth wrapper (Bluedroid lazy encryption — not
+          tested with this integration, but the diagnostic surface is
+          here so users with mixed setups can see what HA picked).
+        - ``unknown`` — not connected, or backend type not recognised.
+
+        The classification is sticky over disconnects: once the backend
+        type is known, the cached value is returned even when the link
+        is currently down. That keeps the diagnostic sensor stable
+        instead of flickering to "unknown" on every reconnect cycle.
+        """
+        if self._is_esp_bridge:
+            return "esp_bridge"
+        if self._last_adapter_type is not None and not self.transport.is_connected:
+            return self._last_adapter_type
+        client = getattr(self.transport, "_client", None)
+        backend = getattr(client, "_backend", None) if client else None
+        if backend is None:
+            return self._last_adapter_type or "unknown"
+        mod = type(backend).__module__ or ""
+        if "bluezdbus" in mod:
+            self._last_adapter_type = "direct_ble"
+        elif "esphome" in mod:
+            self._last_adapter_type = "stock_proxy"
+        else:
+            return self._last_adapter_type or "unknown"
+        return self._last_adapter_type
 
     def _check_bridge_version(self) -> None:
         """Create or clear a HA repair issue if the ESP bridge firmware is outdated."""

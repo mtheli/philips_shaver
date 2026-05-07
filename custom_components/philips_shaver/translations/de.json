@@ -199,6 +199,15 @@
       "rssi": {
         "name": "Signalstärke"
       },
+      "adapter_type": {
+        "name": "Adaptertyp",
+        "state": {
+          "direct_ble": "Direktes Bluetooth",
+          "esp_bridge": "ESP Bridge",
+          "stock_proxy": "Bluetooth Proxy",
+          "unknown": "Unbekannt"
+        }
+      },
       "cleaning_progress": {
         "name": "Reinigungsfortschritt"
       },
