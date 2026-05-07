@@ -13,6 +13,19 @@ Bluetooth access from the HA host.
 > a Bluetooth Proxy, you still need to flash this custom component — the proxy
 > alone will fail with `ESP_GATT_CONN_FAIL_ESTABLISH`.
 
+> [!TIP]
+> **Two pairing modes are supported** (per `philips_shaver:` entry):
+> - **Mode A — Fixed MAC** (this guide). You know the shaver's MAC, declare a
+>   `ble_client:` block, pair once via `pair.sh` from the host. Deterministic
+>   slot-to-shaver mapping; ideal for established setups.
+> - **Mode B — Auto-Discovery**. The bridge scans for the universal Philips
+>   Shaver Platform Service UUID, the HA setup dialog walks you through a
+>   pair-mode flow, the bonded MAC persists in NVS — no terminal access
+>   needed. See [`esphome/README.md`](../esphome/README.md#mode-a-vs-mode-b)
+>   for the YAML pattern.
+>
+> Both modes can coexist on the same ESP — multi-bridge YAMLs can mix them.
+
 ## Tested Hardware
 
 | Board | Status |

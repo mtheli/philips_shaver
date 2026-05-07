@@ -249,7 +249,12 @@ A single ESP32 can bridge **multiple devices** (e.g. a shaver and an OneBlade si
 
 > **Note:** This option requires basic [ESPHome](https://esphome.io/) knowledge (flashing firmware, editing YAML configs). If you're new to ESPHome, check out [Getting Started with ESPHome](https://esphome.io/guides/getting_started_hassio) first.
 
-For the complete setup guide, see **[ESP Bridge Setup Guide](docs/ESP_BRIDGE_SETUP.md)**.
+The bridge supports two pairing modes per `philips_shaver:` entry:
+
+- **Mode A — Fixed MAC** (`ble_client_id:` references a `ble_client:` block with the shaver's MAC). Pairing happens once, manually via `pair.sh` from the host. Deterministic slot-to-shaver mapping; ideal when you already know the MAC.
+- **Mode B — Auto-Discovery** (no `ble_client_id:`, no `mac_address:`). The bridge scans for the universal Philips Shaver Platform Service UUID, bonds to the first match via the HA setup dialog's pair-mode flow, and persists the bonded MAC in NVS. No terminal access needed; ideal for Bluetooth-Proxy-only setups or when you want to swap shavers without re-flashing.
+
+For the complete setup guide and Mode A vs Mode B comparison, see **[ESP Bridge Setup Guide](docs/ESP_BRIDGE_SETUP.md)** and [`esphome/README.md`](esphome/README.md).
 
 ---
 
