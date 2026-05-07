@@ -6,6 +6,7 @@
 #include <esp_gap_ble_api.h>
 #include <esp_gattc_api.h>
 
+#include <deque>
 #include <functional>
 #include <map>
 #include <set>
@@ -233,6 +234,17 @@ class ShaverCoordinator {
       desired_subscriptions_;  // Restored after reconnect
   std::map<uint16_t, uint32_t> last_notify_ms_;           // throttle bookkeeping
   uint32_t notify_throttle_ms_{500};
+
+  // Pending HA service calls deferred until SEARCH_CMPL completes. HA's
+  // coordinator fires read/subscribe/write the moment the BLE link is up
+  // (OPEN_EVT), but characteristics aren't queryable until services have
+  // been discovered (SEARCH_CMPL_EVT, ~5–11 s later for our shavers).
+  // Each lambda re-enters the originating method, which re-checks
+  // connected_/services_discovered_/parent_ and either runs or
+  // re-queues. Drained from SEARCH_CMPL_EVT, cleared on disconnect.
+  // Bounded to keep flash/heap predictable if discovery never completes.
+  std::deque<std::function<void()>> pending_calls_;
+  static const size_t MAX_PENDING_CALLS = 64;
 };
 
 }  // namespace philips_shaver

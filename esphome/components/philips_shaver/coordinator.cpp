@@ -257,6 +257,15 @@ void ShaverCoordinator::on_gattc_event(esp_gattc_cb_event_t event,
       this->retry_read_after_auth_ = false;
       this->probe_handle_ = 0;
       this->ready_fired_ = false;
+      // Drop any queued reads/subscribes — they were addressed at this
+      // (now-broken) connection. HA's coordinator will re-issue them
+      // after the next ready event.
+      if (!this->pending_calls_.empty()) {
+        ESP_LOGD(this->log_tag_.c_str(),
+                 "Discarding %u queued call(s) on disconnect",
+                 (unsigned) this->pending_calls_.size());
+        this->pending_calls_.clear();
+      }
       if (this->bridge_ != nullptr)
         this->bridge_->publish_connected(false);
       this->pending_handle_ = 0;
@@ -679,6 +688,29 @@ void ShaverCoordinator::read_char(const std::string &service_uuid,
                 });
     return;
   }
+  if (!this->services_discovered_) {
+    if (this->pending_calls_.size() >= MAX_PENDING_CALLS) {
+      ESP_LOGW(this->log_tag_.c_str(),
+               "Pending queue full — dropping read for %s",
+               characteristic_uuid.c_str());
+      this->emit_(EVENT_DATA,
+                  {
+                      {"uuid", characteristic_uuid},
+                      {"payload", ""},
+                      {"error", "queue_full"},
+                      {"mac", this->get_remote_mac()},
+                  });
+      return;
+    }
+    ESP_LOGD(this->log_tag_.c_str(),
+             "Queueing read of %s until service discovery completes",
+             characteristic_uuid.c_str());
+    this->pending_calls_.push_back(
+        [this, service_uuid, characteristic_uuid]() {
+          this->read_char(service_uuid, characteristic_uuid);
+        });
+    return;
+  }
 
   auto svc = parse_uuid(service_uuid);
   auto chr_uuid = parse_uuid(characteristic_uuid);
@@ -727,6 +759,22 @@ void ShaverCoordinator::subscribe(const std::string &service_uuid,
                                    const std::string &characteristic_uuid) {
   if (!this->connected_ || this->parent_ == nullptr) {
     ESP_LOGW(this->log_tag_.c_str(), "Cannot subscribe: not connected");
+    return;
+  }
+  if (!this->services_discovered_) {
+    if (this->pending_calls_.size() >= MAX_PENDING_CALLS) {
+      ESP_LOGW(this->log_tag_.c_str(),
+               "Pending queue full — dropping subscribe for %s",
+               characteristic_uuid.c_str());
+      return;
+    }
+    ESP_LOGD(this->log_tag_.c_str(),
+             "Queueing subscribe of %s until service discovery completes",
+             characteristic_uuid.c_str());
+    this->pending_calls_.push_back(
+        [this, service_uuid, characteristic_uuid]() {
+          this->subscribe(service_uuid, characteristic_uuid);
+        });
     return;
   }
 
@@ -800,6 +848,22 @@ void ShaverCoordinator::unsubscribe(const std::string &service_uuid,
     ESP_LOGW(this->log_tag_.c_str(), "Cannot unsubscribe: not connected");
     return;
   }
+  if (!this->services_discovered_) {
+    if (this->pending_calls_.size() >= MAX_PENDING_CALLS) {
+      ESP_LOGW(this->log_tag_.c_str(),
+               "Pending queue full — dropping unsubscribe for %s",
+               characteristic_uuid.c_str());
+      return;
+    }
+    ESP_LOGD(this->log_tag_.c_str(),
+             "Queueing unsubscribe of %s until service discovery completes",
+             characteristic_uuid.c_str());
+    this->pending_calls_.push_back(
+        [this, service_uuid, characteristic_uuid]() {
+          this->unsubscribe(service_uuid, characteristic_uuid);
+        });
+    return;
+  }
 
   auto svc = parse_uuid(service_uuid);
   auto chr_uuid = parse_uuid(characteristic_uuid);
@@ -836,6 +900,22 @@ void ShaverCoordinator::write_char(const std::string &service_uuid,
                                     const std::string &hex_data) {
   if (!this->connected_ || this->parent_ == nullptr) {
     ESP_LOGW(this->log_tag_.c_str(), "Cannot write: not connected");
+    return;
+  }
+  if (!this->services_discovered_) {
+    if (this->pending_calls_.size() >= MAX_PENDING_CALLS) {
+      ESP_LOGW(this->log_tag_.c_str(),
+               "Pending queue full — dropping write for %s",
+               characteristic_uuid.c_str());
+      return;
+    }
+    ESP_LOGD(this->log_tag_.c_str(),
+             "Queueing write of %s until service discovery completes",
+             characteristic_uuid.c_str());
+    this->pending_calls_.push_back(
+        [this, service_uuid, characteristic_uuid, hex_data]() {
+          this->write_char(service_uuid, characteristic_uuid, hex_data);
+        });
     return;
   }
 
@@ -987,6 +1067,20 @@ void ShaverCoordinator::start_post_auth_setup_() {
              "Restoring %d notification subscription(s)...",
              this->desired_subscriptions_.size());
     this->resubscribe_all_();
+  }
+  // Drain HA service calls that arrived before service discovery
+  // completed. HA's coordinator fires read/subscribe/write on
+  // 'connected' (not 'ready'), so reads can land while we're still
+  // probing. Each lambda re-enters its read_char/subscribe/etc., which
+  // now sees services_discovered_=true and runs normally.
+  if (!this->pending_calls_.empty()) {
+    ESP_LOGI(this->log_tag_.c_str(),
+             "Draining %u queued call(s) deferred until discovery",
+             (unsigned) this->pending_calls_.size());
+    auto pending = std::move(this->pending_calls_);
+    this->pending_calls_.clear();
+    for (auto &fn : pending)
+      fn();
   }
 }
 
