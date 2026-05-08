@@ -43,7 +43,7 @@
           "esp_device_name": "ESPHome Bridge Device"
         },
         "data_description": {
-          "esp_device_name": "The ESPHome device that runs the Philips Shaver BLE bridge component.\n\nLegend: ⚪ ESP unreachable  •  \"paired\" = slot bonded to a shaver  •  \"free\" = slot ready for a new pairing"
+          "esp_device_name": "The ESPHome device that runs the Philips Shaver BLE bridge component.\n\nLegend: ⚪ ESP unreachable  •  🔗 paired slot  •  🟢 empty slot"
         }
       },
       "bluetooth_confirm": {

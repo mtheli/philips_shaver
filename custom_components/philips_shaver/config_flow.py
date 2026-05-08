@@ -811,12 +811,13 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         free bridge slots; falls back to a plain bridge count if the
         probe times out or the ESP is offline.
         """
-        # Note on i18n: the slot-info suffix below is hardcoded English
-        # because HA's strings.json schema doesn't allow custom keys at the
-        # step level (no place for free-form Python-side label translations).
-        # See https://github.com/mtheli/philips_shaver — hassfest run from
-        # 2026-05-08 rejected the slot_info_* keys whichever way we nested
-        # them. Live with the EN suffix on a DE UI.
+        # Slot-occupation counts use unicode markers (🔗 = paired slot,
+        # 🟢 = empty slot) instead of English words so the picker reads
+        # the same regardless of HA UI language. The data_description
+        # below the field explains the markers in the user's locale.
+        # See https://github.com/mtheli/philips_shaver — HA's strings.json
+        # schema doesn't allow custom keys for Python-side label
+        # translations, hence the icon route.
         esphome_entries = self.hass.config_entries.async_entries("esphome")
         options: list[SelectOptionDict] = []
         for entry in esphome_entries:
@@ -841,19 +842,19 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
                 free = len(probe_results) - paired
                 if paired and free:
-                    slot_info = f"{paired} paired / {free} free slots"
+                    slot_info = f"{paired} 🔗 / {free} 🟢"
                 elif free:
-                    slot_info = f"{free} free slots"
+                    slot_info = f"{free} 🟢"
                 elif paired:
-                    slot_info = f"{paired} paired slots"
+                    slot_info = f"{paired} 🔗"
             else:
                 # Probe failed for every bridge_id — ESP is offline (or
                 # services are stale leftovers from a previous firmware).
-                # Show but mark with the ⚪ prefix; the description's
-                # legend explains the marker. (Sonicare's config flow
-                # filters offline ESPs entirely; we deliberately keep them
-                # visible so the user can see *why* their ESP is in the
-                # list but unselectable.)
+                # Show but mark with the ⚪ prefix; the data_description
+                # below the field explains the marker. (Sonicare's config
+                # flow filters offline ESPs entirely; we deliberately keep
+                # them visible so the user can see *why* their ESP is in
+                # the list but unselectable.)
                 is_offline = True
                 if len(bridge_ids) > 1:
                     slot_info = f"{len(bridge_ids)} bridges"
