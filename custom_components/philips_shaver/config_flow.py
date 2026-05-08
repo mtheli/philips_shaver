@@ -1063,11 +1063,24 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             mac = info.get("mac", "").upper()
             has_mac = bool(mac) and mac != "00:00:00:00:00:00"
             mac_suffix = f" — {mac}" if has_mac else ""
+            # The bridge has an identity bound (either YAML-pinned or
+            # NVS-persisted from a successful pair-mode run). Slot is not
+            # truly empty — submitting it imports the existing bond into HA
+            # rather than starting a fresh pair-flow. The 🟢 marker is
+            # reserved for genuinely unbonded slots so the user can tell
+            # them apart at a glance.
+            has_identity = info.get("identity_source", "none") != "none"
 
             if has_mac and mac in configured_macs:
                 options.append(SelectOptionDict(
                     value=did,
                     label=f"✅ {label_did}{mac_suffix}",
+                ))
+            elif has_identity:
+                unconfigured_dids.append(did)
+                options.append(SelectOptionDict(
+                    value=did,
+                    label=f"🔵 {label_did}{mac_suffix}",
                 ))
             else:
                 unconfigured_dids.append(did)

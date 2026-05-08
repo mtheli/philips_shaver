@@ -59,7 +59,7 @@
       },
       "esp_select_device": {
         "title": "Bridge-Slot auswählen",
-        "description": "Diese ESP-Bridge hat mehrere Slots. Wählen Sie einen verfügbaren Slot aus, an den Sie einen Shaver binden möchten.\n\nLegende: 🟢 verfügbar zum Koppeln  •  ✅ bereits konfiguriert  •  ⚪ offline",
+        "description": "Diese ESP-Bridge hat mehrere Slots. Wählen Sie einen verfügbaren Slot aus, an den Sie einen Shaver binden möchten.\n\nLegende: 🟢 verfügbar zum Koppeln  •  🔵 gebondet, kann übernommen werden  •  ✅ bereits konfiguriert  •  ⚪ offline",
         "data": {
           "esp_bridge_id": "Slot"
         }

@@ -59,7 +59,7 @@
       },
       "esp_select_device": {
         "title": "Select bridge slot",
-        "description": "This ESP bridge has multiple slots. Select an available slot to bond a shaver to.\n\nLegend: 🟢 available for bonding  •  ✅ already configured  •  ⚪ offline",
+        "description": "This ESP bridge has multiple slots. Select an available slot to bond a shaver to.\n\nLegend: 🟢 available for bonding  •  🔵 bonded, ready to import  •  ✅ already configured  •  ⚪ offline",
         "data": {
           "esp_bridge_id": "Slot"
         }
