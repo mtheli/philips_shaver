@@ -1,18 +1,6 @@
 # ESP Bridge Changelog
 
-## v1.8.0-rc.2 — 2026-05-08
-
-- **Fix `pair_capable` semantic in `ble_get_info`.** The field used to be
-  hardcoded `true` for every Mode B (standalone) bridge regardless of bond
-  state, which contradicted its name on a bridge that already had an
-  identity persisted in NVS or pinned in YAML. Now correctly reports
-  `true` only when `mode == standalone && identity_source == "none"`. The
-  HA integration's setup flow already had a defensive triple-check
-  (`pair_capable && identity_source == "none" && !paired`) so functional
-  behaviour is unchanged, but service-call consumers (Developer Tools,
-  third-party automations) now see the field's real meaning.
-
-## v1.8.0-rc.1 — 2026-05-07
+## v1.8.0 — 2026-05-08
 
 - **Mode B auto-discovery pair flow.** YAML configs without
   `ble_client_id:` now define a self-contained `BLEClientBase` subclass
@@ -41,6 +29,12 @@
   HA-side multi-bridge filtering works for `pair_complete`,
   `scan_result`, `unpaired`, etc. without each emit-site having to
   remember to set it.
+- **Fix `pair_capable` semantic in `ble_get_info`.** The field used to be
+  hardcoded `true` for every Mode B (standalone) bridge regardless of
+  bond state. Now correctly reports `true` only when
+  `mode == standalone && identity_source == "none"` — service-call
+  consumers (Developer Tools, third-party automations) now see the
+  field's real meaning.
 
 ## v1.7.0 — 2026-05-01
 
