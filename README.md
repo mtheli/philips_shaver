@@ -2,7 +2,6 @@
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/v/release/mtheli/philips_shaver)](https://github.com/mtheli/philips_shaver/releases)
-[![Downloads](https://img.shields.io/github/downloads/mtheli/philips_shaver/total.svg)](https://github.com/mtheli/philips_shaver/releases)
 [![License: MIT](https://img.shields.io/github/license/mtheli/philips_shaver)](LICENSE)
 
 This is a custom component for Home Assistant to integrate **Philips Bluetooth-enabled shavers**.
