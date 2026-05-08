@@ -177,7 +177,7 @@ You can use the **short form** (e.g. `0x0319` or `0319`) — the integration aut
 | `0x0705` | Speed Zone Thresholds | 7 bytes | Three uint16 LE zone boundaries + post-feedback % |
 | `0x0706` | Speed Verdict | uint8 | 0=optimal, 1=too fast, 2=none |
 
-For a full protocol reference, see [PROTOCOL.md](PROTOCOL.md).
+For a full protocol reference, see [BLE_PROTOCOL.md](BLE_PROTOCOL.md).
 
 ## Response Status Values
 

@@ -1,24 +1,25 @@
 #pragma once
 
 #include "esphome/core/component.h"
-#include "esphome/components/ble_client/ble_client.h"
+#include "esphome/core/preferences.h"
+#include "esphome/components/esp32_ble_client/ble_client_base.h"
 #include "esphome/components/esp32_ble_tracker/esp32_ble_tracker.h"
-#include "esphome/components/api/custom_api_device.h"
-#include "esphome/components/binary_sensor/binary_sensor.h"
 
-#include <map>
-#include <string>
-#include <utility>
-#include <vector>
+#ifdef USE_BLE_CLIENT
+#include "esphome/components/ble_client/ble_client.h"
+#endif
+
+#include "coordinator.h"
 
 namespace esphome {
 namespace philips_shaver {
 
-static const char *const PHILIPS_SHAVER_VERSION = "1.7.0";
-
-class PhilipsShaver : public ble_client::BLEClientNode,
-                      public Component,
-                      public api::CustomAPIDevice {
+#ifdef USE_BLE_CLIENT
+// Mode A worker: thin BLEClientNode adapter that forwards GATT/GAP events
+// to the ShaverCoordinator. Used when an external `ble_client:` block is
+// referenced via `ble_client_id`. All GATT logic lives in the Coordinator.
+// Compiled only when the user includes `ble_client:` in their YAML.
+class PhilipsShaver : public ble_client::BLEClientNode, public Component {
  public:
   void setup() override;
   void loop() override;
@@ -27,102 +28,72 @@ class PhilipsShaver : public ble_client::BLEClientNode,
     return setup_priority::AFTER_BLUETOOTH;
   }
 
-  void gattc_event_handler(esp_gattc_cb_event_t event,
-                            esp_gatt_if_t gattc_if,
-                            esp_ble_gattc_cb_param_t *param) override;
+  void gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
+                            esp_ble_gattc_cb_param_t *param) override {
+    if (this->coord_ != nullptr)
+      this->coord_->on_gattc_event(event, gattc_if, param);
+  }
+  void gap_event_handler(esp_gap_ble_cb_event_t event,
+                          esp_ble_gap_cb_param_t *param) override {
+    if (this->coord_ != nullptr)
+      this->coord_->on_gap_event(event, param);
+  }
 
+  void set_coordinator(ShaverCoordinator *coord) { this->coord_ = coord; }
+  void set_log_tag(const std::string &tag) { this->log_tag_ = tag; }
+
+ protected:
+  ShaverCoordinator *coord_{nullptr};
+  std::string log_tag_;
+};
+#endif  // USE_BLE_CLIENT
+
+// Mode B standalone client: extends BLEClientBase directly so we don't
+// depend on the `ble_client` component (no dummy `ble_client:` YAML block
+// needed). Combines BLE infrastructure + UUID-scan + NVS-persisted
+// identity into one class. The Coordinator (mode-agnostic) handles GATT
+// state and event emission.
+class PhilipsShaverStandalone : public esp32_ble_client::BLEClientBase {
+ public:
+  void setup() override;
+  void loop() override;
+  bool parse_device(const esp32_ble_tracker::ESPBTDevice &device) override;
+  bool gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if,
+                            esp_ble_gattc_cb_param_t *param) override;
   void gap_event_handler(esp_gap_ble_cb_event_t event,
                           esp_ble_gap_cb_param_t *param) override;
 
-  void on_read_characteristic(std::string service_uuid,
-                               std::string characteristic_uuid);
-  void on_subscribe(std::string service_uuid,
-                     std::string characteristic_uuid);
-  void on_unsubscribe(std::string service_uuid,
-                       std::string characteristic_uuid);
-  void on_write_characteristic(std::string service_uuid,
-                                std::string characteristic_uuid,
-                                std::string hex_data);
+  // Wired by to_code(): coordinator pointer, NVS pref namespace (CRC32 of
+  // the YAML id so each instance gets its own slot), and per-instance
+  // log tag.
+  void set_coordinator(ShaverCoordinator *coord) { this->coord_ = coord; }
+  void set_pref_namespace(uint32_t ns) { this->pref_ns_ = ns; }
+  void set_log_tag(const std::string &tag) { this->log_tag_ = tag; }
 
-  void on_set_throttle(std::string throttle_ms);
-  void on_get_info();
-
-  void set_connected_sensor(binary_sensor::BinarySensor *sensor) {
-    this->connected_sensor_ = sensor;
-  }
-  void set_notify_throttle(uint32_t ms) { this->notify_throttle_ms_ = ms; }
-  void set_bridge_id(const std::string &id) { this->bridge_id_ = id; }
+  // Mode B set_enabled — closes any in-flight GATT connection if disabling.
+  // BLEClientBase's enabled_ field controls whether parse_device() will
+  // accept adverts; we override to also tear down a live connection on
+  // disable so auth-backoff actually disconnects.
+  void set_enabled(bool enabled);
 
  protected:
-  std::string get_shaver_mac_();
-  std::string svc_name_(const std::string &action);
-
-  std::string bridge_id_;
-  // Per-instance log tag: "philips_shaver" (single-bridge) or
-  // "philips_shaver.<bridge_id>" (multi-bridge). Set in setup() and used
-  // by all ESP_LOG calls so each bridge's lines are distinguishable in
-  // the log stream and the logger: filter can target a single bridge.
+  ShaverCoordinator *coord_{nullptr};
   std::string log_tag_;
-
-  binary_sensor::BinarySensor *connected_sensor_{nullptr};
-  bool connected_{false};
-  bool services_discovered_{false};
-  uint16_t pending_handle_{0};
-  std::string pending_char_uuid_;
-  // Cached BLE device name (read from GAP 0x2A00 after service discovery)
-  uint16_t name_handle_{0};
-  std::string remote_name_;
-  // handle → char_uuid for active notification subscriptions
-  std::map<uint16_t, std::string> notify_map_;
-  // char_handle → cccd_handle for writing notification enable
-  std::map<uint16_t, uint16_t> cccd_map_;
-  // char_handle → properties (for notify-vs-indicate CCCD value selection)
-  std::map<uint16_t, uint8_t> char_props_map_;
-  // Subscriptions that should be restored after reconnect (service_uuid, char_uuid)
-  std::vector<std::pair<std::string, std::string>> desired_subscriptions_;
-
-  void apply_smp_params_();
-  void resubscribe_all_();
-  uint16_t find_cccd_handle_(uint16_t char_handle);
-  void fire_ready_event_();
-  bool is_already_bonded_();
-  void start_post_auth_setup_();
-
-  // Lazy encryption: don't proactively call set_encryption() on bonded
-  // reconnect. SEARCH_CMPL issues a probe read; if it returns
-  // INSUF_AUTH/INSUF_ENCR, set_encryption() is triggered then. This
-  // avoids racing BTM-rehydrate on cache-hit reconnects (Issue #6).
-  bool encryption_requested_{false};
-  bool retry_read_after_auth_{false};
-  uint16_t probe_handle_{0};
-  // Idempotent ready-event fire: ensures start_post_auth_setup_() runs
-  // exactly once per connection regardless of how many code paths reach it.
-  bool ready_fired_{false};
-
-  // Auth tracking for stale bond detection
-  bool auth_completed_{false};
-  uint32_t connect_time_ms_{0};
-  uint8_t rapid_disconnect_count_{0};
-  static const uint8_t MAX_RAPID_DISCONNECTS = 3;
-  // Service discovery on XP9201 takes ~5.5s; 10s covers it with a small
-  // margin so a disconnect right after re-encrypt is still counted as
-  // rapid (the 5s previous threshold was too tight).
-  static const uint32_t RAPID_DISCONNECT_THRESHOLD_MS = 10000;
-
-  // Auth failure backoff: disable reconnection after repeated failures
-  uint8_t auth_fail_count_{0};
-  uint32_t backoff_until_ms_{0};
-  static const uint8_t MAX_AUTH_FAILURES = 3;
-  static const uint32_t AUTH_BACKOFF_MS = 60000;  // 60 seconds
-
-  // Notification throttle: min interval between events per characteristic
-  uint32_t notify_throttle_ms_{500};
-  std::map<uint16_t, uint32_t> last_notify_ms_;
-
-  // Heartbeat: periodic status event to HA
-  static const uint32_t HEARTBEAT_INTERVAL_MS = 15000;
-  uint32_t last_heartbeat_ms_{0};
-
+  // True on first scan when no YAML mac and no NVS identity. parse_device()
+  // does the UUID-match in this mode; once an identity is bound (from
+  // pair-mode or NVS load) we flip it off and let BLEClientBase's
+  // address-match logic take over.
+  bool uuid_scan_mode_{true};
+  // BLEClientBase has no `enabled_` — it lives on `BLEClient` (the Mode A
+  // wrapper). We declare our own here for the Coordinator's set_enabled
+  // callback to toggle. parse_device() and loop() gate on it.
+  bool enabled_{true};
+  // Captured at setup() — pin set to true if YAML had `mac_address:`.
+  // Governs unpair-callback behavior: Fixed-MAC keeps the YAML target,
+  // Auto-Discovery clears address_ and flips uuid_scan_mode_ back on.
+  bool has_yaml_mac_{false};
+  uint32_t pref_ns_{0};
+  ESPPreferenceObject pref_;
 };
 
 }  // namespace philips_shaver

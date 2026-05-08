@@ -1067,7 +1067,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         # Build a dynamic legend showing only states present in the list.
         legend_entries: list[str] = []
         if "available" in states_present:
-            legend_entries.append("🟢 available")
+            legend_entries.append("🟢 available for bonding")
         if "configured" in states_present:
             legend_entries.append("✅ already configured")
         if "offline" in states_present:
@@ -1130,6 +1130,20 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             esp_device_name = self.fetched_esp_device_name
+
+            # Mode B detection — bridge supports ble_pair_mode and the user
+            # hasn't paired a shaver to it yet. Route to the pair-mode flow
+            # instead of attempting a capability fetch (which would fail —
+            # there's nothing bonded to read from). YAML-pinned identities
+            # (Mode A or Mode B with explicit mac_address:) skip this branch
+            # because identity_source == "yaml" guarantees a live target.
+            info = self.fetched_bridge_info or {}
+            pair_capable = info.get("pair_capable") == "true"
+            identity_source = info.get("identity_source", "")
+            already_paired = info.get("paired") == "true"
+            if pair_capable and identity_source == "none" and not already_paired:
+                return await self.async_step_request_pair()
+
             try:
                 capabilities = await self._async_fetch_capabilities_esp(
                     esp_device_name, esp_device_name,
@@ -1185,8 +1199,19 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         finally:
             await transport.disconnect()
 
-        # Format bridge status display
+        # Mode B unpaired: skip the bridge-status form entirely and route
+        # straight to request_pair. The status-form's "BLE Disconnected /
+        # Paired No" rows look like an error to the user, when actually
+        # the bridge is just waiting for ble_pair_mode.
         info = self.fetched_bridge_info or {}
+        if (
+            info.get("pair_capable") == "true"
+            and info.get("identity_source", "") == "none"
+            and info.get("paired") != "true"
+        ):
+            return await self.async_step_request_pair()
+
+        # Format bridge status display
         if info:
             version = info.get("version", "?")
             ble_connected = info.get("ble_connected", "false") == "true"
@@ -1247,6 +1272,171 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             },
             errors=errors,
         )
+
+    async def async_step_request_pair(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Mode B: confirm before arming ble_pair_mode on the bridge."""
+        if user_input is not None:
+            return await self.async_step_wait_pair()
+
+        bridge_id = self.fetched_esp_bridge_id or ""
+        target = (
+            f"{self.fetched_esp_device_name} / {bridge_id}"
+            if bridge_id
+            else self.fetched_esp_device_name
+        )
+        return self.async_show_form(
+            step_id="request_pair",
+            data_schema=vol.Schema({}),
+            description_placeholders={"target": target},
+        )
+
+    async def async_step_wait_pair(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Mode B: arm ble_pair_mode and wait for pair_complete or pair_timeout."""
+        esp_device_name = self.fetched_esp_device_name
+        bridge_id = self.fetched_esp_bridge_id or ""
+
+        # Service name with bridge_id suffix (matches ShaverBridge::svc_name_)
+        svc = f"{esp_device_name}_ble_pair_mode"
+        if bridge_id:
+            svc = f"{svc}_{bridge_id}"
+
+        # Filter events by bridge_id so multi-bridge ESPs don't cross-talk.
+        # ShaverBridge::fire_event auto-injects bridge_id, so the field is
+        # always present (empty string for single-bridge YAMLs).
+        pair_future: asyncio.Future = self.hass.loop.create_future()
+
+        @callback
+        def _on_status(event: Event) -> None:
+            if event.data.get("bridge_id", "") != bridge_id:
+                return
+            status = event.data.get("status")
+            if status not in ("pair_complete", "pair_timeout", "pair_failed"):
+                return
+            if not pair_future.done():
+                pair_future.set_result(dict(event.data))
+
+        unsub = self.hass.bus.async_listen(
+            "esphome.philips_shaver_ble_status", _on_status
+        )
+
+        try:
+            await self.hass.services.async_call(
+                "esphome",
+                svc,
+                {"enabled": True, "timeout_s": "60"},
+                blocking=True,
+            )
+        except Exception as err:  # pylint: disable=broad-except
+            unsub()
+            _LOGGER.error("ble_pair_mode service call failed: %s", err)
+            return self.async_show_form(
+                step_id="request_pair",
+                data_schema=vol.Schema({}),
+                errors={"base": "service_call_failed"},
+                description_placeholders={
+                    "target": (
+                        f"{esp_device_name} / {bridge_id}"
+                        if bridge_id else esp_device_name
+                    ),
+                },
+            )
+
+        # 65 s margin = 60 s pair window + 5 s grace for the pair_timeout
+        # event to land. The bridge fires pair_timeout/pair_complete itself
+        # so the wait_for is just a safety net for missed events.
+        try:
+            result = await asyncio.wait_for(pair_future, timeout=65)
+        except asyncio.TimeoutError:
+            _LOGGER.warning(
+                "Pair-mode wait elapsed without pair_complete/pair_timeout "
+                "event from bridge"
+            )
+            result = {"status": "pair_timeout"}
+        finally:
+            unsub()
+
+        result_status = result.get("status")
+        if result_status in ("pair_timeout", "pair_failed"):
+            # Map the bridge's status to a translation key. pair_failed with
+            # reason=auth_max_failures means the shaver retained its half
+            # of the bond — user has to clear BT on the shaver before
+            # retrying. Generic pair_timeout just means no shaver showed
+            # up (or showed up too late).
+            if (
+                result_status == "pair_failed"
+                and result.get("reason") == "auth_max_failures"
+            ):
+                error_key = "pair_failed_stale_bond"
+            else:
+                error_key = "pair_timeout"
+            return self.async_show_form(
+                step_id="request_pair",
+                data_schema=vol.Schema({}),
+                errors={"base": error_key},
+                description_placeholders={
+                    "target": (
+                        f"{esp_device_name} / {bridge_id}"
+                        if bridge_id else esp_device_name
+                    ),
+                },
+            )
+
+        # pair_complete — bond established. identity_address comes from
+        # the bridge's pair_complete event payload (Coord fills it from
+        # parent_->get_remote_bda after AUTH_CMPL.success).
+        identity_address = (
+            result.get("identity_address") or result.get("mac") or ""
+        )
+        if identity_address:
+            self.fetched_address = identity_address
+
+        # Continue with capabilities probe on the now-bonded shaver.
+        try:
+            capabilities = await self._async_fetch_capabilities_esp(
+                esp_device_name, esp_device_name, bridge_id,
+            )
+        except Exception:  # pylint: disable=broad-except
+            _LOGGER.exception(
+                "Capability fetch failed after pair_complete (%s) — bond "
+                "exists but the shaver may have disconnected before probe",
+                identity_address,
+            )
+            return self.async_show_form(
+                step_id="request_pair",
+                data_schema=vol.Schema({}),
+                errors={"base": "cannot_connect"},
+                description_placeholders={
+                    "target": (
+                        f"{esp_device_name} / {bridge_id}"
+                        if bridge_id else esp_device_name
+                    ),
+                },
+            )
+
+        shaver_mac = capabilities.get("shaver_mac") or identity_address
+        if shaver_mac:
+            await self.async_set_unique_id(
+                shaver_mac.upper(), raise_on_progress=False
+            )
+        else:
+            await self.async_set_unique_id(f"esp_{esp_device_name}")
+        self._abort_if_unique_id_configured()
+
+        self.fetched_data = capabilities
+        if self.fetched_bridge_info:
+            self.fetched_data["bridge_version"] = self.fetched_bridge_info.get(
+                "version"
+            )
+        self.fetched_address = shaver_mac
+        model = capabilities.get("model_number")
+        self.fetched_name = model if model else esp_device_name
+        self.fetched_transport_type = TRANSPORT_ESP_BRIDGE
+
+        return await self.async_step_show_capabilities()
 
     async def _route_to_pairing(self) -> ConfigFlowResult:
         """Route to D-Bus pairing if available, otherwise show script instructions."""

@@ -52,16 +52,21 @@
         "submit": "Read capabilities"
       },
       "esp_select_device": {
-        "title": "Select BLE Device",
-        "description": "This ESP bridge has multiple Philips devices connected. Select the one you want to add to Home Assistant.\n\n{legend}",
+        "title": "Select bridge slot",
+        "description": "This ESP bridge has multiple slots. Select an available slot to bond a shaver to.\n\n{legend}",
         "data": {
-          "esp_bridge_id": "BLE Device"
+          "esp_bridge_id": "Slot"
         }
       },
       "esp_bridge_status": {
         "title": "Connection via ESP32 Bridge",
         "description": "Setting up **{shaver_name}** via **ESP32 Bridge**.\n\n✅ Bridge **{target}** is reachable.\n\n{status}",
         "submit": "Read capabilities"
+      },
+      "request_pair": {
+        "title": "Pair shaver to ESP bridge",
+        "description": "Bridge **{target}** has no shaver bonded yet.\n\n1. Make sure the shaver is **turned on** and **not connected to your phone** (remove it from Bluetooth settings and the GroomTribe / OneBlade app).\n2. Place the shaver close to the bridge.\n3. Click **Start pairing** below — the bridge will scan for **60 seconds**. Trigger the shaver's BLE-advertise mode (model-specific: hold the power button or place it on the charging stand).\n\nOnce the bond is established, capabilities will be probed automatically.",
+        "submit": "Start pairing"
       },
       "pair": {
         "title": "Pair Device",
@@ -88,6 +93,9 @@
       "out_of_slots": "No Bluetooth adapter could reach the device. Either all connection slots are in use, or the device is out of range. Ensure the shaver is powered on and close to the Bluetooth adapter, and try removing unused Bluetooth devices if needed.",
       "connection_aborted": "Connection was aborted. The device may be out of range or connected through an unsupported Bluetooth proxy. This integration requires direct Bluetooth or the dedicated ESP32 BLE bridge — standard ESPHome Bluetooth Proxies are not supported.",
       "pairing_failed": "Bluetooth pairing failed. Ensure the shaver is powered on and not connected to another device. If the problem persists, try turning the shaver off and back on, or pair manually via terminal.",
+      "service_call_failed": "Could not arm pair-mode on the ESP bridge. The bridge may be offline or a too-old firmware version. Update the bridge to v1.8.0 or newer and retry.",
+      "pair_timeout": "No shaver appeared during the 60-second pair-mode window. Make sure the shaver is on and advertising, and try again.",
+      "pair_failed_stale_bond": "Pairing failed with repeated auth errors. The shaver still holds the previous bond on its side and is rejecting fresh pairing. Clear Bluetooth on the shaver (model-specific: long-press the power button until the BT LED clears, or unpair via the GroomTribe / OneBlade app), then retry.",
       "unknown": "Unexpected error. Please check the logs."
     },
     "abort": {
@@ -191,6 +199,15 @@
       },
       "rssi": {
         "name": "Signal Strength"
+      },
+      "adapter_type": {
+        "name": "Adapter Type",
+        "state": {
+          "direct_ble": "Direct Bluetooth",
+          "esp_bridge": "ESP Bridge",
+          "stock_proxy": "Bluetooth Proxy",
+          "unknown": "Unknown"
+        }
       },
       "cleaning_progress": {
         "name": "Cleaning Progress"
