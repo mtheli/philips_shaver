@@ -849,13 +849,14 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             else:
                 # Probe failed for every bridge_id — ESP is offline (or
                 # services are stale leftovers from a previous firmware).
-                # Show but mark clearly so the user can see *why* their
-                # ESP is in the list but unselectable.
+                # Show but mark with the ⚪ prefix; the description's
+                # legend explains the marker. (Sonicare's config flow
+                # filters offline ESPs entirely; we deliberately keep them
+                # visible so the user can see *why* their ESP is in the
+                # list but unselectable.)
                 is_offline = True
                 if len(bridge_ids) > 1:
-                    slot_info = f"{len(bridge_ids)} bridges, offline"
-                else:
-                    slot_info = "offline"
+                    slot_info = f"{len(bridge_ids)} bridges"
             label = f"{entry.title} ({device_name})"
             if slot_info:
                 label = f"{label}, {slot_info}"

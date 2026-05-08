@@ -38,7 +38,7 @@
       },
       "esp_bridge": {
         "title": "ESP32 Bridge (ESPHome)",
-        "description": "Select the ESPHome device that acts as the BLE bridge for your shaver.",
+        "description": "Select the ESPHome device that acts as the BLE bridge for your shaver.\n\nLegend: ⚪ ESP unreachable  •  \"paired\" = slot bonded to a shaver  •  \"free\" = slot ready for a new pairing",
         "data": {
           "esp_device_name": "ESPHome Bridge Device"
         },

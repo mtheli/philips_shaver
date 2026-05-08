@@ -38,7 +38,7 @@
       },
       "esp_bridge": {
         "title": "ESP32 Bridge (ESPHome)",
-        "description": "Wählen Sie das ESPHome-Gerät, das als BLE-Bridge für Ihren Rasierer dient.",
+        "description": "Wählen Sie das ESPHome-Gerät, das als BLE-Bridge für Ihren Rasierer dient.\n\nLegende: ⚪ ESP nicht erreichbar  •  \"paired\" = Slot mit gekoppeltem Shaver  •  \"free\" = Slot bereit für neues Pairing",
         "data": {
           "esp_device_name": "ESPHome Bridge-Gerät"
         },
