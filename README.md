@@ -2,6 +2,7 @@
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub Release](https://img.shields.io/github/v/release/mtheli/philips_shaver)](https://github.com/mtheli/philips_shaver/releases)
+[![Downloads](https://img.shields.io/github/downloads/mtheli/philips_shaver/total.svg)](https://github.com/mtheli/philips_shaver/releases)
 [![License: MIT](https://img.shields.io/github/license/mtheli/philips_shaver)](LICENSE)
 
 This is a custom component for Home Assistant to integrate **Philips Bluetooth-enabled shavers**.
@@ -14,6 +15,9 @@ Two connection methods are supported:
 
 1.  **Direct Bluetooth** — connects from the HA host's Bluetooth adapter. Event-driven: detects when the shaver wakes up via BLE advertisements, then establishes a persistent live connection.
 2.  **ESP32 BLE Bridge** — an ESP32 running ESPHome acts as a wireless BLE relay. Ideal when the shaver is out of Bluetooth range of the HA host.
+
+> [!NOTE]
+> The standard ESPHome `bluetooth_proxy` is **not currently supported** — it does not handle the shaver's LE Secure Connections pairing. Use the dedicated ESP32 BLE Bridge component (Option B) instead, which can run a `bluetooth_proxy` for *other* BLE devices alongside it.
 
 See [Configuration](#configuration) for setup instructions.
 
@@ -125,10 +129,13 @@ This integration creates a new device for your shaver and provides the following
 | Entity | Type | Description |
 | :--- | :--- | :--- |
 | **Last Seen** | Sensor | Time in minutes since the device was last reachable. |
-| **RSSI** | Sensor | Bluetooth signal strength (`dBm`, direct BLE only). |
+| **Signal Strength** | Sensor | Bluetooth signal strength (`dBm`, direct BLE only). |
+| **Adapter** | Sensor | Bluetooth adapter currently carrying the connection (e.g. `hci0`, `<esp_name>`). |
+| **Adapter Type** | Sensor | Classification of the active transport: `direct_ble` / `esp_bridge` / `stock_proxy` / `unknown`. |
 | **Shaver BLE** | Binary Sensor | BLE connection status to the shaver. |
 | **ESP Bridge** | Binary Sensor | ESP32 bridge online status (ESP bridge only). |
 | **Bridge Version** | Sensor | ESP bridge firmware version (ESP bridge only). |
+| **Bridge Last Boot** | Sensor | Timestamp of the ESP bridge's last boot — useful to detect ESP reboots (ESP bridge only). |
 | **Firmware** | Sensor | Installed firmware version (disabled by default). |
 | **Model Number** | Sensor | Device model number (disabled by default). |
 
@@ -169,6 +176,7 @@ The integration supports two connection methods:
 | :--- | :--- | :--- |
 | **[Option A](#option-a-direct-bluetooth-pairing)** | **Direct Bluetooth** | HA host is within Bluetooth range of the shaver (typically 5–10 m / 15–30 ft, less through walls) |
 | **[Option B](#option-b-esp32-ble-bridge)** | **ESP32 BLE Bridge** | Shaver is out of range — a small ESP32 device placed near the shaver relays data over WiFi |
+| ❌ | ~~Stock ESPHome `bluetooth_proxy`~~ | **Not currently supported** — the standard ESPHome Bluetooth Proxy does not handle the shaver's LE Secure Connections pairing. Use Option B (the dedicated bridge component) instead, which can run a `bluetooth_proxy` for *other* BLE devices alongside it. |
 
 > [!IMPORTANT]
 > The shaver must be **fully unpaired** (from your phone **and** the device itself) before connecting to Home Assistant.
@@ -279,15 +287,15 @@ The integration communicates directly via BLE — no cloud, no app required. All
 
 The shaver exposes multiple GATT services with individual characteristics for each data point (battery, motor, pressure, light ring, etc.). Data is read directly from these characteristics and live updates are received via GATT notifications.
 
-For a detailed technical description of the BLE protocol including service UUIDs, characteristic reference, data formats, and capability flags, see [PROTOCOL.md](docs/PROTOCOL.md).
+For a detailed technical description of the BLE protocol including service UUIDs, characteristic reference, data formats, and capability flags, see [BLE_PROTOCOL.md](docs/BLE_PROTOCOL.md).
 
 For debug service actions (reading arbitrary BLE characteristics via Developer Tools), see [ADVANCED.md](docs/ADVANCED.md).
 
 ## Screenshots
 
-| Discovery | Capabilities | Device | Diagnostics |
-| :---: | :---: | :---: | :---: |
-| ![Discovery](./images/discovery.png) | ![Capabilities](./images/capabilities.png) | ![Device](./images/device.png) | ![Diagnostics](./images/diagnostic.png) |
+| Discovery | Capabilities | Device | Diagnostics | Connection |
+| :---: | :---: | :---: | :---: | :---: |
+| ![Discovery](./images/discovery.png) | ![Capabilities](./images/setup_capabilities.png) | ![Device](./images/device.png) | ![Diagnostics](./images/diagnostic.png) | ![Connection](./images/device_connection.png) |
 
 ## Disclaimer
 
