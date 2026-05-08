@@ -1067,7 +1067,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         # Build a dynamic legend showing only states present in the list.
         legend_entries: list[str] = []
         if "available" in states_present:
-            legend_entries.append("🟢 available")
+            legend_entries.append("🟢 available for bonding")
         if "configured" in states_present:
             legend_entries.append("✅ already configured")
         if "offline" in states_present:

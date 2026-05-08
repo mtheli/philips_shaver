@@ -52,10 +52,10 @@
         "submit": "Fähigkeiten auslesen"
       },
       "esp_select_device": {
-        "title": "BLE-Gerät auswählen",
-        "description": "Diese ESP-Bridge hat mehrere Philips-Geräte verbunden. Wählen Sie das Gerät aus, das Sie zu Home Assistant hinzufügen möchten.\n\n{legend}",
+        "title": "Bridge-Slot auswählen",
+        "description": "Diese ESP-Bridge hat mehrere Slots. Wählen Sie einen verfügbaren Slot aus, an den Sie einen Shaver binden möchten.\n\n{legend}",
         "data": {
-          "esp_bridge_id": "BLE-Gerät"
+          "esp_bridge_id": "Slot"
         }
       },
       "esp_bridge_status": {
