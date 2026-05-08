@@ -132,8 +132,8 @@ This integration creates a new device for your shaver and provides the following
 | **Signal Strength** | Sensor | Bluetooth signal strength (`dBm`, direct BLE only). |
 | **Adapter** | Sensor | Bluetooth adapter currently carrying the connection (e.g. `hci0`, `<esp_name>`). |
 | **Adapter Type** | Sensor | Classification of the active transport: `direct_ble` / `esp_bridge` / `stock_proxy` / `unknown`. |
-| **Shaver BLE** | Binary Sensor | BLE connection status to the shaver. |
-| **ESP Bridge** | Binary Sensor | ESP32 bridge online status (ESP bridge only). |
+| **BLE Status** | Binary Sensor | BLE connection status to the shaver. |
+| **Bridge Status** | Binary Sensor | ESP32 bridge online status (ESP bridge only). |
 | **Bridge Version** | Sensor | ESP bridge firmware version (ESP bridge only). |
 | **Bridge Last Boot** | Sensor | Timestamp of the ESP bridge's last boot — useful to detect ESP reboots (ESP bridge only). |
 | **Firmware** | Sensor | Installed firmware version (disabled by default). |

@@ -316,14 +316,14 @@
         }
       },
       "shaver_ble_connected": {
-        "name": "Shaver BLE",
+        "name": "BLE Status",
         "state": {
           "on": "Connected",
           "off": "Disconnected"
         }
       },
       "esp_bridge_alive": {
-        "name": "ESP Bridge",
+        "name": "Bridge Status",
         "state": {
           "on": "Online",
           "off": "Offline"
