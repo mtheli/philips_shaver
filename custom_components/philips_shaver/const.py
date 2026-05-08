@@ -522,7 +522,7 @@ CONF_ESP_DEVICE_ID_LEGACY = "esp_device_id"
 # Bumped to 1.8.0-rc.1 with v0.14.0-beta.1: Mode B auto-discovery flow
 # requires the new ble_pair_mode/ble_unpair/ble_scan/ble_pair_mac services
 # and the pair_capable / identity_source fields in the heartbeat payload.
-MIN_BRIDGE_VERSION = "1.8.0-rc.1"
+MIN_BRIDGE_VERSION = "1.8.0-rc.2"
 
 CONF_NOTIFY_THROTTLE = "notify_throttle_ms"
 DEFAULT_NOTIFY_THROTTLE = 500

@@ -177,7 +177,10 @@ std::map<std::string, std::string> ShaverCoordinator::collect_info_data() {
       {"mode", this->mode_},
       {"identity_source", this->identity_source_},
       {"pair_capable",
-       this->mode_ == MODE_STANDALONE ? "true" : "false"},
+       (this->mode_ == MODE_STANDALONE
+        && this->identity_source_ == IDENTITY_SOURCE_NONE)
+           ? "true"
+           : "false"},
   };
   if (!this->identity_address_.empty()) {
     data["identity_address"] = this->identity_address_;

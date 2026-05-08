@@ -19,7 +19,7 @@ namespace philips_shaver {
 
 class ShaverBridge;  // forward — defined in bridge.h
 
-static const char *const PHILIPS_SHAVER_VERSION = "1.8.0-rc.1";
+static const char *const PHILIPS_SHAVER_VERSION = "1.8.0-rc.2";
 static const char *const EVENT_STATUS = "esphome.philips_shaver_ble_status";
 static const char *const EVENT_DATA = "esphome.philips_shaver_ble_data";
 static const char *const EVENT_SERVICES = "esphome.philips_shaver_ble_services";
