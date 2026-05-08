@@ -43,7 +43,7 @@
           "esp_device_name": "ESPHome Bridge-Gerät"
         },
         "data_description": {
-          "esp_device_name": "Das ESPHome-Gerät, auf dem die Philips Shaver BLE-Bridge-Komponente läuft.\n\nLegende: ⚪ ESP nicht erreichbar  •  🔗 gekoppelter Slot  •  🟢 leerer Slot"
+          "esp_device_name": "Legende: ⚪ ESP nicht erreichbar  •  🔗 gekoppelter Slot  •  🟢 leerer Slot"
         }
       },
       "bluetooth_confirm": {
