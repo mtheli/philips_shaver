@@ -38,12 +38,12 @@
       },
       "esp_bridge": {
         "title": "ESP32 Bridge (ESPHome)",
-        "description": "Wählen Sie das ESPHome-Gerät, das als BLE-Bridge für Ihren Rasierer dient.\n\nLegende: ⚪ ESP nicht erreichbar  •  \"paired\" = Slot mit gekoppeltem Shaver  •  \"free\" = Slot bereit für neues Pairing",
+        "description": "Wählen Sie das ESPHome-Gerät, das als BLE-Bridge für Ihren Rasierer dient.",
         "data": {
           "esp_device_name": "ESPHome Bridge-Gerät"
         },
         "data_description": {
-          "esp_device_name": "Das ESPHome-Gerät, auf dem die Philips Shaver BLE-Bridge-Komponente läuft."
+          "esp_device_name": "Das ESPHome-Gerät, auf dem die Philips Shaver BLE-Bridge-Komponente läuft.\n\nLegende: ⚪ ESP nicht erreichbar  •  \"paired\" = Slot mit gekoppeltem Shaver  •  \"free\" = Slot bereit für neues Pairing"
         }
       },
       "bluetooth_confirm": {
@@ -53,9 +53,12 @@
       },
       "esp_select_device": {
         "title": "Bridge-Slot auswählen",
-        "description": "Diese ESP-Bridge hat mehrere Slots. Wählen Sie einen verfügbaren Slot aus, an den Sie einen Shaver binden möchten.\n\nLegende: 🟢 verfügbar zum Koppeln  •  🔵 gebondet, kann übernommen werden  •  ✅ bereits konfiguriert  •  ⚪ offline",
+        "description": "Diese ESP-Bridge hat mehrere Slots. Wählen Sie einen verfügbaren Slot aus, an den Sie einen Shaver binden möchten.",
         "data": {
           "esp_bridge_id": "Slot"
+        },
+        "data_description": {
+          "esp_bridge_id": "Legende: 🟢 verfügbar zum Koppeln  •  🔵 gebondet, kann übernommen werden  •  ✅ bereits konfiguriert  •  ⚪ offline"
         }
       },
       "esp_bridge_status": {
