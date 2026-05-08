@@ -817,7 +817,10 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         translations = await async_get_translations(
             self.hass, self.hass.config.language, "config", {DOMAIN}
         )
-        prefix = f"component.{DOMAIN}.config.step.esp_bridge."
+        prefix = (
+            f"component.{DOMAIN}.config.step.esp_bridge."
+            "description_placeholders."
+        )
         for entry in esphome_entries:
             device_name = entry.data.get("device_name")
             if not device_name:

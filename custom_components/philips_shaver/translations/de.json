@@ -45,12 +45,14 @@
         "data_description": {
           "esp_device_name": "Das ESPHome-Gerät, auf dem die Philips Shaver BLE-Bridge-Komponente läuft."
         },
-        "slot_info_paired_and_free": "{paired} gekoppelt / {free} frei (Slots)",
-        "slot_info_free_only": "{free} freie Slots",
-        "slot_info_paired_only": "{paired} gekoppelte Slots",
-        "slot_info_bridges": "{count} Bridges",
-        "slot_info_offline": "offline",
-        "slot_info_bridges_offline": "{count} Bridges, offline"
+        "description_placeholders": {
+          "slot_info_paired_and_free": "{paired} gekoppelt / {free} frei (Slots)",
+          "slot_info_free_only": "{free} freie Slots",
+          "slot_info_paired_only": "{paired} gekoppelte Slots",
+          "slot_info_bridges": "{count} Bridges",
+          "slot_info_offline": "offline",
+          "slot_info_bridges_offline": "{count} Bridges, offline"
+        }
       },
       "bluetooth_confirm": {
         "title": "Erkanntes Gerät bestätigen",
