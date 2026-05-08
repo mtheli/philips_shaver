@@ -36,7 +36,6 @@ from homeassistant.helpers.selector import (
     SelectSelectorConfig,
     SelectOptionDict,
 )
-from homeassistant.helpers.translation import async_get_translations
 from .const import (
     DOMAIN,
     PHILIPS_SERVICE_UUIDS,
@@ -812,15 +811,14 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         free bridge slots; falls back to a plain bridge count if the
         probe times out or the ESP is offline.
         """
+        # Note on i18n: the slot-info suffix below is hardcoded English
+        # because HA's strings.json schema doesn't allow custom keys at the
+        # step level (no place for free-form Python-side label translations).
+        # See https://github.com/mtheli/philips_shaver — hassfest run from
+        # 2026-05-08 rejected the slot_info_* keys whichever way we nested
+        # them. Live with the EN suffix on a DE UI.
         esphome_entries = self.hass.config_entries.async_entries("esphome")
         options: list[SelectOptionDict] = []
-        translations = await async_get_translations(
-            self.hass, self.hass.config.language, "config", {DOMAIN}
-        )
-        prefix = (
-            f"component.{DOMAIN}.config.step.esp_bridge."
-            "description_placeholders."
-        )
         for entry in esphome_entries:
             device_name = entry.data.get("device_name")
             if not device_name:
@@ -843,20 +841,11 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
                 free = len(probe_results) - paired
                 if paired and free:
-                    slot_info = translations.get(
-                        prefix + "slot_info_paired_and_free",
-                        "{paired} paired / {free} free slots",
-                    ).format(paired=paired, free=free)
+                    slot_info = f"{paired} paired / {free} free slots"
                 elif free:
-                    slot_info = translations.get(
-                        prefix + "slot_info_free_only",
-                        "{free} free slots",
-                    ).format(free=free)
+                    slot_info = f"{free} free slots"
                 elif paired:
-                    slot_info = translations.get(
-                        prefix + "slot_info_paired_only",
-                        "{paired} paired slots",
-                    ).format(paired=paired)
+                    slot_info = f"{paired} paired slots"
             else:
                 # Probe failed for every bridge_id — ESP is offline (or
                 # services are stale leftovers from a previous firmware).
@@ -864,14 +853,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 # ESP is in the list but unselectable.
                 is_offline = True
                 if len(bridge_ids) > 1:
-                    slot_info = translations.get(
-                        prefix + "slot_info_bridges_offline",
-                        "{count} bridges, offline",
-                    ).format(count=len(bridge_ids))
+                    slot_info = f"{len(bridge_ids)} bridges, offline"
                 else:
-                    slot_info = translations.get(
-                        prefix + "slot_info_offline", "offline"
-                    )
+                    slot_info = "offline"
             label = f"{entry.title} ({device_name})"
             if slot_info:
                 label = f"{label}, {slot_info}"
