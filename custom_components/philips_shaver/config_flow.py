@@ -36,6 +36,7 @@ from homeassistant.helpers.selector import (
     SelectSelectorConfig,
     SelectOptionDict,
 )
+from homeassistant.helpers.translation import async_get_translations
 from .const import (
     DOMAIN,
     PHILIPS_SERVICE_UUIDS,
@@ -813,6 +814,10 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         """
         esphome_entries = self.hass.config_entries.async_entries("esphome")
         options: list[SelectOptionDict] = []
+        translations = await async_get_translations(
+            self.hass, self.hass.config.language, "config", {DOMAIN}
+        )
+        prefix = f"component.{DOMAIN}.config.step.esp_bridge."
         for entry in esphome_entries:
             device_name = entry.data.get("device_name")
             if not device_name:
@@ -825,6 +830,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 esp_service_id, bridge_ids
             )
             slot_info = ""
+            is_offline = False
             if probe_results:
                 paired = sum(
                     1
@@ -833,18 +839,41 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                     and info["mac"] != "00:00:00:00:00:00"
                 )
                 free = len(probe_results) - paired
-                parts = []
-                if paired:
-                    parts.append(f"{paired} paired")
-                if free:
-                    parts.append(f"{free} free")
-                if parts:
-                    slot_info = f"{' / '.join(parts)} slots"
-            elif len(bridge_ids) > 1:
-                slot_info = f"{len(bridge_ids)} bridges"
+                if paired and free:
+                    slot_info = translations.get(
+                        prefix + "slot_info_paired_and_free",
+                        "{paired} paired / {free} free slots",
+                    ).format(paired=paired, free=free)
+                elif free:
+                    slot_info = translations.get(
+                        prefix + "slot_info_free_only",
+                        "{free} free slots",
+                    ).format(free=free)
+                elif paired:
+                    slot_info = translations.get(
+                        prefix + "slot_info_paired_only",
+                        "{paired} paired slots",
+                    ).format(paired=paired)
+            else:
+                # Probe failed for every bridge_id — ESP is offline (or
+                # services are stale leftovers from a previous firmware).
+                # Show but mark clearly so the user can see *why* their
+                # ESP is in the list but unselectable.
+                is_offline = True
+                if len(bridge_ids) > 1:
+                    slot_info = translations.get(
+                        prefix + "slot_info_bridges_offline",
+                        "{count} bridges, offline",
+                    ).format(count=len(bridge_ids))
+                else:
+                    slot_info = translations.get(
+                        prefix + "slot_info_offline", "offline"
+                    )
             label = f"{entry.title} ({device_name})"
             if slot_info:
                 label = f"{label}, {slot_info}"
+            if is_offline:
+                label = f"⚪ {label}"
             options.append(SelectOptionDict(value=device_name, label=label))
         return options
 
@@ -1015,7 +1044,6 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
         self._esp_device_info = {}
         options: list[SelectOptionDict] = []
-        states_present: set[str] = set()
         unconfigured_dids: list[str] = []
         for did, info in results:
             label_did = did or "default"
@@ -1025,7 +1053,6 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 # bridge sharing service names but firing a different
                 # event). Show but don't allow selecting; the user can
                 # see which slot needs attention.
-                states_present.add("offline")
                 options.append(SelectOptionDict(
                     value=did,
                     label=f"⚪ {label_did}",
@@ -1038,13 +1065,11 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             mac_suffix = f" — {mac}" if has_mac else ""
 
             if has_mac and mac in configured_macs:
-                states_present.add("configured")
                 options.append(SelectOptionDict(
                     value=did,
                     label=f"✅ {label_did}{mac_suffix}",
                 ))
             else:
-                states_present.add("available")
                 unconfigured_dids.append(did)
                 options.append(SelectOptionDict(
                     value=did,
@@ -1054,6 +1079,13 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         if not options:
             return self.async_abort(reason="no_devices_found")
         if not unconfigured_dids:
+            # Distinguish "all already configured" from "all offline" — both
+            # leave unconfigured_dids empty but the user-facing reason is
+            # very different. If no slot answered the probe at all, the ESP
+            # is unreachable; otherwise the slots are genuinely all bonded.
+            any_responding = any(info is not None for _, info in results)
+            if not any_responding:
+                return self.async_abort(reason="esp_not_reachable")
             return self.async_abort(reason="already_configured")
 
         # Auto-select if exactly one unconfigured slot is available
@@ -1064,16 +1096,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             self.fetched_bridge_info = self._esp_device_info.get(sole)
             return await self._esp_bridge_health_check()
 
-        # Build a dynamic legend showing only states present in the list.
-        legend_entries: list[str] = []
-        if "available" in states_present:
-            legend_entries.append("🟢 available for bonding")
-        if "configured" in states_present:
-            legend_entries.append("✅ already configured")
-        if "offline" in states_present:
-            legend_entries.append("⚪ offline")
-        legend = "  •  ".join(legend_entries) if legend_entries else ""
-
+        # Legend is embedded statically in the description (translated as
+        # part of the description string itself) — avoids the system-vs-
+        # user-language mismatch that hits dynamically-built placeholders.
         return self.async_show_form(
             step_id="esp_select_device",
             data_schema=vol.Schema(
@@ -1083,7 +1108,6 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                     ),
                 }
             ),
-            description_placeholders={"legend": legend},
         )
 
     async def _esp_bridge_health_check(self) -> ConfigFlowResult:

@@ -44,7 +44,13 @@
         },
         "data_description": {
           "esp_device_name": "Das ESPHome-Gerät, auf dem die Philips Shaver BLE-Bridge-Komponente läuft."
-        }
+        },
+        "slot_info_paired_and_free": "{paired} gekoppelt / {free} frei (Slots)",
+        "slot_info_free_only": "{free} freie Slots",
+        "slot_info_paired_only": "{paired} gekoppelte Slots",
+        "slot_info_bridges": "{count} Bridges",
+        "slot_info_offline": "offline",
+        "slot_info_bridges_offline": "{count} Bridges, offline"
       },
       "bluetooth_confirm": {
         "title": "Erkanntes Gerät bestätigen",
@@ -53,7 +59,7 @@
       },
       "esp_select_device": {
         "title": "Bridge-Slot auswählen",
-        "description": "Diese ESP-Bridge hat mehrere Slots. Wählen Sie einen verfügbaren Slot aus, an den Sie einen Shaver binden möchten.\n\n{legend}",
+        "description": "Diese ESP-Bridge hat mehrere Slots. Wählen Sie einen verfügbaren Slot aus, an den Sie einen Shaver binden möchten.\n\nLegende: 🟢 verfügbar zum Koppeln  •  ✅ bereits konfiguriert  •  ⚪ offline",
         "data": {
           "esp_bridge_id": "Slot"
         }
@@ -101,7 +107,8 @@
     "abort": {
       "already_configured": "Das Gerät ist bereits konfiguriert.",
       "already_in_progress": "Konfigurations-Ablauf bereits im Gange.",
-      "no_devices_found": "Es wurden keine unterstützten Philips Shaver Geräte in Reichweite gefunden."
+      "no_devices_found": "Es wurden keine unterstützten Philips Shaver Geräte in Reichweite gefunden.",
+      "esp_not_reachable": "Die ESP-Bridge ist nicht erreichbar. Stelle sicher, dass der ESP eingeschaltet und mit dem Netzwerk verbunden ist, und versuche es erneut."
     }
   },
   "entity": {
