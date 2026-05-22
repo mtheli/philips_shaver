@@ -1,6 +1,6 @@
 # Philips Shaver Integration for Home Assistant
 
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/default)
 [![GitHub Release](https://img.shields.io/github/v/release/mtheli/philips_shaver)](https://github.com/mtheli/philips_shaver/releases)
 [![License: MIT](https://img.shields.io/github/license/mtheli/philips_shaver)](LICENSE)
 
@@ -153,18 +153,21 @@ This integration creates a new device for your shaver and provides the following
 
 ### HACS (Recommended)
 
+This integration is available in the **default HACS store** — just click the button below, or search HACS for "Philips Shaver".
+
+[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=mtheli&repository=philips_shaver&category=integration)
+
+Then restart Home Assistant.
+
 > Don't have HACS yet? Follow the [HACS installation guide](https://hacs.xyz/docs/use/) first.
 
-1.  Go to **HACS** > **Integrations** in your Home Assistant UI.
-2.  Click the three-dot menu in the top right and select **Custom repositories**.
-3.  Add the URL to this repository and select the category **Integration**.
-4.  Find the "Philips Shaver" integration and click **Install**.
-5.  Restart Home Assistant.
-
-### Manual Installation
+<details>
+<summary>Manual installation</summary>
 
 1.  Copy the `custom_components/philips_shaver` directory from this repository into your Home Assistant `config/custom_components/` folder.
 2.  Restart Home Assistant.
+
+</details>
 
 ---
 
