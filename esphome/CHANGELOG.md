@@ -1,5 +1,19 @@
 # ESP Bridge Changelog
 
+## v1.8.1 — 2026-05-22
+
+- **Fix Mode B YAML validation error (Issue #10).** Configurations that
+  followed the documented Fixed-MAC example (`mac_address:` without
+  `ble_client_id:`) failed with the misleading `"'ble_client_id' is a
+  required option for [philips_shaver]"` error. Root cause: `cv.Any`'s
+  backtracking could not fall back cleanly from Mode A to Mode B when the
+  nested `connected:` binary_sensor schema fired its deferred `declare_id`
+  during the first attempt. Replaced `cv.Any` with explicit key-based
+  routing — presence of `ble_client_id` selects Mode A, absence selects
+  Mode B. Each schema now runs exactly once against a fresh config dict.
+  No YAML changes needed; existing Mode A and Mode B configs continue to
+  validate.
+
 ## v1.8.0 — 2026-05-08
 
 - **Mode B auto-discovery pair flow.** YAML configs without
