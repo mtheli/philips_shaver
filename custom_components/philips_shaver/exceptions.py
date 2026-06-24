@@ -17,5 +17,9 @@ class NotPairedException(PhilipsShaverException):
     """Device is not paired at OS level."""
 
 
+class DeviceAsleepException(PhilipsShaverException):
+    """No recent connectable advertisement — the shaver is asleep/unreachable."""
+
+
 class TransportError(PhilipsShaverException):
     """Transport-level communication error."""

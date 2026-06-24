@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import asyncio
+import time
 import voluptuous as vol
 import logging
 
@@ -17,6 +18,7 @@ from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 from homeassistant.components.bluetooth import (
     BluetoothServiceInfoBleak,
     async_ble_device_from_address,
+    async_last_service_info,
 )
 from bleak import BleakClient
 from bleak.exc import BleakError
@@ -72,6 +74,7 @@ from .const import (
 )
 from .transport import EspBridgeTransport, describe_connection_path
 from .exceptions import (
+    DeviceAsleepException,
     DeviceNotFoundException,
     CannotConnectException,
     NotPairedException,
@@ -83,6 +86,13 @@ def _is_hassio(hass) -> bool:
     return "hassio" in hass.config.components
 
 _LOGGER = logging.getLogger(__name__)
+
+# Max age of the last *connectable* advertisement before we treat the shaver as
+# asleep. habluetooth keeps returning a connectable BLEDevice for up to ~195 s
+# after the last advertisement, so a fresh BLEDevice reference alone does not
+# prove the device is reachable; the device advertises every ~1-2 s while awake,
+# so a stricter window cleanly separates "awake now" from "asleep".
+_STALE_ADV_MAX_SECONDS = 15.0
 
 
 class PhilipsShaverOptionsFlow(OptionsFlowWithReload):
@@ -207,6 +217,22 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> dict[str, Any]:
         """Connect to the BLE device and read its capabilities."""
         capabilities: dict[str, Any] = {}
+
+        # Gate on the age of the last *connectable* advertisement. Within the
+        # ~195 s habluetooth fallback window async_ble_device_from_address still
+        # hands back a stale BLEDevice whose connect just drops mid-handshake.
+        # The history timestamp is updated on every received advertisement
+        # (including deduplicated identical ones — dedup only suppresses callback
+        # dispatch, not the history write), so an awake shaver is never misread.
+        last = async_last_service_info(self.hass, address, connectable=True)
+        age = None if last is None else (time.monotonic() - last.time)
+        if last is None or age > _STALE_ADV_MAX_SECONDS:
+            _LOGGER.info(
+                "%s: no recent connectable advertisement (%s) — device asleep",
+                address,
+                "never seen" if last is None else f"{age:.0f}s ago",
+            )
+            raise DeviceAsleepException
 
         device = async_ble_device_from_address(self.hass, address)
         if not device:
@@ -550,6 +576,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         """Shared handler for bluetooth confirmation steps."""
         assert self.discovery_info is not None
         errors: dict[str, str] = {}
+        status = ""
 
         if user_input is not None:
             # Quick D-Bus pre-check: if the device is known to BlueZ but
@@ -626,6 +653,18 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                     self.discovery_info.address,
                 )
                 errors["base"] = "device_not_found"
+            except DeviceAsleepException:
+                # Keep the discovery flow alive — an abort would dismiss the
+                # discovery card, and ADV deduplication stops HA from
+                # re-creating it when the shaver wakes. errors["base"] does not
+                # render on this schema-less confirmation step, so inject an
+                # <ha-alert> into the description; ha-markdown renders it as a
+                # real coloured alert box.
+                status = (
+                    '<ha-alert alert-type="error">The shaver is asleep — wake '
+                    "it (press the power button or place it on its charging "
+                    "stand), then click Read capabilities again.</ha-alert>\n\n"
+                )
             except Exception:
                 _LOGGER.exception("Unexpected error during setup")
                 errors["base"] = "unknown"
@@ -638,6 +677,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id=step_id,
             description_placeholders={
                 "name": self.discovery_info.name or self.discovery_info.address,
+                "status": status,
             },
             errors=errors,
         )
@@ -689,6 +729,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.error("Device %s is not paired", address)
                 self._pair_address = address
                 return await self._route_to_pairing()
+            except DeviceAsleepException:
+                errors["base"] = "device_asleep"
             except Exception:
                 _LOGGER.exception(
                     "Setup failed: Unable to connect to the device or fetch capabilities"
@@ -1512,6 +1554,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                     address,
                 )
                 return await self.async_step_not_paired()
+            except DeviceAsleepException:
+                errors["base"] = "device_asleep"
             except (
                 DeviceNotFoundException,
                 CannotConnectException,

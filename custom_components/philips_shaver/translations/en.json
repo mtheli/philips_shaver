@@ -48,7 +48,7 @@
       },
       "bluetooth_confirm": {
         "title": "Confirm detected device",
-        "description": "Do you want to add the detected Philips Shaver **{name}** to Home Assistant?\n\nℹ️ **Before continuing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **unpaired** from your phone\n   — Remove from Bluetooth settings **and** GroomTribe / OneBlade app\n\nPairing will be handled automatically during setup. The integration will then connect to the device to read hardware capabilities. This may take a few seconds.",
+        "description": "{status}Do you want to add the detected Philips Shaver **{name}** to Home Assistant?\n\nℹ️ **Before continuing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **unpaired** from your phone\n   — Remove from Bluetooth settings **and** GroomTribe / OneBlade app\n\nPairing will be handled automatically during setup. The integration will then connect to the device to read hardware capabilities. This may take a few seconds.",
         "submit": "Read capabilities"
       },
       "esp_select_device": {
@@ -90,6 +90,7 @@
     "error": {
       "abort_if_unique_id_configured": "This device is already configured.",
       "no_esphome_devices": "No ESPHome devices found. Please set up an ESPHome device with the BLE bridge component first. See the ESP Bridge Setup Guide in the integration documentation for instructions.",
+      "device_asleep": "The shaver is asleep. Wake it (press the power button or place it on its charging stand), then try again.",
       "cannot_connect": "Failed to connect to the shaver. Please ensure it is powered on, in range, and not connected to another device (e.g. your phone).",
       "device_not_found": "Device not found. Please ensure it is powered on and in range.",
       "not_paired": "The shaver is not paired with this system.",
