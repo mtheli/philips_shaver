@@ -11,6 +11,7 @@ from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.config_entries import ConfigEntry
 
+from homeassistant.components import bluetooth as ha_bluetooth
 from homeassistant.components.bluetooth import (
     BluetoothCallbackMatcher,
     BluetoothScanningMode,
@@ -172,6 +173,11 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._live_setup_done = False
         self._full_read_done = False
         self._dbus_bus: MessageBus | None = None
+        # HA >= 2026.5 exposes async_clear_advertisement_history — preferred over
+        # the BlueZ D-Bus RSSI listener for waking on static-ADV devices.
+        self._use_adv_clear = hasattr(
+            ha_bluetooth, "async_clear_advertisement_history"
+        )
         self._wake_event = asyncio.Event()
         self._unsub_advertisement = None
 
@@ -235,7 +241,9 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Start live monitoring. Call after setup is complete."""
         if not self._is_esp_bridge:
             self._start_advertisement_callback()
-            await self._start_dbus_rssi_listener()
+            if not self._use_adv_clear:
+                # Fallback for HA < 2026.5 without async_clear_advertisement_history.
+                await self._start_dbus_rssi_listener()
             # If device is already advertising (e.g., on charger during HA restart),
             # trigger wake immediately — the ADV callback may have fired with stale
             # cached RSSI (-127) which we filter, and habluetooth deduplicates
@@ -254,6 +262,22 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.data["_connecting"] = True
             self.async_set_updated_data(self.data)
         self._wake_event.set()
+
+    @callback
+    def _clear_adv_history(self) -> None:
+        """Re-arm advertisement-based wake detection for static-ADV devices.
+
+        habluetooth deduplicates identical advertisements (core#141662), so the
+        registered advertisement callback stops firing after the first packet.
+        Clearing the dedup history makes the next (identical) ADV reach the
+        callback again. Called right before each ADV wait so every reconnect
+        cycle re-opens the guard; no periodic timer needed.
+
+        Replaces the BlueZ D-Bus RSSI listener on HA >= 2026.5. No-op on older
+        HA, which uses _start_dbus_rssi_listener instead.
+        """
+        if self._use_adv_clear:
+            ha_bluetooth.async_clear_advertisement_history(self.hass, self.address)
 
     def _start_advertisement_callback(self) -> None:
         """Register HA bluetooth callback for advertisement detection.
@@ -574,6 +598,9 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self._wake_event.clear()
                     _LOGGER.info("Advertisement already pending — connecting to %s", self.address)
                 else:
+                    # Re-open the dedup guard so the next ADV wakes us even
+                    # though the payload is identical to the last one seen.
+                    self._clear_adv_history()
                     _LOGGER.debug("Waiting for advertisement from %s...", self.address)
                     await self._wake_event.wait()
                     self._wake_event.clear()
