@@ -48,7 +48,7 @@
       },
       "bluetooth_confirm": {
         "title": "Erkanntes Gerät bestätigen",
-        "description": "Möchten Sie den erkannten Philips Shaver **{name}** zu Home Assistant hinzufügen?\n\nℹ️ **Bitte vor dem Fortfahren prüfen:**\n1. ⬜ Rasierer ist **eingeschaltet** oder auf der **Ladestation**\n2. ⬜ Rasierer ist **entkoppelt** vom Handy\n   — Aus Bluetooth-Einstellungen **und** GroomTribe / OneBlade App entfernen\n\nDas Pairing wird automatisch während der Einrichtung durchgeführt. Anschließend verbindet sich die Integration mit dem Gerät, um die Hardware-Fähigkeiten zu lesen. Dies kann einige Sekunden dauern.",
+        "description": "{status}Möchten Sie den erkannten Philips Shaver **{name}** zu Home Assistant hinzufügen?\n\nℹ️ **Bitte vor dem Fortfahren prüfen:**\n1. ⬜ Rasierer ist **eingeschaltet** oder auf der **Ladestation**\n2. ⬜ Rasierer ist **entkoppelt** vom Handy\n   — Aus Bluetooth-Einstellungen **und** GroomTribe / OneBlade App entfernen\n\nDas Pairing wird automatisch während der Einrichtung durchgeführt. Anschließend verbindet sich die Integration mit dem Gerät, um die Hardware-Fähigkeiten zu lesen. Dies kann einige Sekunden dauern.",
         "submit": "Fähigkeiten auslesen"
       },
       "esp_select_device": {
@@ -90,6 +90,7 @@
     "error": {
       "abort_if_unique_id_configured": "Das Gerät ist bereits konfiguriert.",
       "no_esphome_devices": "Keine ESPHome-Geräte gefunden. Bitte richten Sie zuerst ein ESPHome-Gerät mit der BLE-Bridge-Komponente ein. Siehe die ESP Bridge Setup-Anleitung in der Integrations-Dokumentation.",
+      "device_asleep": "Der Rasierer ist im Ruhezustand. Wecke ihn (Einschaltknopf drücken oder auf die Ladestation stellen) und versuche es erneut.",
       "cannot_connect": "Verbindung zum Rasierer fehlgeschlagen. Bitte stelle sicher, dass er eingeschaltet, in Reichweite und nicht mit einem anderen Gerät (z.B. deinem Smartphone) verbunden ist.",
       "device_not_found": "Das Gerät wurde nicht gefunden. Bitte stelle sicher, dass es eingeschaltet und in Reichweite ist.",
       "not_paired": "Der Rasierer ist nicht mit diesem System gepairt.",
