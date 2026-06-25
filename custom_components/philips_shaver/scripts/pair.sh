@@ -58,8 +58,9 @@ scan_for_devices() {
     echo "" >&2
 
     # Scan — all output to stderr (display only)
+    # No --line-buffered: BusyBox grep (HA Terminal add-on) doesn't support it
     bluetoothctl --timeout "$SCAN_SECONDS" scan on 2>/dev/null | \
-        grep --line-buffered -i "philips\|shaver" | \
+        grep -i "philips\|shaver" | \
         sed 's/^/    /' >&2 &
     local scan_pid=$!
     wait "$scan_pid" 2>/dev/null || true
@@ -132,7 +133,9 @@ pair_device() {
         ok "Pairing successful!"
     else
         local fail_reason
-        fail_reason=$(echo "$pair_output" | grep -oP "Failed to pair: \K.*" || echo "unknown")
+        # Portable extraction: BusyBox grep (HA Terminal add-on) lacks -P/\K
+        fail_reason=$(echo "$pair_output" | sed -n 's/.*Failed to pair: //p' | head -n1)
+        [ -z "$fail_reason" ] && fail_reason="unknown"
         err "Pairing failed: $fail_reason"
         echo "" >&2
         if echo "$fail_reason" | grep -qi "AuthenticationFailed"; then
