@@ -579,6 +579,10 @@ class EspBridgeTransport(ShaverTransport):
             # Store bridge component version if present
             version = event.data.get("version")
             if version:
+                # Defensive: normalise stray surrounding quotes/whitespace so a
+                # firmware that reports e.g. '"1.8.2"' still parses as 1.8.2.
+                if isinstance(version, str):
+                    version = version.strip().strip("\"'").strip()
                 self._bridge_version = version
 
             # Every status event (including heartbeat) proves ESP is alive

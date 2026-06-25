@@ -19,7 +19,13 @@ namespace philips_shaver {
 
 class ShaverBridge;  // forward — defined in bridge.h
 
-static const char *const PHILIPS_SHAVER_VERSION = "1.8.1";
+// Bridge firmware version — injected at build time from the component's VERSION
+// file (see __init__.py). The fallback only applies if the define is missing
+// (e.g. the header is compiled outside the ESPHome codegen path).
+#ifndef PHILIPS_SHAVER_BRIDGE_VERSION
+#define PHILIPS_SHAVER_BRIDGE_VERSION "dev"
+#endif
+static const char *const PHILIPS_SHAVER_VERSION = PHILIPS_SHAVER_BRIDGE_VERSION;
 static const char *const EVENT_STATUS = "esphome.philips_shaver_ble_status";
 static const char *const EVENT_DATA = "esphome.philips_shaver_ble_data";
 static const char *const EVENT_SERVICES = "esphome.philips_shaver_ble_services";

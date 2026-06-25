@@ -524,6 +524,19 @@ CONF_ESP_DEVICE_ID_LEGACY = "esp_device_id"
 # and the pair_capable / identity_source fields in the heartbeat payload.
 MIN_BRIDGE_VERSION = "1.8.0"
 
+# ── ESP bridge firmware update entity ────────────────────────────────────────
+# The latest available bridge firmware version is read straight from the repo
+# (same VERSION file the firmware bakes in at build time) so users are notified
+# of new bridge firmware without us shipping an integration release. The update
+# entity is passive (no install) — flashing happens via ESPHome. Release notes
+# are pulled lazily from CHANGELOG.md when the user opens the dialog.
+_GH_RAW = "https://raw.githubusercontent.com/mtheli/philips_shaver/main"
+BRIDGE_VERSION_URL = f"{_GH_RAW}/esphome/components/philips_shaver/VERSION"
+BRIDGE_CHANGELOG_URL = f"{_GH_RAW}/esphome/CHANGELOG.md"
+BRIDGE_RELEASE_URL = (
+    "https://github.com/mtheli/philips_shaver/blob/main/esphome/CHANGELOG.md"
+)
+
 CONF_NOTIFY_THROTTLE = "notify_throttle_ms"
 DEFAULT_NOTIFY_THROTTLE = 500
 MIN_NOTIFY_THROTTLE = 100

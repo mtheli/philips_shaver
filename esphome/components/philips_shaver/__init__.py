@@ -1,4 +1,5 @@
 import zlib
+from pathlib import Path
 
 import esphome.codegen as cg
 import esphome.config_validation as cv
@@ -136,6 +137,14 @@ FINAL_VALIDATE_SCHEMA = _final_validate
 
 
 async def to_code(config):
+    # Single source of truth for the bridge firmware version: the VERSION file
+    # next to this component, baked into the binary as a compile define so the
+    # ESP reports it at runtime and the HA integration's update entity can read
+    # the same file from GitHub. Bare string — add_define quotes it itself via
+    # safe_exp()/StringLiteral; adding our own quotes would double-quote it.
+    version = (Path(__file__).parent / "VERSION").read_text(encoding="utf-8").strip()
+    cg.add_define("PHILIPS_SHAVER_BRIDGE_VERSION", version)
+
     # Accept both bridge_id (new) and device_id (deprecated)
     bridge_id = config.get(CONF_BRIDGE_ID) or config.get(CONF_DEVICE_ID_LEGACY, "")
 

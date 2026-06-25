@@ -364,6 +364,11 @@
       "lightring_enabled": {
         "name": "Lichtring"
       }
+    },
+    "update": {
+      "bridge_firmware": {
+        "name": "Bridge-Firmware"
+      }
     }
   }
 }

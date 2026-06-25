@@ -1,5 +1,21 @@
 # ESP Bridge Changelog
 
+## v1.8.2 — 2026-06-26
+
+- **Firmware version is now a single source of truth.** The bridge version
+  lives in `esphome/components/philips_shaver/VERSION` and is baked into the
+  firmware at build time (injected as a compile define by `__init__.py`, read
+  via the `PHILIPS_SHAVER_BRIDGE_VERSION` macro in `coordinator.h`) instead of
+  a hard-coded constant. The Home Assistant integration reads the same file
+  from GitHub to power a passive firmware-update notification, so new bridge
+  firmware is surfaced without shipping an integration release. No behavioural
+  change to the bridge itself — the bump from v1.8.1 only reflects the new
+  version plumbing.
+
+  > The firmware-update notification in Home Assistant is supported from
+  > **integration version 0.16.0** onwards. Older integration versions ignore
+  > this and keep working unchanged.
+
 ## v1.8.1 — 2026-05-22
 
 - **Fix Mode B YAML validation error (Issue #10).** Configurations that

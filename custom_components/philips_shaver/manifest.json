@@ -16,6 +16,6 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/mtheli/philips_shaver/issues",
   "requirements": [],
-  "version": "0.15.0",
+  "version": "0.16.0",
   "zeroconf": [{"type": "_esphomelib._tcp.local."}]
 }
