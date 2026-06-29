@@ -52,13 +52,13 @@
         "submit": "Read capabilities"
       },
       "esp_select_device": {
-        "title": "Select bridge slot",
-        "description": "This ESP bridge has multiple slots. Select an available slot to bond a shaver to.",
+        "title": "Select BLE Device",
+        "description": "This ESP bridge has multiple Philips devices connected. Select the device you want to add.\n\n✅ already configured · 🔒 bonded · 🔓 unpaired · 🟢 online · ⚪ offline",
         "data": {
-          "esp_bridge_id": "Slot"
+          "esp_bridge_id": "BLE Device"
         },
         "data_description": {
-          "esp_bridge_id": "Legend: 🟢 available for bonding  •  🔵 bonded, ready to import  •  ✅ already configured  •  ⚪ offline"
+          "esp_bridge_id": "Entries without status icons are empty bridges in pair-mode. Switch on the shaver you want to bond before submitting."
         }
       },
       "esp_bridge_status": {
@@ -82,8 +82,8 @@
         "submit": "Retry"
       },
       "show_capabilities": {
-        "title": "Hardware Capabilities detected",
-        "description": "Successfully connected to **{name}** {bridge_info}.\n\n**Hardware Capabilities:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legend:**\n✅ Service found & supported\n❌ Expected service missing\n❔ Unknown service from device",
+        "title": "Philips Shaver — {name}",
+        "description": "{connection_status}\n\n**Device Information**\n\n{device_info}\n\n<br/>\n\n{caps_services}",
         "submit": "Set up"
       }
     },

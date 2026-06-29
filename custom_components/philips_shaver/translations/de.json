@@ -52,13 +52,13 @@
         "submit": "Fähigkeiten auslesen"
       },
       "esp_select_device": {
-        "title": "Bridge-Slot auswählen",
-        "description": "Diese ESP-Bridge hat mehrere Slots. Wählen Sie einen verfügbaren Slot aus, an den Sie einen Shaver binden möchten.",
+        "title": "BLE-Gerät auswählen",
+        "description": "Diese ESP-Bridge hat mehrere Philips-Geräte verbunden. Wähle das Gerät, das du hinzufügen möchtest.\n\n✅ bereits konfiguriert · 🔒 gebondet · 🔓 ungekoppelt · 🟢 online · ⚪ offline",
         "data": {
-          "esp_bridge_id": "Slot"
+          "esp_bridge_id": "BLE-Gerät"
         },
         "data_description": {
-          "esp_bridge_id": "Legende: 🟢 verfügbar zum Koppeln  •  🔵 gebondet, kann übernommen werden  •  ✅ bereits konfiguriert  •  ⚪ offline"
+          "esp_bridge_id": "Einträge ohne Status-Icons sind leere Bridges im Pair-Modus. Schalte den Rasierer ein, den du koppeln möchtest, bevor du bestätigst."
         }
       },
       "esp_bridge_status": {
@@ -82,8 +82,8 @@
         "submit": "Erneut versuchen"
       },
       "show_capabilities": {
-        "title": "Hardware-Fähigkeiten erkannt",
-        "description": "Erfolgreich mit **{name}** {bridge_info} verbunden.\n\n**Hardware-Fähigkeiten:**\n{capabilities}\n\n**GATT Service Status:**\n{services}\n\n**Legende:**\n✅ Service gefunden & unterstützt\n❌ Erwarteter Service fehlt\n❔ Unbekannter Service vom Gerät",
+        "title": "Philips Shaver — {name}",
+        "description": "{connection_status}\n\n**Geräteinformationen**\n\n{device_info}\n\n<br/>\n\n{caps_services}",
         "submit": "Einrichten"
       }
     },
