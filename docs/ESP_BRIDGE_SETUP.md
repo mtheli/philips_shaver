@@ -151,9 +151,18 @@ identity is persisted to NVS:
 ```yaml
 philips_shaver:
   - bridge_id: "shaver"
+    friendly_name: "Bathroom Shaver"   # optional — pre-fills the HA device name
+    area: "Bathroom"                    # optional — auto-assigns the HA area
     connected:
       name: "Shaver Connected"
 ```
+
+> [!TIP]
+> `friendly_name:` and `area:` are optional (firmware ≥ v1.9.0, integration
+> ≥ 0.17.0). When set, the HA setup dialog pre-fills the device name with
+> `friendly_name`, labels the BLE-device picker by it, and assigns the device
+> to `area` on first setup (it never overwrites an area you set manually).
+> Handy for multi-bridge boards where each slot drives a different device.
 
 #### Fixed MAC
 
