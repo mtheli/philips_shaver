@@ -1866,7 +1866,11 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             )
         if not rows:
             return ""
-        return f"<table><tbody>{''.join(rows)}</tbody></table>"
+        # Trailing <br/> separates this table from the capabilities table that
+        # follows. It lives in this runtime-generated value rather than the
+        # translation string because hassfest rejects HTML tags in static
+        # translation values (it does not inspect placeholder content).
+        return f"<table><tbody>{''.join(rows)}</tbody></table><br/>"
 
     @staticmethod
     def _capability_items(cap_val: int, groomer_cap: int | None = None) -> list[str]:

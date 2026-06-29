@@ -88,7 +88,7 @@
       },
       "show_capabilities": {
         "title": "Philips Shaver — {name}",
-        "description": "{connection_status}\n\n**Device Information**\n\n{device_info}\n\n<br/>\n\n{caps_services}",
+        "description": "{connection_status}\n\n**Device Information**\n\n{device_info}\n\n{caps_services}",
         "data": {
           "device_name": "Name"
         },
