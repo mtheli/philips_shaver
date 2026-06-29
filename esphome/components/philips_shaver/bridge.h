@@ -27,6 +27,8 @@ class ShaverBridge : public Component, public api::CustomAPIDevice {
 
   void set_coordinator(ShaverCoordinator *coord) { this->coord_ = coord; }
   void set_bridge_id(const std::string &id) { this->bridge_id_ = id; }
+  void set_friendly_name(const std::string &v) { this->friendly_name_ = v; }
+  void set_area(const std::string &v) { this->area_ = v; }
   // Per-instance log tag, set in to_code(): "philips_shaver" (single-bridge)
   // or "philips_shaver.<bridge_id>" (multi-bridge). Used by all ESP_LOG calls
   // in this class so each bridge's lines are distinguishable in the log
@@ -62,6 +64,8 @@ class ShaverBridge : public Component, public api::CustomAPIDevice {
 
   ShaverCoordinator *coord_{nullptr};
   std::string bridge_id_;
+  std::string friendly_name_;
+  std::string area_;
   std::string log_tag_;
   binary_sensor::BinarySensor *connected_sensor_{nullptr};
   uint32_t last_heartbeat_ms_{0};

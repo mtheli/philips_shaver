@@ -19,7 +19,7 @@
     }
   },
   "config": {
-    "flow_title": "Philips Shaver ({name})",
+    "flow_title": "{name}",
     "step": {
       "user": {
         "title": "Philips Shaver hinzufügen",
@@ -63,7 +63,12 @@
       },
       "esp_bridge_status": {
         "title": "Verbindung über ESP32 Bridge",
-        "description": "Einrichtung von **{shaver_name}** über **ESP32 Bridge**.\n\n✅ Bridge **{target}** ist erreichbar.\n\n{status}",
+        "description": "Einrichtung von **{shaver_name}** über **ESP32 Bridge**.\n\n✅ Bridge **{target}** ist erreichbar.\n\n{status}\n\nStelle sicher, dass der Rasierer **eingeschaltet** ist (Power-Knopf drücken oder auf die Ladestation stellen) und **angeschaltet bleibt**, dann klicke **Fähigkeiten auslesen**.",
+        "submit": "Fähigkeiten auslesen"
+      },
+      "esp_bridge_status_connected": {
+        "title": "Verbindung über ESP32 Bridge",
+        "description": "Einrichtung von **{shaver_name}** über **ESP32 Bridge**.\n\n✅ Bridge **{target}** ist erreichbar.\n\n{status}\n\nDie Bridge ist bereits mit deinem Rasierer verbunden. **Lass ihn eingeschaltet** — klicke **Fähigkeiten auslesen**, um die Einrichtung abzuschließen.",
         "submit": "Fähigkeiten auslesen"
       },
       "request_pair": {
@@ -84,6 +89,12 @@
       "show_capabilities": {
         "title": "Philips Shaver — {name}",
         "description": "{connection_status}\n\n**Geräteinformationen**\n\n{device_info}\n\n<br/>\n\n{caps_services}",
+        "data": {
+          "device_name": "Name"
+        },
+        "data_description": {
+          "device_name": "Wie dieser Rasierer in Home Assistant erscheint. Wähle etwas, das ihn von anderen Rasierern unterscheidet (z.B. \"Bad\", \"Johns\")."
+        },
         "submit": "Einrichten"
       }
     },

@@ -113,6 +113,11 @@ void ShaverBridge::dump_config() {
   if (!this->bridge_id_.empty())
     ESP_LOGCONFIG(this->log_tag_.c_str(), "  Bridge ID: %s",
                   this->bridge_id_.c_str());
+  if (!this->friendly_name_.empty())
+    ESP_LOGCONFIG(this->log_tag_.c_str(), "  Friendly Name: %s",
+                  this->friendly_name_.c_str());
+  if (!this->area_.empty())
+    ESP_LOGCONFIG(this->log_tag_.c_str(), "  Area: %s", this->area_.c_str());
 }
 
 void ShaverBridge::fire_event(const std::string &event_type,
@@ -204,6 +209,8 @@ void ShaverBridge::on_get_info() {
   auto info = this->coord_->collect_info_data();
   info["status"] = "info";
   info["bridge_id"] = this->bridge_id_;
+  info["friendly_name"] = this->friendly_name_;
+  info["area"] = this->area_;
   info["uptime_s"] = std::string(uptime_str);
   info["free_heap"] = std::string(heap_str);
 

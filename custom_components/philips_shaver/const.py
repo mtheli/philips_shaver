@@ -515,6 +515,12 @@ TRANSPORT_ESP_BRIDGE = "esp_bridge"
 
 CONF_ESP_DEVICE_NAME = "esp_device_name"
 CONF_ESP_BRIDGE_ID = "esp_bridge_id"
+# User-chosen device name set during setup (distinguishes multi-device
+# households). Falls back to a model + bridge_id/MAC default when unset.
+CONF_DEVICE_NAME = "device_name"
+# Optional area name pushed from the ESP bridge YAML (per-slot `area:`),
+# applied to the device's area_id at setup when unset.
+CONF_AREA = "area"
 # Legacy key — used for migration from v1.2 → v1.3
 CONF_ESP_DEVICE_ID_LEGACY = "esp_device_id"
 

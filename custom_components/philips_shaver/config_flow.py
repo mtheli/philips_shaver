@@ -62,6 +62,8 @@ from .const import (
     CONF_CAPABILITIES,
     CONF_SERVICES,
     CONF_DEVICE_TYPE,
+    CONF_DEVICE_NAME,
+    CONF_AREA,
     CONF_TRANSPORT_TYPE,
     TRANSPORT_BLEAK,
     TRANSPORT_ESP_BRIDGE,
@@ -501,7 +503,11 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="already_configured")
 
         _LOGGER.info("Zeroconf: found Shaver bridge on ESP device '%s'", device_name)
-        self.context["title_placeholders"] = {"name": device_name.replace("_", "-")}
+        # Tag the discovery card with the transport class so users can tell an
+        # ESP-bridge discovery apart from a direct-Bluetooth one at a glance.
+        self.context["title_placeholders"] = {
+            "name": f"ESP32 Bridge ({device_name.replace('_', '-')})"
+        }
 
         if len(bridge_ids) > 1:
             return await self.async_step_esp_select_device()
@@ -538,6 +544,12 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 self.fetched_esp_device_name = esp["device_name"]
                 self.fetched_esp_bridge_id = esp.get("bridge_id", "")
                 self.fetched_bridge_info = esp["info"]
+                # Tag the discovery card so flow_title ("{name}") renders the
+                # transport class here too — this redirect bypasses the normal
+                # bluetooth_confirm path that would otherwise set it.
+                self.context["title_placeholders"] = {
+                    "name": f"ESP32 Bridge ({esp['device_name'].replace('_', '-')})"
+                }
                 return await self.async_step_esp_bridge_status()
 
         return await self._async_bluetooth_confirm(user_input, "bluetooth_confirm")
@@ -670,7 +682,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
 
         self.context["title_placeholders"] = {
-            "name": self.discovery_info.name or self.discovery_info.address
+            "name": f"Bluetooth ({self.discovery_info.address})"
         }
 
         return self.async_show_form(
@@ -1159,8 +1171,12 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         shows a pairing-lock + connection-dot. The caller prepends ✅ when
         the device is already configured in HA.
         """
+        # Prefer the user's YAML friendly_name (always present, even before the
+        # bridge connects), then the device's advertised ble_name, then the
+        # bridge_id slot label.
+        friendly = (info.get("friendly_name") or "").strip()
         ble_name = (info.get("ble_name") or "").strip()
-        name = ble_name or bridge_id or "default"
+        name = friendly or ble_name or bridge_id or "default"
         if info.get("pair_capable") == "true":
             return name  # empty pair-mode slot — no status icons
 
@@ -1355,8 +1371,15 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             if bridge_id
             else self.fetched_esp_device_name
         )
+        # Pick the matching translation variant: the "already connected" hint
+        # when the bridge holds a live BLE link, the "turn it on" hint
+        # otherwise. Both submit to async_step_esp_bridge_status.
+        ble_connected = info.get("ble_connected") == "true"
+        step_id = (
+            "esp_bridge_status_connected" if ble_connected else "esp_bridge_status"
+        )
         return self.async_show_form(
-            step_id="esp_bridge_status",
+            step_id=step_id,
             data_schema=vol.Schema({}),
             description_placeholders={
                 "device_name": self.fetched_esp_device_name,
@@ -1366,6 +1389,17 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             },
             errors=errors,
         )
+
+    async def async_step_esp_bridge_status_connected(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Alias step rendered when the bridge is already BLE-connected.
+
+        HA routes submissions to async_step_<step_id>; the translations are
+        split across two step IDs (different action hints) but the
+        implementation is shared with async_step_esp_bridge_status.
+        """
+        return await self.async_step_esp_bridge_status(user_input)
 
     async def async_step_request_pair(
         self, user_input: dict[str, Any] | None = None
@@ -1650,6 +1684,30 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             },
         )
 
+    def _build_default_name(self) -> str:
+        """Default device name for the new entry.
+
+        Priority: ESP ``friendly_name`` (Phase 2, when the bridge emits it)
+        wins verbatim; otherwise the model with a bridge_id / MAC-suffix
+        disambiguator so multi-device households stay distinguishable.
+        """
+        data = self.fetched_data or {}
+        yaml_name = (data.get("friendly_name") or "").strip()
+        if yaml_name:
+            return yaml_name
+        model = (data.get("model_number") or "").strip()
+        if (
+            self.fetched_transport_type == TRANSPORT_ESP_BRIDGE
+            and self.fetched_esp_bridge_id
+        ):
+            suffix = self.fetched_esp_bridge_id
+        elif self.fetched_address:
+            suffix = self.fetched_address.replace(":", "")[-4:].upper()
+        else:
+            suffix = ""
+        base = model or "Philips Shaver"
+        return f"{base} ({suffix})" if suffix else base
+
     async def async_step_show_capabilities(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -1658,14 +1716,33 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         if self.fetched_data is None:
             return await self.async_step_user()
 
+        # Surface ESP per-slot friendly_name / area (from ble_get_info) into
+        # fetched_data so the default name and area assignment can use them.
+        # Empty on older bridges that don't emit these fields.
+        if self.fetched_bridge_info:
+            for key in ("friendly_name", "area"):
+                val = (self.fetched_bridge_info.get(key) or "").strip()
+                if val and not self.fetched_data.get(key):
+                    self.fetched_data[key] = val
+
+        default_name = self._build_default_name()
+
         if user_input is not None:
+            device_name = (
+                user_input.get(CONF_DEVICE_NAME) or ""
+            ).strip() or default_name
+
             entry_data: dict[str, Any] = {
                 CONF_CAPABILITIES: self.fetched_data.get("capabilities", 0),
                 CONF_SERVICES: self.fetched_data.get("services", []),
+                CONF_DEVICE_NAME: device_name,
             }
             device_type = self.fetched_data.get("device_type")
             if device_type:
                 entry_data[CONF_DEVICE_TYPE] = device_type
+            area = (self.fetched_data.get("area") or "").strip()
+            if area:
+                entry_data[CONF_AREA] = area
 
             if self.fetched_transport_type == TRANSPORT_ESP_BRIDGE:
                 entry_data[CONF_TRANSPORT_TYPE] = TRANSPORT_ESP_BRIDGE
@@ -1679,7 +1756,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 entry_data[CONF_ADDRESS] = self.fetched_address
 
             return self.async_create_entry(
-                title=f"Philips Shaver ({self.fetched_name})",
+                title=f"Philips Shaver ({device_name})",
                 data=entry_data,
             )
 
@@ -1699,12 +1776,17 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
         # Connection info suffix — show adapter / bridge actually used
         path = self.fetched_data.get("connection_path") or self.fetched_esp_device_name
-        bridge_info = f" via **{path}**" if path else ""
-        connection_status = self._get_connection_status_text(bridge_info)
+        connection_status = self._get_connection_status_text(
+            self.fetched_transport_type, path
+        )
 
         return self.async_show_form(
             step_id="show_capabilities",
-            data_schema=vol.Schema({}),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_DEVICE_NAME, default=default_name): str,
+                }
+            ),
             description_placeholders={
                 "name": str(self.fetched_name),
                 "connection_status": connection_status,
@@ -1736,11 +1818,21 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     ]
 
     @staticmethod
-    def _get_connection_status_text(bridge_info: str) -> str:
-        """Connection status line shown above the device info."""
-        if bridge_info:
-            return f"✅ Connected{bridge_info}."
-        return "✅ Connected."
+    def _get_connection_status_text(transport_type: str | None, path: str | None) -> str:
+        """Connection status line shown above the device info.
+
+        Leads with the transport *class* (ESP32 Bridge / Direct Bluetooth) so
+        it reads the same as the other "via" dialogs, with the adapter/bridge
+        label appended in parentheses as a disambiguator.
+        """
+        transport_label = (
+            "ESP32 Bridge"
+            if transport_type == TRANSPORT_ESP_BRIDGE
+            else "Direct Bluetooth"
+        )
+        if path:
+            return f"✅ Connected via **{transport_label}** ({path})."
+        return f"✅ Connected via **{transport_label}**."
 
     @staticmethod
     def _get_device_info_text(
@@ -1843,7 +1935,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         """Return device family: 'oneblade' or 'shaver'.
 
         The Smart Groomer service (0x0700) is the OneBlade marker — analogous
-        to how the Sonicare integration keys its 'condor' family off the
+        to how the Sonicare integration keys its newer-protocol family off the
         transport service rather than a model string. Fall back to the
         device-type text ("OneBlade" vs a model number like "XP9201") when
         the service set is ambiguous.

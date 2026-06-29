@@ -9,7 +9,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import area_registry as ar, device_registry as dr
 
 from .const import (
     DOMAIN,
@@ -19,6 +19,7 @@ from .const import (
     CONF_ESP_DEVICE_NAME,
     CONF_ESP_BRIDGE_ID,
     CONF_ESP_DEVICE_ID_LEGACY,
+    CONF_AREA,
     CHAR_SYSTEM_NOTIFICATIONS,
 )
 from .coordinator import PhilipsShaverCoordinator
@@ -135,6 +136,35 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+def _async_apply_yaml_area(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Fill the device's area_id from the ESP YAML ``area:`` when unset.
+
+    DeviceInfo.suggested_area only applies at device-creation time, so a YAML
+    ``area:`` value won't move an already-created device on its own. We fill
+    the gap here — but only when area_id is currently None, to avoid
+    overwriting a user's manual assignment.
+    """
+    area_name = entry.data.get(CONF_AREA)
+    if not area_name:
+        return
+
+    device_id = entry.data.get(CONF_ADDRESS) or entry.data.get(CONF_ESP_DEVICE_NAME)
+    if not device_id:
+        return
+
+    dev_reg = dr.async_get(hass)
+    device = dev_reg.async_get_device(identifiers={(DOMAIN, device_id)})
+    if device is None:
+        return
+
+    # Only create/assign the area when the device has none yet — never
+    # overwrite a manual assignment, and don't register an unused area.
+    if device.area_id is None:
+        area = ar.async_get(hass).async_get_or_create(area_name)
+        dev_reg.async_update_device(device.id, area_id=area.id)
+        _LOGGER.info("Applied YAML area '%s' to Philips Shaver device", area_name)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Philips Shaver from a config entry."""
     # Create transport based on config
@@ -162,6 +192,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Link shaver device to ESP bridge device via device registry
     if transport_type == TRANSPORT_ESP_BRIDGE:
         _async_link_via_esp_device(hass, entry)
+
+    # Apply YAML-pushed area (per-slot `area:`) when the device has none yet
+    _async_apply_yaml_area(hass, entry)
 
     # Start event-driven live monitoring after platforms are registered
     await coordinator.async_start()

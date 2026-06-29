@@ -19,7 +19,7 @@
     }
   },
   "config": {
-    "flow_title": "Philips Shaver ({name})",
+    "flow_title": "{name}",
     "step": {
       "user": {
         "title": "Add Philips Shaver",
@@ -63,7 +63,12 @@
       },
       "esp_bridge_status": {
         "title": "Connection via ESP32 Bridge",
-        "description": "Setting up **{shaver_name}** via **ESP32 Bridge**.\n\n✅ Bridge **{target}** is reachable.\n\n{status}",
+        "description": "Setting up **{shaver_name}** via **ESP32 Bridge**.\n\n✅ Bridge **{target}** is reachable.\n\n{status}\n\nMake sure the shaver is **turned on** (press the power button or place it on its charging stand) and **keep it on**, then click **Read capabilities**.",
+        "submit": "Read capabilities"
+      },
+      "esp_bridge_status_connected": {
+        "title": "Connection via ESP32 Bridge",
+        "description": "Setting up **{shaver_name}** via **ESP32 Bridge**.\n\n✅ Bridge **{target}** is reachable.\n\n{status}\n\nThe bridge is already connected to your shaver. **Keep it switched on** — click **Read capabilities** to finish setup.",
         "submit": "Read capabilities"
       },
       "request_pair": {
@@ -84,6 +89,12 @@
       "show_capabilities": {
         "title": "Philips Shaver — {name}",
         "description": "{connection_status}\n\n**Device Information**\n\n{device_info}\n\n<br/>\n\n{caps_services}",
+        "data": {
+          "device_name": "Name"
+        },
+        "data_description": {
+          "device_name": "How this shaver appears in Home Assistant. Pick something that distinguishes it from any other shavers you have (e.g., \"Bathroom\", \"John's\")."
+        },
         "submit": "Set up"
       }
     },

@@ -765,6 +765,8 @@ class PhilipsMotorSpeedSensor(PhilipsShaverEntity, SensorEntity):
 
     @property
     def native_value(self) -> int | None:
+        # motor_rpm is already normalized (raw / 3.036) in the coordinator;
+        # return it directly — consistent with motor_rpm_max / motor_rpm_min.
         return self.coordinator.data.get("motor_rpm")
 
     @property

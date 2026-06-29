@@ -18,6 +18,8 @@ CONF_COORD_GENERATED_ID = "coord_generated_id"
 CONF_CONNECTED_SENSOR = "connected"
 CONF_DEVICE_ID_LEGACY = "device_id"
 CONF_NOTIFY_THROTTLE = "notify_throttle_ms"
+CONF_FRIENDLY_NAME = "friendly_name"
+CONF_AREA = "area"
 
 philips_shaver_ns = cg.esphome_ns.namespace("philips_shaver")
 PhilipsShaver = philips_shaver_ns.class_(
@@ -45,6 +47,8 @@ _BASE_SCHEMA = cv.Schema(
             ShaverCoordinator
         ),
         cv.Optional(CONF_BRIDGE_ID, default=""): cv.string,
+        cv.Optional(CONF_FRIENDLY_NAME, default=""): cv.string,
+        cv.Optional(CONF_AREA, default=""): cv.string,
         cv.Optional(CONF_DEVICE_ID_LEGACY): cv.string,  # deprecated
         cv.Optional(CONF_NOTIFY_THROTTLE, default=500): cv.positive_int,
         cv.Optional(CONF_CONNECTED_SENSOR): binary_sensor.binary_sensor_schema(
@@ -161,6 +165,8 @@ async def to_code(config):
     bridge_var = cg.new_Pvariable(config[CONF_BRIDGE_GENERATED_ID])
     await cg.register_component(bridge_var, config)
     cg.add(bridge_var.set_bridge_id(bridge_id))
+    cg.add(bridge_var.set_friendly_name(config[CONF_FRIENDLY_NAME]))
+    cg.add(bridge_var.set_area(config[CONF_AREA]))
     cg.add(bridge_var.set_log_tag(log_tag))
     cg.add(bridge_var.set_coordinator(coord_var))
     cg.add(coord_var.set_bridge(bridge_var))
