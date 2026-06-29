@@ -1,5 +1,17 @@
 # ESP Bridge Changelog
 
+## v1.9.0 — 2026-06-30
+
+- **Per-slot `friendly_name:` and `area:`.** Each `philips_shaver:` slot can
+  now carry an optional `friendly_name:` and `area:` (both default empty).
+  They are emitted in `ble_get_info` and printed in `dump_config`, so the Home
+  Assistant integration can pre-fill the device name during setup, label the
+  BLE-device picker by friendly name, and assign the device's area
+  automatically. Purely additive — `MIN_BRIDGE_VERSION` stays `1.8.0`, and
+  older bridges that omit these fields keep working unchanged.
+
+  > Consumed by Home Assistant integration version **0.17.0** onwards.
+
 ## v1.8.2 — 2026-06-26
 
 - **Firmware version is now a single source of truth.** The bridge version
