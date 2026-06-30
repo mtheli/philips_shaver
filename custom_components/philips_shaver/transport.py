@@ -393,7 +393,10 @@ class EspBridgeTransport(ShaverTransport):
         self._hass = hass
         self._address = address
         self._device_name = esphome_device_name  # e.g. "atom_lite"
-        self._esp_bridge_id = esp_bridge_id  # e.g. "shaver" — suffix for multi-device ESP
+        # Lowercase: HA's ServiceRegistry lowercases service names, so the
+        # bridge_id suffix is always lowercase on the wire — canonicalize so
+        # service-name building and bridge_id event filtering stay consistent.
+        self._esp_bridge_id = (esp_bridge_id or "").lower()  # e.g. "shaver" — suffix for multi-device ESP
         self._setup_done = False  # event listeners registered
         self._shaver_connected = False  # ESP↔Shaver BLE link active
         self._esp_alive = False  # heartbeat received from ESP
@@ -625,8 +628,9 @@ class EspBridgeTransport(ShaverTransport):
                     pass
 
             if status == "info":
-                # Filter by bridge_id if present (multi-device ESP)
-                event_bridge_id = event.data.get("bridge_id", "")
+                # Filter by bridge_id if present (multi-device ESP).
+                # Lowercase to match the canonicalized self._esp_bridge_id.
+                event_bridge_id = event.data.get("bridge_id", "").lower()
                 if event_bridge_id and self._esp_bridge_id and event_bridge_id != self._esp_bridge_id:
                     return
                 # Only set _detected_mac from info events (bridge_id filtered)

@@ -474,7 +474,10 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             @callback
             def _on_status(event: Event, _did=did) -> None:
                 if (event.data.get("status") == "info"
-                        and event.data.get("bridge_id", "") == _did
+                        # HA lowercases service names, so an uppercase bridge_id
+                        # (e.g. a model number) yields a lowercase suffix while
+                        # the event echoes the original case — compare lowercased.
+                        and event.data.get("bridge_id", "").lower() == _did.lower()
                         and not info_future.done()):
                     info_future.set_result(dict(event.data))
 
@@ -542,7 +545,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                     self.discovery_info.address,
                 )
                 self.fetched_esp_device_name = esp["device_name"]
-                self.fetched_esp_bridge_id = esp.get("bridge_id", "")
+                # Lowercase: HA lowercases service names, so the bridge_id
+                # suffix is lowercase on the wire — keep our copy consistent.
+                self.fetched_esp_bridge_id = esp.get("bridge_id", "").lower()
                 self.fetched_bridge_info = esp["info"]
                 # Tag the discovery card so flow_title ("{name}") renders the
                 # transport class here too — this redirect bypasses the normal
@@ -944,7 +949,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             @callback
             def _on_status(event: Event, _did: str = did) -> None:
                 if (event.data.get("status") == "info"
-                        and event.data.get("bridge_id", "") == _did
+                        # bridge_id compared case-insensitively (see above)
+                        and event.data.get("bridge_id", "").lower() == _did.lower()
                         and not info_future.done()):
                     info_future.set_result(dict(event.data))
 
@@ -1066,7 +1072,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             @callback
             def _on_info(event: Event) -> None:
                 if (event.data.get("status") == "info"
-                        and event.data.get("bridge_id", "") == did
+                        # bridge_id compared case-insensitively (see above)
+                        and event.data.get("bridge_id", "").lower() == did.lower()
                         and not info_future.done()):
                     info_future.set_result(dict(event.data))
 
@@ -1439,7 +1446,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
         @callback
         def _on_status(event: Event) -> None:
-            if event.data.get("bridge_id", "") != bridge_id:
+            # bridge_id compared case-insensitively (HA lowercases service names)
+            if event.data.get("bridge_id", "").lower() != bridge_id.lower():
                 return
             status = event.data.get("status")
             if status not in ("pair_complete", "pair_timeout", "pair_failed"):
