@@ -3,6 +3,10 @@
     "esp_bridge_outdated": {
       "title": "ESP bridge firmware update required",
       "description": "Your ESP bridge is running **v{version}**, but **v{min_version}** or newer is required for full functionality.\n\nRebuild and flash your ESPHome device to get the latest firmware.\n\nSee the ESP Bridge Setup Guide in the integration documentation for details."
+    },
+    "standalone_card_installed": {
+      "title": "Standalone Philips Shaver Card is still installed",
+      "description": "The Philips Shaver Card now ships with this integration and no longer needs to be installed separately.\n\nA standalone copy of the card is still registered as a dashboard resource (`{url}`). Both copies register the same card element and only one of them wins, so the standalone copy can silently shadow the bundled, up-to-date card.\n\nPlease remove the standalone installation:\n\n1. If installed via HACS: open HACS, find *Philips Shaver Card* and uninstall it (this also removes the dashboard resource).\n2. If added manually: delete the resource under *Settings → Dashboards → Resources* and remove the file from your `www` folder.\n\nYour dashboards keep working unchanged — the bundled card uses the same `custom:philips-shaver-card` type."
     }
   },
   "options": {

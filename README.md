@@ -65,11 +65,21 @@ Other BLE-enabled Philips shavers and groomers using the same GATT services may 
 
 ## Lovelace Card
 
-A dedicated dashboard card is available: **[Philips Shaver Card](https://github.com/mtheli/philips_shaver_card)**
+A dedicated dashboard card — the **Philips Shaver Card** — ships with this integration. No separate installation and no dashboard resource setup needed: it is available as soon as the integration is set up. Add it via the dashboard card picker or in YAML:
+
+```yaml
+type: custom:philips-shaver-card
+device_id: <your-device-id>
+title: My Shaver   # optional, defaults to the device's name
+show_model: true   # optional, show model number as subtitle (default: true)
+```
 
 ![Philips Shaver Card](./images/card_shaving.png)
 
 The card automatically switches between standby, shaving, charging, and cleaning modes with live pressure gauge, battery status, and session stats.
+
+> [!NOTE]
+> **Upgrading from the standalone card?** The card was previously distributed separately as [philips_shaver_card](https://github.com/mtheli/philips_shaver_card). If that copy is still installed, remove it — in HACS uninstall *Philips Shaver Card* (this also removes the dashboard resource), or delete the manually added resource under *Settings → Dashboards → Resources*. A leftover standalone copy can shadow the bundled, up-to-date card; the integration raises a repair issue if it detects one. Your dashboards keep working unchanged — the card type stays `custom:philips-shaver-card`. Card development continues in that repository; releases ship here.
 
 ---
 

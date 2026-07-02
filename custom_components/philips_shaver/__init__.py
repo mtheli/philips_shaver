@@ -9,7 +9,8 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
-from homeassistant.helpers import area_registry as ar, device_registry as dr
+from homeassistant.helpers import area_registry as ar, config_validation as cv, device_registry as dr
+from homeassistant.helpers.typing import ConfigType
 
 from .const import (
     DOMAIN,
@@ -23,9 +24,12 @@ from .const import (
     CHAR_SYSTEM_NOTIFICATIONS,
 )
 from .coordinator import PhilipsShaverCoordinator
+from .frontend import async_register_card
 from .transport import BleakTransport, EspBridgeTransport
 
 _LOGGER = logging.getLogger(__name__)
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 PLATFORMS = [Platform.SENSOR, Platform.LIGHT, Platform.SELECT, Platform.BINARY_SENSOR, Platform.BUTTON, Platform.SWITCH, Platform.UPDATE]
 
@@ -163,6 +167,13 @@ def _async_apply_yaml_area(hass: HomeAssistant, entry: ConfigEntry) -> None:
         area = ar.async_get(hass).async_get_or_create(area_name)
         dev_reg.async_update_device(device.id, area_id=area.id)
         _LOGGER.info("Applied YAML area '%s' to Philips Shaver device", area_name)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the Philips Shaver component (one-time, entry-independent)."""
+    # Serve the bundled Lovelace card on every dashboard.
+    await async_register_card(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
