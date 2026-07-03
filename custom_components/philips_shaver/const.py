@@ -530,6 +530,13 @@ CONF_ESP_DEVICE_ID_LEGACY = "esp_device_id"
 # and the pair_capable / identity_source fields in the heartbeat payload.
 MIN_BRIDGE_VERSION = "1.8.0"
 
+# Bridges from this version serialise overlapping GATT reads through their
+# pending-calls queue, so the transport may fire its poll cycle concurrently
+# (asyncio.gather). Older bridges have a single response slot that silently
+# drops all-but-the-last overlapping read — the transport reads sequentially
+# against those.
+BRIDGE_PIPELINED_READS_VERSION = "1.10.0"
+
 # ── ESP bridge firmware update entity ────────────────────────────────────────
 # The latest available bridge firmware version is read straight from the repo
 # (same VERSION file the firmware bakes in at build time) so users are notified

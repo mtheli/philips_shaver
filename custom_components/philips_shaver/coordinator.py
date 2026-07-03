@@ -665,23 +665,31 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     # Read characteristics first, then subscribe.
                     # First connect: read ALL chars (incl. static data like
                     # model, firmware). Subsequent: dynamic only.
-                    read_chars = (
+                    chars_to_read = (
                         self._poll_chars
                         if not self._full_read_done
                         else self._live_chars
                     )
 
-                    results = {}
-                    for uuid in read_chars:
-                        if not self.transport.is_connected:
-                            break
-                        try:
-                            value = await self.transport.read_char(uuid)
-                            results[uuid] = value
-                        except Exception as e:
-                            _LOGGER.debug(
-                                "Live initial read failed for %s: %s", uuid, e
-                            )
+                    if self._is_esp_bridge:
+                        # Batch through read_chars: pipelined via
+                        # asyncio.gather on bridge v1.10.0+, serial fallback
+                        # on older firmware. Not used for direct BLE — its
+                        # read_chars is a connect-read-disconnect poll and
+                        # would fight the live connection we just opened.
+                        results = await self.transport.read_chars(chars_to_read)
+                    else:
+                        results = {}
+                        for uuid in chars_to_read:
+                            if not self.transport.is_connected:
+                                break
+                            try:
+                                value = await self.transport.read_char(uuid)
+                                results[uuid] = value
+                            except Exception as e:
+                                _LOGGER.debug(
+                                    "Live initial read failed for %s: %s", uuid, e
+                                )
 
                     # For ESP bridge: if ALL reads failed, bridge is not ready
                     if self._is_esp_bridge:
