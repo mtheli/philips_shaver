@@ -79,6 +79,53 @@ void ShaverCoordinator::apply_smp_params_() {
 }
 
 void ShaverCoordinator::on_loop(uint32_t now) {
+  // ATT watchdog: an in-flight operation whose completion event never
+  // arrives (Bluedroid response loss, event consumed by another dispatch
+  // branch, …) would otherwise hold the ATT slot forever — and since
+  // v1.10.0 defers concurrent reads/writes behind that slot, the queue
+  // would wedge until disconnect. One net for all tracked ops: force-
+  // clear every marker after ATT_WATCHDOG_MS without progress, resolve
+  // a stuck read towards HA, fall back to ready for a stuck probe, and
+  // keep the queue draining.
+  if (this->att_busy_() && this->att_last_progress_ms_ != 0 &&
+      (now - this->att_last_progress_ms_) > ATT_WATCHDOG_MS) {
+    ESP_LOGW(this->log_tag_.c_str(),
+             "ATT op got no response in %us (read=0x%04X probe=0x%04X "
+             "write=0x%04X reg=%u cccd=%u) — clearing, draining %u queued "
+             "call(s)",
+             ATT_WATCHDOG_MS / 1000, this->pending_handle_,
+             this->probe_handle_, this->write_handle_,
+             (unsigned) this->reg_notify_pending_,
+             (unsigned) this->pending_cccd_writes_,
+             (unsigned) this->pending_calls_.size());
+    if (this->pending_handle_ != 0) {
+      this->emit_(EVENT_DATA,
+                  {
+                      {"uuid", this->pending_char_uuid_},
+                      {"payload", ""},
+                      {"error", "read_timeout"},
+                      {"mac", this->get_remote_mac()},
+                  });
+    }
+    bool probe_stuck = this->probe_handle_ != 0;
+    this->pending_handle_ = 0;
+    this->write_handle_ = 0;
+    this->probe_handle_ = 0;
+    this->reg_notify_pending_ = 0;
+    this->pending_cccd_writes_ = 0;
+    this->att_last_progress_ms_ = 0;
+    if (probe_stuck) {
+      // The probe gates "ready" — without this fallback a lost probe
+      // response wedges the connection permanently (reads defer, ready
+      // never fires, subscriptions never restore).
+      ESP_LOGW(this->log_tag_.c_str(),
+               "Encryption probe never resolved — firing ready as fallback");
+      this->retry_read_after_auth_ = false;
+      this->start_post_auth_setup_();
+    }
+    this->drain_pending_calls_();
+  }
+
   // Re-enable BLE client after auth failure backoff expires
   if (this->backoff_until_ms_ != 0 && now >= this->backoff_until_ms_) {
     ESP_LOGI(this->log_tag_.c_str(),
@@ -272,6 +319,10 @@ void ShaverCoordinator::on_gattc_event(esp_gattc_cb_event_t event,
       if (this->bridge_ != nullptr)
         this->bridge_->publish_connected(false);
       this->pending_handle_ = 0;
+      this->write_handle_ = 0;
+      this->pending_cccd_writes_ = 0;
+      this->reg_notify_pending_ = 0;
+      this->att_last_progress_ms_ = 0;
       this->name_handle_ = 0;
       // Clear handle-based maps (handles are invalid after disconnect)
       // but keep desired_subscriptions_ for auto-resubscribe
@@ -337,6 +388,7 @@ void ShaverCoordinator::on_gattc_event(esp_gattc_cb_event_t event,
                    "Probe read request failed, status=%d", status);
           this->probe_handle_ = 0;
         } else {
+          this->att_progress_();
           ESP_LOGD(this->log_tag_.c_str(),
                    "Probe read issued for handle 0x%04X — waiting on result",
                    chr->handle);
@@ -428,10 +480,27 @@ void ShaverCoordinator::on_gattc_event(esp_gattc_cb_event_t event,
         break;
       }
 
+      // Stray-event guard: only events for the read we actually issued
+      // may resolve the slot. After a watchdog force-clear, a late event
+      // for the OLD read can arrive while a NEW read owns the slot —
+      // without this check it would be misattributed (spurious
+      // read_failed for the new uuid, and the new read's real response
+      // dropped).
+      if (this->pending_handle_ == 0 ||
+          param->read.handle != this->pending_handle_) {
+        ESP_LOGD(this->log_tag_.c_str(),
+                 "Ignoring stray READ_CHAR_EVT (handle 0x%04X, status=%d, "
+                 "pending 0x%04X)",
+                 param->read.handle, param->read.status,
+                 this->pending_handle_);
+        break;
+      }
+
       if (param->read.status != ESP_GATT_OK) {
         // Insufficient Authentication / Encryption on a HA-driven read:
-        // initiate encryption and let HA retry the read. Avoids the
-        // proactive set_encryption() race with BTM rehydrate.
+        // initiate encryption (once) and report the read as failed — HA
+        // retries on its next cycle over the then-encrypted link. Avoids
+        // the proactive set_encryption() race with BTM rehydrate.
         if ((param->read.status == ESP_GATT_INSUF_AUTHENTICATION ||
              param->read.status == ESP_GATT_INSUF_ENCRYPTION) &&
             !this->encryption_requested_) {
@@ -455,10 +524,12 @@ void ShaverCoordinator::on_gattc_event(esp_gattc_cb_event_t event,
                         {"mac", this->get_remote_mac()},
                     });
         this->pending_handle_ = 0;
+        this->att_progress_();
+        this->drain_pending_calls_();
         break;
       }
 
-      if (param->read.handle == this->pending_handle_) {
+      {
         std::string hex_payload =
             format_hex(param->read.value, param->read.value_len);
 
@@ -474,6 +545,8 @@ void ShaverCoordinator::on_gattc_event(esp_gattc_cb_event_t event,
                     });
 
         this->pending_handle_ = 0;
+        this->att_progress_();
+        this->drain_pending_calls_();
       }
       break;
     }
@@ -487,10 +560,23 @@ void ShaverCoordinator::on_gattc_event(esp_gattc_cb_event_t event,
                  "Write FAILED for handle 0x%04X, status=%d",
                  param->write.handle, param->write.status);
       }
+      if (this->write_handle_ != 0 &&
+          param->write.handle == this->write_handle_) {
+        this->write_handle_ = 0;
+        this->att_progress_();
+        this->drain_pending_calls_();
+      }
       break;
     }
 
     case ESP_GATTC_REG_FOR_NOTIFY_EVT: {
+      // One registration of the subscribe burst resolved (the counter was
+      // incremented synchronously when register_for_notify was issued, so
+      // reads stay deferred across the whole burst including the CCCD
+      // writes that follow below).
+      if (this->reg_notify_pending_ > 0)
+        this->reg_notify_pending_--;
+      this->att_progress_();
       if (param->reg_for_notify.status == ESP_GATT_OK) {
         ESP_LOGI(this->log_tag_.c_str(),
                  "Notify registered for handle 0x%04X",
@@ -510,10 +596,14 @@ void ShaverCoordinator::on_gattc_event(esp_gattc_cb_event_t event,
             else if (has_indicate)
               cccd_val = 0x0002;
           }
-          esp_ble_gattc_write_char_descr(
+          auto wr_status = esp_ble_gattc_write_char_descr(
               gattc_if, this->parent_->get_conn_id(), it->second,
               sizeof(cccd_val), (uint8_t *) &cccd_val,
               ESP_GATT_WRITE_TYPE_RSP, ESP_GATT_AUTH_REQ_NO_MITM);
+          if (wr_status == ESP_OK) {
+            this->pending_cccd_writes_++;
+            this->att_progress_();
+          }
           ESP_LOGI(this->log_tag_.c_str(),
                    "CCCD written for handle 0x%04X (descr 0x%04X, value 0x%04X)",
                    param->reg_for_notify.handle, it->second, cccd_val);
@@ -521,6 +611,20 @@ void ShaverCoordinator::on_gattc_event(esp_gattc_cb_event_t event,
       } else {
         ESP_LOGW(this->log_tag_.c_str(), "Notify registration failed, status=%d",
                  param->reg_for_notify.status);
+      }
+      // Burst may be over (last registration failed / carried no CCCD) —
+      // let deferred reads resume; no-op while anything is still busy.
+      this->drain_pending_calls_();
+      break;
+    }
+
+    case ESP_GATTC_WRITE_DESCR_EVT: {
+      // CCCD write completed (success or failure) — reads deferred behind
+      // the subscribe burst may resume once the last write is done.
+      if (this->pending_cccd_writes_ > 0) {
+        this->pending_cccd_writes_--;
+        this->att_progress_();
+        this->drain_pending_calls_();
       }
       break;
     }
@@ -611,6 +715,7 @@ void ShaverCoordinator::on_gap_event(esp_gap_ble_cb_event_t event,
           // Path A: probe returned INSUF_AUTH, our explicit set_encryption()
           // triggered SMP, encryption is now up — retry the probe.
           this->retry_read_after_auth_ = false;
+          this->att_progress_();
           ESP_LOGI(this->log_tag_.c_str(),
                    "Auth complete — retrying probe read on handle 0x%04X",
                    this->probe_handle_);
@@ -639,6 +744,9 @@ void ShaverCoordinator::on_gap_event(esp_gap_ble_cb_event_t event,
           ESP_LOGD(this->log_tag_.c_str(),
                    "Auth complete — deferring ready to probe-OK");
         }
+        // Calls that queued while SMP was in flight can resume — no-op
+        // if an op is busy or start_post_auth_setup_ already drained.
+        this->drain_pending_calls_();
       } else {
         this->auth_fail_count_++;
         ESP_LOGW(this->log_tag_.c_str(),
@@ -692,6 +800,11 @@ void ShaverCoordinator::on_gap_event(esp_gap_ble_cb_event_t event,
                         });
           }
         }
+        // Don't leave calls queued during the failed handshake stranded:
+        // drained reads on the unencrypted link fail fast with
+        // read_failed (encryption_requested_ prevents re-initiating), so
+        // HA's futures resolve instead of timing out.
+        this->drain_pending_calls_();
       }
       break;
     }
@@ -714,7 +827,12 @@ void ShaverCoordinator::read_char(const std::string &service_uuid,
                 });
     return;
   }
-  if (!this->services_discovered_) {
+  // Defer while service discovery hasn't completed or any ATT operation
+  // is in flight (see att_busy_): only one ATT request may be outstanding
+  // per connection, and Bluedroid has been observed to lose the response
+  // of an operation racing another one (read vs. CCCD burst, live-
+  // reproduced three times).
+  if (!this->services_discovered_ || this->att_busy_()) {
     if (this->pending_calls_.size() >= MAX_PENDING_CALLS) {
       ESP_LOGW(this->log_tag_.c_str(),
                "Pending queue full — dropping read for %s",
@@ -728,9 +846,14 @@ void ShaverCoordinator::read_char(const std::string &service_uuid,
                   });
       return;
     }
-    ESP_LOGD(this->log_tag_.c_str(),
-             "Queueing read of %s until service discovery completes",
-             characteristic_uuid.c_str());
+    const char *reason =
+        !this->services_discovered_      ? "awaiting service discovery"
+        : this->pending_handle_ != 0     ? "another read in flight"
+        : this->probe_handle_ != 0       ? "encryption probe in flight"
+        : this->write_handle_ != 0       ? "write in flight"
+                                         : "subscription writes in flight";
+    ESP_LOGD(this->log_tag_.c_str(), "Queueing read of %s (%s)",
+             characteristic_uuid.c_str(), reason);
     this->pending_calls_.push_back(
         [this, service_uuid, characteristic_uuid]() {
           this->read_char(service_uuid, characteristic_uuid);
@@ -753,11 +876,17 @@ void ShaverCoordinator::read_char(const std::string &service_uuid,
                     {"error", "not_found"},
                     {"mac", this->get_remote_mac()},
                 });
+    // Keep the chain alive when this call was popped from the queue —
+    // drain_pending_calls_ guards against re-entrancy, so this is a
+    // no-op while the drain loop is already running.
+    this->drain_pending_calls_();
     return;
   }
 
   this->pending_handle_ = chr->handle;
   this->pending_char_uuid_ = characteristic_uuid;
+  this->pending_service_uuid_ = service_uuid;
+  this->att_progress_();
 
   ESP_LOGI(this->log_tag_.c_str(), "Reading %s (handle 0x%04X)...",
            characteristic_uuid.c_str(), chr->handle);
@@ -778,6 +907,7 @@ void ShaverCoordinator::read_char(const std::string &service_uuid,
                     {"error", std::string(err_str)},
                     {"mac", this->get_remote_mac()},
                 });
+    this->drain_pending_calls_();
   }
 }
 
@@ -787,7 +917,9 @@ void ShaverCoordinator::subscribe(const std::string &service_uuid,
     ESP_LOGW(this->log_tag_.c_str(), "Cannot subscribe: not connected");
     return;
   }
-  if (!this->services_discovered_) {
+  // The CCCD write triggered by this subscription shares the ATT slot —
+  // issued mid-read it can cost the read its response event.
+  if (!this->services_discovered_ || this->att_busy_()) {
     if (this->pending_calls_.size() >= MAX_PENDING_CALLS) {
       ESP_LOGW(this->log_tag_.c_str(),
                "Pending queue full — dropping subscribe for %s",
@@ -795,8 +927,9 @@ void ShaverCoordinator::subscribe(const std::string &service_uuid,
       return;
     }
     ESP_LOGD(this->log_tag_.c_str(),
-             "Queueing subscribe of %s until service discovery completes",
-             characteristic_uuid.c_str());
+             "Queueing subscribe of %s (%s)", characteristic_uuid.c_str(),
+             !this->services_discovered_ ? "awaiting service discovery"
+                                         : "ATT operation in flight");
     this->pending_calls_.push_back(
         [this, service_uuid, characteristic_uuid]() {
           this->subscribe(service_uuid, characteristic_uuid);
@@ -865,6 +998,12 @@ void ShaverCoordinator::subscribe(const std::string &service_uuid,
     this->notify_map_.erase(chr->handle);
     this->cccd_map_.erase(chr->handle);
     this->char_props_map_.erase(chr->handle);
+  } else {
+    // Arm the ATT gate synchronously: the REG_FOR_NOTIFY_EVT and the
+    // CCCD write it triggers arrive asynchronously, and reads must not
+    // interleave with that burst.
+    this->reg_notify_pending_++;
+    this->att_progress_();
   }
 }
 
@@ -928,7 +1067,10 @@ void ShaverCoordinator::write_char(const std::string &service_uuid,
     ESP_LOGW(this->log_tag_.c_str(), "Cannot write: not connected");
     return;
   }
-  if (!this->services_discovered_) {
+  // Writes share the single ATT slot with reads/probe/subscribe — a
+  // write racing an in-flight read is the same Bluedroid response-loss
+  // class observed live for CCCD descriptor writes.
+  if (!this->services_discovered_ || this->att_busy_()) {
     if (this->pending_calls_.size() >= MAX_PENDING_CALLS) {
       ESP_LOGW(this->log_tag_.c_str(),
                "Pending queue full — dropping write for %s",
@@ -936,8 +1078,9 @@ void ShaverCoordinator::write_char(const std::string &service_uuid,
       return;
     }
     ESP_LOGD(this->log_tag_.c_str(),
-             "Queueing write of %s until service discovery completes",
-             characteristic_uuid.c_str());
+             "Queueing write of %s (%s)", characteristic_uuid.c_str(),
+             !this->services_discovered_ ? "awaiting service discovery"
+                                         : "ATT operation in flight");
     this->pending_calls_.push_back(
         [this, service_uuid, characteristic_uuid, hex_data]() {
           this->write_char(service_uuid, characteristic_uuid, hex_data);
@@ -969,6 +1112,9 @@ void ShaverCoordinator::write_char(const std::string &service_uuid,
            characteristic_uuid.c_str(), chr->handle, hex_data.c_str(),
            bytes.size());
 
+  this->write_handle_ = chr->handle;
+  this->att_progress_();
+
   auto status = esp_ble_gattc_write_char(
       this->parent_->get_gattc_if(), this->parent_->get_conn_id(),
       chr->handle, bytes.size(), bytes.data(),
@@ -976,6 +1122,8 @@ void ShaverCoordinator::write_char(const std::string &service_uuid,
 
   if (status != ESP_OK) {
     ESP_LOGW(this->log_tag_.c_str(), "Write request failed: %d", status);
+    this->write_handle_ = 0;
+    this->drain_pending_calls_();
   }
 }
 
@@ -1042,6 +1190,11 @@ void ShaverCoordinator::resubscribe_all_() {
       ESP_LOGI(this->log_tag_.c_str(),
                "Resubscribe: %s (handle 0x%04X, cccd 0x%04X)",
                chr_uuid_str.c_str(), chr->handle, cccd_handle);
+      // Arm the ATT gate synchronously — the whole resubscribe burst
+      // (REG_FOR_NOTIFY_EVTs + CCCD writes) resolves asynchronously,
+      // and queued reads must stay deferred until it completes.
+      this->reg_notify_pending_++;
+      this->att_progress_();
     } else {
       ESP_LOGW(this->log_tag_.c_str(), "Resubscribe failed for %s: %d",
                chr_uuid_str.c_str(), status);
@@ -1080,6 +1233,26 @@ void ShaverCoordinator::fire_ready_event_() {
               });
 }
 
+void ShaverCoordinator::att_progress_() {
+  this->att_last_progress_ms_ = millis();
+}
+
+void ShaverCoordinator::drain_pending_calls_() {
+  if (this->draining_)
+    return;  // re-entrant call from a synchronously-failing drained call
+  this->draining_ = true;
+  while (!this->pending_calls_.empty() && this->connected_ &&
+         this->services_discovered_ && !this->att_busy_()) {
+    auto next = std::move(this->pending_calls_.front());
+    this->pending_calls_.pop_front();
+    next();
+    // If next() started an ATT op, att_busy_() ends the loop; if it
+    // failed synchronously (not_found, gatt_err, …) the loop simply
+    // continues with the following entry.
+  }
+  this->draining_ = false;
+}
+
 void ShaverCoordinator::start_post_auth_setup_() {
   if (this->ready_fired_) {
     ESP_LOGD(this->log_tag_.c_str(),
@@ -1097,16 +1270,15 @@ void ShaverCoordinator::start_post_auth_setup_() {
   // Drain HA service calls that arrived before service discovery
   // completed. HA's coordinator fires read/subscribe/write on
   // 'connected' (not 'ready'), so reads can land while we're still
-  // probing. Each lambda re-enters its read_char/subscribe/etc., which
-  // now sees services_discovered_=true and runs normally.
+  // probing. The drain loop stops as soon as one call occupies the ATT
+  // slot — in particular, the resubscribe burst started above has
+  // already armed the gate, so queued reads stay deferred until every
+  // CCCD write is confirmed instead of racing the burst.
   if (!this->pending_calls_.empty()) {
     ESP_LOGI(this->log_tag_.c_str(),
              "Draining %u queued call(s) deferred until discovery",
              (unsigned) this->pending_calls_.size());
-    auto pending = std::move(this->pending_calls_);
-    this->pending_calls_.clear();
-    for (auto &fn : pending)
-      fn();
+    this->drain_pending_calls_();
   }
 }
 
@@ -1199,6 +1371,10 @@ void ShaverCoordinator::unpair() {
   if (this->bridge_ != nullptr)
     this->bridge_->publish_connected(false);
   this->pending_handle_ = 0;
+  this->write_handle_ = 0;
+  this->pending_cccd_writes_ = 0;
+  this->reg_notify_pending_ = 0;
+  this->att_last_progress_ms_ = 0;
   this->name_handle_ = 0;
   this->notify_map_.clear();
   this->cccd_map_.clear();

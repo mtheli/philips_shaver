@@ -160,6 +160,28 @@ class ShaverCoordinator {
   bool is_already_bonded_();
   void fire_ready_event_();
   void start_post_auth_setup_();
+  // True while any ATT operation this coordinator issued is outstanding:
+  // a HA-driven read, the encryption probe, a HA-driven characteristic
+  // write, or the subscribe burst (notify registrations awaiting their
+  // REG_FOR_NOTIFY_EVT plus CCCD descriptor writes awaiting their
+  // WRITE_DESCR_EVT). Only one ATT request may be in flight per
+  // connection — Bluedroid has been observed to lose the response of an
+  // operation that races another one — so read_char/write_char defer
+  // through pending_calls_ while this holds.
+  bool att_busy_() const {
+    return this->pending_handle_ != 0 || this->probe_handle_ != 0 ||
+           this->write_handle_ != 0 || this->reg_notify_pending_ > 0 ||
+           this->pending_cccd_writes_ > 0;
+  }
+  // Record ATT progress (an op started or completed) for the watchdog.
+  void att_progress_();
+  // Fire deferred calls from pending_calls_ until one occupies the ATT
+  // slot (att_busy_) or the queue is empty. Loop, not recursion: calls
+  // that fail synchronously (not_found, gatt_err) simply let the loop
+  // continue with the next entry, so no completion path can strand the
+  // queue. Re-entrant calls (a fired call completing synchronously and
+  // invoking a drain) are no-ops via draining_.
+  void drain_pending_calls_();
   // Wrapper around bridge_->fire_event() — keeps emit-call-sites short.
   void emit_(const std::string &event_type,
              const std::map<std::string, std::string> &data);
@@ -228,9 +250,41 @@ class ShaverCoordinator {
   uint16_t name_handle_{0};
   std::string remote_name_;
 
-  // Pending HA-driven read
+  // Pending HA-driven read. Single slot — only one GATT read can be in
+  // flight per connection; concurrent requests are serialised via
+  // pending_calls_ (see below).
   uint16_t pending_handle_{0};
   std::string pending_char_uuid_;
+  std::string pending_service_uuid_;
+
+  // Pending HA-driven characteristic write (single slot, cleared from
+  // WRITE_CHAR_EVT). Gated like reads: a write racing an in-flight read
+  // is the same Bluedroid response-loss class observed live for CCCD
+  // descriptor writes.
+  uint16_t write_handle_{0};
+
+  // Subscribe burst tracking. reg_notify_pending_ counts notify
+  // registrations issued whose REG_FOR_NOTIFY_EVT hasn't arrived yet —
+  // incremented synchronously at issue time so the gate is armed BEFORE
+  // the burst's CCCD writes start (the events arrive asynchronously).
+  // pending_cccd_writes_ counts issued CCCD descriptor writes awaiting
+  // WRITE_DESCR_EVT. Reads racing this burst lose their READ_CHAR_EVT
+  // (observed three times live).
+  uint8_t reg_notify_pending_{0};
+  uint8_t pending_cccd_writes_{0};
+
+  // ATT watchdog: att_last_progress_ms_ is stamped whenever a tracked ATT
+  // op starts or completes. If att_busy_() holds with no progress for
+  // ATT_WATCHDOG_MS (response event lost — Bluedroid hiccup, consumed by
+  // another dispatch branch, …), on_loop() force-clears all in-flight
+  // markers, emits read_timeout for a stuck read, falls back to ready for
+  // a stuck probe, and keeps the queue draining instead of wedging until
+  // disconnect.
+  uint32_t att_last_progress_ms_{0};
+  static const uint32_t ATT_WATCHDOG_MS = 10000;
+
+  // Re-entrancy guard for drain_pending_calls_().
+  bool draining_{false};
 
   // Subscriptions
   std::map<uint16_t, std::string> notify_map_;            // handle → char_uuid
@@ -241,13 +295,18 @@ class ShaverCoordinator {
   std::map<uint16_t, uint32_t> last_notify_ms_;           // throttle bookkeeping
   uint32_t notify_throttle_ms_{500};
 
-  // Pending HA service calls deferred until SEARCH_CMPL completes. HA's
+  // Pending HA service calls deferred until they can run. Two reasons a
+  // call lands here: (a) service discovery hasn't completed yet — HA's
   // coordinator fires read/subscribe/write the moment the BLE link is up
-  // (OPEN_EVT), but characteristics aren't queryable until services have
-  // been discovered (SEARCH_CMPL_EVT, ~5–11 s later for our shavers).
+  // (OPEN_EVT), but characteristics aren't queryable until SEARCH_CMPL
+  // (~5–11 s later for our shavers); (b) another read is already in
+  // flight — pending_handle_ is a single slot, so concurrent reads (HA
+  // pipelines its poll via asyncio.gather since bridge 1.10.0) are
+  // serialised here and drained one at a time as each read completes.
   // Each lambda re-enters the originating method, which re-checks
   // connected_/services_discovered_/parent_ and either runs or
-  // re-queues. Drained from SEARCH_CMPL_EVT, cleared on disconnect.
+  // re-queues. Drained from start_post_auth_setup_() and each
+  // read-completion path, cleared on disconnect.
   // Bounded to keep flash/heap predictable if discovery never completes.
   std::deque<std::function<void()>> pending_calls_;
   static const size_t MAX_PENDING_CALLS = 64;

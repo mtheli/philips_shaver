@@ -182,7 +182,7 @@ Read a GATT characteristic on the bonded shaver.
 | | |
 |---|---|
 | **Args** | `service_uuid: string`, `char_uuid: string` |
-| **Side-effect** | Issues an `esp_ble_gattc_read_char`. On `INSUF_AUTH/ENCR` it transparently triggers SMP and retries the read once `AUTH_CMPL` succeeds. |
+| **Side-effect** | Issues an `esp_ble_gattc_read_char`. On `INSUF_AUTH/ENCR` it transparently triggers SMP and retries the read once `AUTH_CMPL` succeeds. Concurrent reads that race the SMP handshake — common when HA fires its poll cycle concurrently — are requeued via the bridge's pending-calls queue and drained on `AUTH_CMPL` (added in 1.10.0). |
 | **Reply** | `_ble_data` event |
 
 **`_ble_data` (success):**
@@ -201,8 +201,14 @@ Read a GATT characteristic on the bonded shaver.
 | `payload` | `""` |
 | `error` | `not_connected` \| `not_found` \| `read_failed` \| `auth_failed` \| `gatt_err_<n>` \| `queue_full` |
 
-If service discovery hasn't completed yet, the call is **queued** and replayed
-once `SEARCH_CMPL_EVT` fires. Overflowing the queue yields `error=queue_full`.
+If service discovery hasn't completed yet — or any other GATT operation is
+in flight (a read, a characteristic write, the encryption probe, or the
+subscribe burst's CCCD writes; since 1.10.0) — the call is **queued** and
+replayed once the ATT slot frees up. Queued operations execute back-to-back
+at BLE pace, so callers may fire several `ble_read_char` calls
+concurrently. A queued read whose response is lost is force-cleared by a
+10 s watchdog (`error=read_timeout`) and the queue keeps draining.
+Overflowing the queue (64 entries) yields `error=queue_full`.
 
 ### `ble_subscribe`
 
@@ -240,7 +246,7 @@ Write a characteristic with response.
 | | |
 |---|---|
 | **Args** | `service_uuid: string`, `char_uuid: string`, `data: string` (hex, no separators) |
-| **Side-effect** | `esp_ble_gattc_write_char` with `WRITE_TYPE_RSP`. |
+| **Side-effect** | `esp_ble_gattc_write_char` with `WRITE_TYPE_RSP`. Since 1.10.0 the write shares the single ATT slot with reads/probe/subscribes: it is queued while another GATT operation is in flight and executed as soon as the slot frees up. |
 | **Reply** | None — success/failure only in the ESP log |
 
 Hex parsing rejects malformed input silently (warning in log, no event).

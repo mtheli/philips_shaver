@@ -1,5 +1,43 @@
 # ESP Bridge Changelog
 
+## v1.10.0 — 2026-07-03
+
+- **Pipelined GATT reads.** `ble_read_char` calls that arrive while another
+  read is in flight are no longer clobbering the single response-routing
+  slot (which silently dropped the earlier read's result). They are now
+  deferred through the bridge's pending-calls queue and drained one at a
+  time as each read completes, so a burst of reads executes back-to-back at
+  BLE pace without a Wi-Fi round-trip between them. Reads that race the SMP
+  handshake (encryption still being established) are requeued and drained
+  once authentication completes instead of failing.
+
+  > The Home Assistant integration fires its poll cycle concurrently
+  > (`asyncio.gather`) when it detects bridge **1.10.0+**, cutting the
+  > post-connect read phase from ~15–23 s to ~2–3 s on a warm connection.
+  > Against older bridges it keeps reading sequentially —
+  > `MIN_BRIDGE_VERSION` stays `1.8.0`.
+
+- **Single ATT-operation scheduler.** Only one ATT request may be
+  outstanding per connection, and Bluedroid has been observed (live,
+  three times) to lose the response of an operation racing another one —
+  e.g. a read racing the post-reconnect CCCD subscribe burst. All
+  coordinator-issued GATT operations now share one in-flight gate:
+  - Reads **and characteristic writes** defer through the pending-calls
+    queue while any tracked operation is outstanding (a read, a write,
+    the encryption probe — whose characteristic `8d560117` doubles as a
+    regular poll characteristic — or the subscribe burst, armed
+    synchronously at registration so the very first queued read cannot
+    race the CCCD writes; `WRITE_DESCR_EVT` handler newly added).
+  - The queue drains as a loop on every completion path, so calls that
+    fail synchronously (`not_found`, `gatt_err_*`) can never strand the
+    entries queued behind them.
+  - One ATT watchdog: if the in-flight operation makes no progress for
+    10 s, all markers are force-cleared, a stuck read is resolved to HA
+    as `error=read_timeout`, a stuck probe falls back to firing `ready`,
+    and the queue keeps draining.
+  - Late completion events are matched against the issued handle and
+    ignored as stray if they don't belong to the current operation.
+
 ## v1.9.0 — 2026-06-30
 
 - **Per-slot `friendly_name:` and `area:`.** Each `philips_shaver:` slot can
