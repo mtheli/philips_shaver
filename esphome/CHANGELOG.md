@@ -38,6 +38,15 @@
   - Late completion events are matched against the issued handle and
     ignored as stray if they don't belong to the current operation.
 
+- **Connection-parameter visibility.** The bridge now logs the link's
+  connection parameters: `Conn params initial: interval=… ms latency=…`
+  on connect, and `Conn params now: …` whenever they change (polled on
+  read/notify completions, since ESPHome drops the GAP update event
+  before it reaches components). Devices renegotiate these parameters
+  by state — fast after connecting, a power-save interval with slave
+  latency once idle — which directly bounds how fast a poll batch can
+  run. These INFO lines make that visible when debugging slow reads.
+
 ## v1.9.0 — 2026-06-30
 
 - **Per-slot `friendly_name:` and `area:`.** Each `philips_shaver:` slot can

@@ -37,6 +37,22 @@ std::string ShaverCoordinator::get_remote_mac() const {
   return std::string(mac);
 }
 
+void ShaverCoordinator::log_conn_params_if_changed_() {
+  if (this->parent_ == nullptr || !this->connected_)
+    return;
+  esp_gap_conn_params_t p;
+  if (esp_ble_get_current_conn_params(this->parent_->get_remote_bda(), &p) !=
+      ESP_OK)
+    return;
+  if (p.interval == this->last_conn_interval_units_)
+    return;
+  this->last_conn_interval_units_ = p.interval;
+  ESP_LOGI(this->log_tag_.c_str(),
+           "Conn params now: interval=%u ms latency=%u timeout=%u ms",
+           (unsigned) (p.interval * 125 / 100), (unsigned) p.latency,
+           (unsigned) (p.timeout * 10));
+}
+
 void ShaverCoordinator::apply_smp_params_() {
   // --- BLE Security (SMP) configuration ---
   //
@@ -245,6 +261,23 @@ void ShaverCoordinator::on_gattc_event(esp_gattc_cb_event_t event,
     return;
 
   switch (event) {
+    case ESP_GATTC_CONNECT_EVT: {
+      if (memcmp(param->connect.remote_bda,
+                 this->parent_->get_remote_bda(), 6) != 0)
+        break;
+      // Initial link parameters (central's defaults). Sizes the fast-interval
+      // window the post-connect read batch races against — the peripheral
+      // typically requests power-save parameters a few seconds in (logged
+      // via ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT).
+      ESP_LOGI(this->log_tag_.c_str(),
+               "Conn params initial: interval=%u ms latency=%u timeout=%u ms",
+               (unsigned) (param->connect.conn_params.interval * 125 / 100),
+               (unsigned) param->connect.conn_params.latency,
+               (unsigned) (param->connect.conn_params.timeout * 10));
+      this->last_conn_interval_units_ = param->connect.conn_params.interval;
+      break;
+    }
+
     case ESP_GATTC_OPEN_EVT: {
       if (param->open.status == ESP_GATT_OK) {
         // Apply SMP params now, before service discovery and pairing.
@@ -536,6 +569,7 @@ void ShaverCoordinator::on_gattc_event(esp_gattc_cb_event_t event,
         ESP_LOGI(this->log_tag_.c_str(), "Read %s: %s (%d bytes)",
                  this->pending_char_uuid_.c_str(), hex_payload.c_str(),
                  param->read.value_len);
+        this->log_conn_params_if_changed_();
 
         this->emit_(EVENT_DATA,
                     {
@@ -642,6 +676,7 @@ void ShaverCoordinator::on_gattc_event(esp_gattc_cb_event_t event,
         break;
       }
       this->last_notify_ms_[param->notify.handle] = now;
+      this->log_conn_params_if_changed_();
 
       std::string hex_payload =
           format_hex(param->notify.value, param->notify.value_len);
@@ -671,6 +706,20 @@ void ShaverCoordinator::on_gap_event(esp_gap_ble_cb_event_t event,
     return;
 
   switch (event) {
+    case ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT: {
+      if (memcmp(param->update_conn_params.bda,
+                 this->parent_->get_remote_bda(), 6) != 0)
+        break;
+      ESP_LOGI(this->log_tag_.c_str(),
+               "Conn params updated: interval=%u ms latency=%u timeout=%u ms "
+               "(status=%d)",
+               (unsigned) (param->update_conn_params.conn_int * 125 / 100),
+               (unsigned) param->update_conn_params.latency,
+               (unsigned) (param->update_conn_params.timeout * 10),
+               (int) param->update_conn_params.status);
+      break;
+    }
+
     case ESP_GAP_BLE_NC_REQ_EVT:
       ESP_LOGI(this->log_tag_.c_str(),
                "Numeric Comparison request — auto-confirming (passkey %06lu)",

@@ -250,6 +250,13 @@ class ShaverCoordinator {
   uint16_t name_handle_{0};
   std::string remote_name_;
 
+  // Last connection interval (1.25 ms units) seen via
+  // esp_ble_get_current_conn_params(). Polled on read completions because
+  // ESPHome's esp32_ble drops ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT before it
+  // reaches component GAP handlers — the event-based path never fires.
+  uint16_t last_conn_interval_units_{0};
+  void log_conn_params_if_changed_();
+
   // Pending HA-driven read. Single slot — only one GATT read can be in
   // flight per connection; concurrent requests are serialised via
   // pending_calls_ (see below).
