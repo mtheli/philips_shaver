@@ -88,19 +88,6 @@ Pipelined (bridge ≥ 1.10.0)
     instead of letting them time out
 ```
 
-Measured on a reconnect (28-characteristic poll, fresh 35 ms link):
-
-```text
-                0 s       2 s       4 s       6 s       8 s
-                ├─────────┼─────────┼─────────┼─────────┼──
-  pipelined     [ setup ▒▒▒▒][█ 28 reads ██]                5.5 s · 28/28 ✓
-  sequential    [ setup ▒▒ + read #1 ✗ 5 s ][ 27 reads █]   8.5 s · 27/28 ✗
-                              └─ first read expired on the HA side while
-                                 the bridge was still subscribing; the
-                                 bridge executed it later, but nobody was
-                                 waiting for the reply anymore
-```
-
 How fast a batch completes is bounded by the BLE **connection
 interval**, which the device itself renegotiates depending on its
 state: fast right after connecting, a power-save interval (with slave
