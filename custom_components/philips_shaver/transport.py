@@ -432,6 +432,16 @@ class EspBridgeTransport(ShaverTransport):
         self._pending_info: asyncio.Future[dict[str, str]] | None = None
         self._needs_resubscribe = False
         self._ready_event = asyncio.Event()
+        # Counts "disconnected" status events. The coordinator compares
+        # this against the count it saw when live setup ran to detect
+        # reconnects it never observed: the shaver can drop the link and
+        # be back within ~0.3 s, faster than the monitor loop wakes, so
+        # is_connected never reads False from the loop's perspective and
+        # the fresh read batch never runs. "disconnected" fires exactly
+        # once per real disconnect — unlike "ready", which the bridge
+        # heartbeat re-fires while no subscriptions exist and which would
+        # oscillate with a teardown/re-setup cycle.
+        self._disconnect_count = 0
         self._last_uptime: int | None = None
         self._boot_time: datetime | None = None
 
@@ -533,6 +543,11 @@ class EspBridgeTransport(ShaverTransport):
     @property
     def connection_path(self) -> str | None:
         return self._device_name if self._esp_alive else None
+
+    @property
+    def disconnect_count(self) -> int:
+        """Number of BLE "disconnected" status events seen so far."""
+        return self._disconnect_count
 
     @property
     def needs_resubscribe(self) -> bool:
@@ -708,6 +723,7 @@ class EspBridgeTransport(ShaverTransport):
                 pass  # GATT discovery still in progress
             elif status == "disconnected":
                 self._shaver_connected = False
+                self._disconnect_count += 1
                 self._cancel_pending_reads()
 
             # Fire callback when any component of state changed
