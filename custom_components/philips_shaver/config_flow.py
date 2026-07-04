@@ -31,6 +31,7 @@ from bleak_retry_connector import (
 )
 
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -70,7 +71,9 @@ from .const import (
     CONF_ESP_DEVICE_NAME,
     CONF_ESP_BRIDGE_ID,
     CONF_NOTIFY_THROTTLE,
+    CONF_PIPELINED_READS,
     DEFAULT_NOTIFY_THROTTLE,
+    DEFAULT_PIPELINED_READS,
     MIN_NOTIFY_THROTTLE,
     MAX_NOTIFY_THROTTLE,
 )
@@ -115,6 +118,10 @@ class PhilipsShaverOptionsFlow(OptionsFlowWithReload):
                 entry_data[CONF_NOTIFY_THROTTLE] = int(
                     user_input[CONF_NOTIFY_THROTTLE]
                 )
+            if is_esp and CONF_PIPELINED_READS in user_input:
+                entry_data[CONF_PIPELINED_READS] = bool(
+                    user_input[CONF_PIPELINED_READS]
+                )
             return self.async_create_entry(data=entry_data)
 
         schema_fields: dict = {}
@@ -129,6 +136,7 @@ class PhilipsShaverOptionsFlow(OptionsFlowWithReload):
                     mode=NumberSelectorMode.BOX,
                 )
             )
+            schema_fields[vol.Required(CONF_PIPELINED_READS)] = BooleanSelector()
 
         if not schema_fields:
             # Direct BLE: no configurable options currently
@@ -141,6 +149,10 @@ class PhilipsShaverOptionsFlow(OptionsFlowWithReload):
             suggested_values[CONF_NOTIFY_THROTTLE] = self.config_entry.options.get(
                 CONF_NOTIFY_THROTTLE,
                 DEFAULT_NOTIFY_THROTTLE,
+            )
+            suggested_values[CONF_PIPELINED_READS] = self.config_entry.options.get(
+                CONF_PIPELINED_READS,
+                DEFAULT_PIPELINED_READS,
             )
 
         return self.async_show_form(

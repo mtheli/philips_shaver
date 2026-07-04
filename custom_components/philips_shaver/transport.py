@@ -394,6 +394,7 @@ class EspBridgeTransport(ShaverTransport):
         address: str,
         esphome_device_name: str,
         esp_bridge_id: str = "",
+        pipelined_reads_enabled: bool = True,
     ) -> None:
         self._hass = hass
         self._address = address
@@ -415,9 +416,13 @@ class EspBridgeTransport(ShaverTransport):
         # same uuid must not clobber the poll's future (both waiters get
         # resolved by the one bridge reply).
         self._pending_reads: dict[str, list[asyncio.Future[bytes | None]]] = {}
+        # User opt-out from the options flow; the entry reloads on change,
+        # so this is fixed for the transport's lifetime.
+        self._pipelined_reads_enabled = pipelined_reads_enabled
         # True once the bridge reported a firmware that serialises
-        # overlapping GATT reads (>= BRIDGE_PIPELINED_READS_VERSION).
-        # Computed once per version report, not per poll.
+        # overlapping GATT reads (>= BRIDGE_PIPELINED_READS_VERSION) and the
+        # user hasn't disabled pipelining. Computed once per version report,
+        # not per poll.
         self._pipelined_reads = False
         self._last_read_errors: dict[str, str] = {}
         self._notify_callbacks: dict[str, Callable[[str, bytes], None]] = {}
@@ -625,8 +630,10 @@ class EspBridgeTransport(ShaverTransport):
                 if version != self._bridge_version:
                     self._bridge_version = version
                     try:
-                        self._pipelined_reads = Version(version) >= Version(
-                            BRIDGE_PIPELINED_READS_VERSION
+                        self._pipelined_reads = (
+                            self._pipelined_reads_enabled
+                            and Version(version)
+                            >= Version(BRIDGE_PIPELINED_READS_VERSION)
                         )
                     except Exception:  # noqa: BLE001 — unparseable (dev build)
                         self._pipelined_reads = False
@@ -861,20 +868,72 @@ class EspBridgeTransport(ShaverTransport):
             # (read_timeout, queue_full, not_found) still resolve futures
             # early, so a failure-free ceiling costs nothing in wall-clock.
             batch_timeout = BATCH_READ_TIMEOUT_BASE + 1.0 * len(char_uuids)
+            started = time.monotonic()
+            offsets: dict[str, float] = {}
+
+            async def _timed_read(u: str) -> bytes | None:
+                value = await self.read_char(u, timeout=batch_timeout)
+                offsets[u] = time.monotonic() - started
+                return value
+
             results = await asyncio.gather(
-                *(self.read_char(u, timeout=batch_timeout) for u in char_uuids)
+                *(_timed_read(u) for u in char_uuids)
             )
-            return dict(zip(char_uuids, results))
+            batch = dict(zip(char_uuids, results))
+            self._log_batch_timing("pipelined", batch, started)
+            # Completion timeline: uniform ~x-ms gaps mean the link paces the
+            # queue (connection interval); a burst at the end means delivery
+            # stalls elsewhere.
+            if _LOGGER.isEnabledFor(logging.DEBUG):
+                timeline = " ".join(
+                    f"{u[:8].lstrip('0') or '0'}={t:.2f}"
+                    for u, t in sorted(offsets.items(), key=lambda kv: kv[1])
+                )
+                _LOGGER.debug(
+                    "Read batch timeline for %s [%s]: %s",
+                    self._address,
+                    self._esp_bridge_id or self._device_name,
+                    timeline,
+                )
+            return batch
 
         # Serial fallback: older bridges have a single response slot that
         # silently drops all-but-the-last overlapping read.
+        started = time.monotonic()
         sequential: dict[str, bytes | None] = {}
         for uuid in char_uuids:
             if not self.is_connected:
                 sequential[uuid] = None
                 continue
             sequential[uuid] = await self.read_char(uuid)
+        self._log_batch_timing("sequential", sequential, started)
         return sequential
+
+    def _log_batch_timing(
+        self, mode: str, results: dict[str, bytes | None], started: float
+    ) -> None:
+        """One line per poll batch so pipelined vs. sequential is comparable."""
+        elapsed = time.monotonic() - started
+        ok = sum(1 for v in results.values() if v is not None)
+        slot = self._esp_bridge_id or self._device_name
+        _LOGGER.info(
+            "Read batch (%s) for %s [%s]: %d/%d chars in %.2f s (bridge %s)",
+            mode,
+            self._address,
+            slot,
+            ok,
+            len(results),
+            elapsed,
+            self._bridge_version or "unknown",
+        )
+        failed = [u for u, v in results.items() if v is None]
+        if failed:
+            _LOGGER.debug(
+                "Read batch for %s [%s]: no data for %s",
+                self._address,
+                slot,
+                ", ".join(failed),
+            )
 
     async def write_char(self, char_uuid: str, data: bytes) -> None:
         if not self._setup_done:

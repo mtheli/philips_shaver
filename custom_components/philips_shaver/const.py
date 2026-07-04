@@ -555,6 +555,11 @@ DEFAULT_NOTIFY_THROTTLE = 500
 MIN_NOTIFY_THROTTLE = 100
 MAX_NOTIFY_THROTTLE = 5000
 
+# Opt-out for pipelined poll reads (only effective on bridges >=
+# BRIDGE_PIPELINED_READS_VERSION; older bridges are always read serially).
+CONF_PIPELINED_READS = "pipelined_reads"
+DEFAULT_PIPELINED_READS = True
+
 # Service UUID for each BLE service
 SVC_BATTERY = "0000180f-0000-1000-8000-00805f9b34fb"
 SVC_DEVICE_INFO = "0000180a-0000-1000-8000-00805f9b34fb"

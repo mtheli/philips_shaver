@@ -14,10 +14,12 @@
       "init": {
         "title": "Philips Shaver Einstellungen",
         "data": {
-          "notify_throttle_ms": "Benachrichtigungs-Drosselung"
+          "notify_throttle_ms": "Benachrichtigungs-Drosselung",
+          "pipelined_reads": "Gebündelte GATT-Lesevorgänge"
         },
         "data_description": {
-          "notify_throttle_ms": "Mindestabstand zwischen BLE-Benachrichtigungen, die von der ESP-Bridge weitergeleitet werden (in Millisekunden). Niedrigere Werte liefern schnellere Updates, können aber den ESP-API-Buffer überlasten. Gilt nur für ESP32-Bridge-Verbindungen."
+          "notify_throttle_ms": "Mindestabstand zwischen BLE-Benachrichtigungen, die von der ESP-Bridge weitergeleitet werden (in Millisekunden). Niedrigere Werte liefern schnellere Updates, können aber den ESP-API-Buffer überlasten. Gilt nur für ESP32-Bridge-Verbindungen.",
+          "pipelined_reads": "Sendet die Lesevorgänge des Abfragezyklus gebündelt an die ESP-Bridge statt einzeln (deutlich schnellere Reconnects). Erfordert Bridge-Firmware 1.10.0 oder neuer — bei älterer Firmware wird unabhängig von dieser Einstellung immer sequenziell gelesen. Nur deaktivieren, falls wiederholt Lese-Timeouts oder ATT-Watchdog-Meldungen in den Bridge-Logs auftreten. Gilt nur für ESP32-Bridge-Verbindungen."
         }
       }
     }

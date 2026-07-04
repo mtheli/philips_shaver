@@ -14,10 +14,12 @@
       "init": {
         "title": "Philips Shaver Settings",
         "data": {
-          "notify_throttle_ms": "Notification Throttle"
+          "notify_throttle_ms": "Notification Throttle",
+          "pipelined_reads": "Pipelined GATT reads"
         },
         "data_description": {
-          "notify_throttle_ms": "Minimum interval between BLE notification events forwarded by the ESP bridge (in milliseconds). Lower values give faster updates but may overload the ESP API buffer. Only applies to ESP32 bridge connections."
+          "notify_throttle_ms": "Minimum interval between BLE notification events forwarded by the ESP bridge (in milliseconds). Lower values give faster updates but may overload the ESP API buffer. Only applies to ESP32 bridge connections.",
+          "pipelined_reads": "Send the poll cycle's GATT reads to the ESP bridge as one batch instead of one at a time (much faster reconnects). Requires bridge firmware 1.10.0 or newer — on older firmware reads always stay sequential, regardless of this setting. Disable only if you see repeated read timeouts or ATT watchdog messages in the bridge logs. Only applies to ESP32 bridge connections."
         }
       }
     }

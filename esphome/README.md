@@ -31,6 +31,49 @@ setups, troubleshooting) see [`docs/ESP_BRIDGE_SETUP.md`](../docs/ESP_BRIDGE_SET
   -85 dBm). RSSI around -100 dBm is the noise floor — pairing/connection
   will fail there.
 
+## Pipelined GATT reads (bridge ≥ 1.10.0)
+
+How the integration polls characteristics depends on the bridge firmware
+version, which the bridge reports in its status events:
+
+- **Bridge ≥ 1.10.0 (pipelined):** Home Assistant fires the whole poll
+  batch at once. The firmware serialises everything through a single
+  ATT-operation scheduler — only one GATT read/write/subscribe is in
+  flight on the BLE link at any time; the rest wait in the bridge's
+  pending-calls queue and are drained back-to-back as each operation
+  completes. Reads deferred behind connection setup (service discovery,
+  subscription writes) simply wait in the queue instead of timing out
+  individually, so a poll batch completes without lost values.
+  A 10-second ATT watchdog recovers the queue if the BLE stack ever
+  drops a completion event, so a lost read costs one 10 s stall instead
+  of a stuck connection.
+- **Bridge < 1.10.0 (sequential):** older firmware has a single response
+  slot, so overlapping reads would silently drop all but the last reply.
+  The integration detects this from the reported version and falls back
+  to reading one characteristic at a time, waiting for each reply —
+  exactly the pre-1.10.0 behavior. Everything keeps working, just with
+  a slower read phase, and a read fired during connection setup can
+  time out on the HA side before the bridge executes it.
+
+How fast a batch completes is bounded by the BLE **connection
+interval**, which the device itself renegotiates depending on its
+state: fast right after connecting, a power-save interval (with slave
+latency) once idle, and fast again while the motor runs. Each GATT
+read costs a few connection events, so the same 28-characteristic
+batch can take ~3 s on a fresh connection and ~14 s on a long-idle
+one — in both modes. Pipelining removes the per-read HA→ESP
+round-trip and the timeout risk; it cannot make the radio tick
+faster. The firmware logs `Conn params initial/now: interval=… ms`
+lines (INFO) whenever the parameters change, which makes this
+directly visible.
+
+No action is required when updating: the integration picks the right
+mode automatically. Pipelining can also be turned off without
+reflashing via the integration options ("Pipelined GATT reads",
+enabled by default) — useful if the bridge logs show repeated read
+timeouts or ATT watchdog messages, e.g. in a congested radio
+environment.
+
 ## Version pinning
 
 The integration enforces a minimum bridge version (`MIN_BRIDGE_VERSION`

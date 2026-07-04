@@ -21,6 +21,8 @@ from .const import (
     CONF_ESP_BRIDGE_ID,
     CONF_ESP_DEVICE_ID_LEGACY,
     CONF_AREA,
+    CONF_PIPELINED_READS,
+    DEFAULT_PIPELINED_READS,
     CHAR_SYSTEM_NOTIFICATIONS,
 )
 from .coordinator import PhilipsShaverCoordinator
@@ -184,7 +186,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         esp_device_name = entry.data[CONF_ESP_DEVICE_NAME]
         esp_bridge_id = entry.data.get(CONF_ESP_BRIDGE_ID, "")
         address = entry.data.get(CONF_ADDRESS, "")
-        transport = EspBridgeTransport(hass, address, esp_device_name, esp_bridge_id)
+        transport = EspBridgeTransport(
+            hass,
+            address,
+            esp_device_name,
+            esp_bridge_id,
+            pipelined_reads_enabled=entry.options.get(
+                CONF_PIPELINED_READS, DEFAULT_PIPELINED_READS
+            ),
+        )
     else:
         address = entry.data["address"]
         transport = BleakTransport(hass, address)
