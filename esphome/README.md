@@ -100,6 +100,18 @@ faster. The firmware logs `Conn params initial/now: interval=… ms`
 lines (INFO) whenever the parameters change, which makes this
 directly visible.
 
+## Connection-parameter boost (bridge ≥ 1.11.0)
+
+To lift that radio bound too, the bridge asks the device for a short
+connection interval (30–45 ms, no slave latency) whenever a batch
+piles up in its queue while the link sits in the power-save profile.
+The device is free to reject the request, but in practice it accepts
+and the batch then runs at fresh-connection speed. No restore step is
+needed: the device renegotiates its own power-save parameters once it
+goes idle again, exactly as it does after a fresh connect. The boost
+request is logged as `Requesting conn-param boost … ms/lat …` (INFO)
+and the accepted parameters appear in the next `Conn params now` line.
+
 No action is required when updating: the integration picks the right
 mode automatically. Pipelining can also be turned off without
 reflashing via the integration options ("Pipelined GATT reads",

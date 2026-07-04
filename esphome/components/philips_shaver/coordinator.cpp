@@ -53,6 +53,49 @@ void ShaverCoordinator::log_conn_params_if_changed_() {
            (unsigned) (p.timeout * 10));
 }
 
+void ShaverCoordinator::maybe_boost_conn_params_() {
+  if (this->parent_ == nullptr || !this->connected_)
+    return;
+  if (this->pending_calls_.size() < BOOST_QUEUE_DEPTH)
+    return;
+  uint32_t now = millis();
+  if (this->last_boost_request_ms_ != 0 &&
+      (now - this->last_boost_request_ms_) < BOOST_COOLDOWN_MS)
+    return;
+  esp_gap_conn_params_t current;
+  if (esp_ble_get_current_conn_params(this->parent_->get_remote_bda(),
+                                      &current) != ESP_OK)
+    return;
+  // Fresh connections (35 ms) and motor-on links (15 ms) are already
+  // fast; only the idle power-save profile (245 ms + latency 1) needs
+  // the boost.
+  if (current.interval <= BOOST_INTERVAL_MAX_UNITS && current.latency == 0)
+    return;
+
+  esp_ble_conn_update_params_t params = {};
+  memcpy(params.bda, this->parent_->get_remote_bda(), sizeof(params.bda));
+  params.min_int = BOOST_INTERVAL_MIN_UNITS;
+  params.max_int = BOOST_INTERVAL_MAX_UNITS;
+  params.latency = 0;
+  params.timeout = current.timeout;
+
+  this->last_boost_request_ms_ = now;
+  auto status = esp_ble_gap_update_conn_params(&params);
+  if (status == ESP_OK) {
+    ESP_LOGI(this->log_tag_.c_str(),
+             "Requesting conn-param boost %u ms/lat %u -> %u-%u ms/lat 0 "
+             "(%u call(s) queued)",
+             (unsigned) (current.interval * 125 / 100),
+             (unsigned) current.latency,
+             (unsigned) (BOOST_INTERVAL_MIN_UNITS * 125 / 100),
+             (unsigned) (BOOST_INTERVAL_MAX_UNITS * 125 / 100),
+             (unsigned) this->pending_calls_.size());
+  } else {
+    ESP_LOGW(this->log_tag_.c_str(), "Conn-param boost request failed: %d",
+             status);
+  }
+}
+
 void ShaverCoordinator::apply_smp_params_() {
   // --- BLE Security (SMP) configuration ---
   //
@@ -356,6 +399,7 @@ void ShaverCoordinator::on_gattc_event(esp_gattc_cb_event_t event,
       this->pending_cccd_writes_ = 0;
       this->reg_notify_pending_ = 0;
       this->att_last_progress_ms_ = 0;
+      this->last_boost_request_ms_ = 0;
       this->name_handle_ = 0;
       // Clear handle-based maps (handles are invalid after disconnect)
       // but keep desired_subscriptions_ for auto-resubscribe
@@ -907,6 +951,7 @@ void ShaverCoordinator::read_char(const std::string &service_uuid,
         [this, service_uuid, characteristic_uuid]() {
           this->read_char(service_uuid, characteristic_uuid);
         });
+    this->maybe_boost_conn_params_();
     return;
   }
 
@@ -983,6 +1028,7 @@ void ShaverCoordinator::subscribe(const std::string &service_uuid,
         [this, service_uuid, characteristic_uuid]() {
           this->subscribe(service_uuid, characteristic_uuid);
         });
+    this->maybe_boost_conn_params_();
     return;
   }
 
@@ -1134,6 +1180,7 @@ void ShaverCoordinator::write_char(const std::string &service_uuid,
         [this, service_uuid, characteristic_uuid, hex_data]() {
           this->write_char(service_uuid, characteristic_uuid, hex_data);
         });
+    this->maybe_boost_conn_params_();
     return;
   }
 
@@ -1424,6 +1471,7 @@ void ShaverCoordinator::unpair() {
   this->pending_cccd_writes_ = 0;
   this->reg_notify_pending_ = 0;
   this->att_last_progress_ms_ = 0;
+  this->last_boost_request_ms_ = 0;
   this->name_handle_ = 0;
   this->notify_map_.clear();
   this->cccd_map_.clear();

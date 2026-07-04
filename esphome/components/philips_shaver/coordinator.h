@@ -257,6 +257,29 @@ class ShaverCoordinator {
   uint16_t last_conn_interval_units_{0};
   void log_conn_params_if_changed_();
 
+  // Connection-parameter boost: the shaver drops a ~1 min idle link to
+  // 245 ms interval + slave latency 1 (~490 ms per ATT round-trip), which
+  // stretches a 28-char poll batch to ~14 s. When enough calls pile up in
+  // pending_calls_, request a short interval for the duration of the
+  // burst. No restore needed — the shaver re-requests its power-save
+  // profile itself after going idle again, and the stack auto-accepts
+  // peripheral-initiated updates (observed live: 35→245 ms downshift
+  // without any action on our side). Success shows up in the
+  // log_conn_params_if_changed_() poll; the GAP UPDATE_CONN_PARAMS event
+  // never reaches us (dropped by esp32_ble).
+  void maybe_boost_conn_params_();
+  uint32_t last_boost_request_ms_{0};
+  // Queue depth that identifies a batch (a lone deferred read isn't
+  // worth a GAP round-trip).
+  static const size_t BOOST_QUEUE_DEPTH = 3;
+  // Requested range in 1.25 ms units: 30–45 ms. Conservative on purpose —
+  // two coordinator slots plus bluetooth_proxy share one antenna.
+  static const uint16_t BOOST_INTERVAL_MIN_UNITS = 24;
+  static const uint16_t BOOST_INTERVAL_MAX_UNITS = 36;
+  // Re-request cooldown so a long burst doesn't spam GAP while the
+  // peripheral is still negotiating (or refusing).
+  static const uint32_t BOOST_COOLDOWN_MS = 10000;
+
   // Pending HA-driven read. Single slot — only one GATT read can be in
   // flight per connection; concurrent requests are serialised via
   // pending_calls_ (see below).

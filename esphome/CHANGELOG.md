@@ -1,5 +1,27 @@
 # ESP Bridge Changelog
 
+## v1.11.0 — 2026-07-04
+
+- **Connection-parameter boost for batched reads.** After ~1–2 minutes of
+  idle the device renegotiates the link into a power-save profile (245 ms
+  connection interval + slave latency 1), which slows every ATT
+  round-trip to ~490 ms — a full poll batch on such a link took ~14 s
+  even with pipelining. When three or more calls pile up in the bridge's
+  pending queue while the link sits in a slow profile, the bridge now
+  requests a short interval (30–45 ms, latency 0) via
+  `esp_ble_gap_update_conn_params()`. Measured live on XP9201 and QP4530:
+  the device accepts within ~2.5–3 s and the rest of the batch runs at
+  fresh-connection pace — an 18-characteristic batch dropped from ~9–13 s
+  to ~4 s.
+  - No restore step needed: the device renegotiates its own power-save
+    profile once the link goes idle again, exactly as it does after a
+    fresh connect.
+  - Fresh (35 ms) and motor-on (15 ms) links are detected and left
+    untouched; a 10 s cooldown prevents repeated GAP requests while a
+    negotiation is still pending.
+  - The request is logged as `Requesting conn-param boost …` (INFO); the
+    accepted parameters appear in the next `Conn params now` line.
+
 ## v1.10.0 — 2026-07-03
 
 - **Pipelined GATT reads.** `ble_read_char` calls that arrive while another
