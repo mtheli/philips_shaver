@@ -597,7 +597,16 @@ class EspBridgeTransport(ShaverTransport):
                 _LOGGER.debug("ESP read error for %s: %s", uuid, error)
                 return
 
-            if not uuid or not payload_hex:
+            if not uuid:
+                return
+
+            if not payload_hex:
+                # A successful read of an empty value (0-byte payload, no
+                # error field) — e.g. a blank Device Information string.
+                # Resolve the waiters with None instead of dropping the
+                # event, which would leave them running into the read
+                # timeout and stall every poll on affected characteristics.
+                self._resolve_pending_reads(uuid, None)
                 return
 
             if mac and not self._detected_mac:
