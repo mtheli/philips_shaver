@@ -15,16 +15,16 @@ Bluetooth access from the HA host.
 
 ## Tested Hardware
 
-| Board | Status |
-|-------|--------|
-| [M5Stack Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) (ESP32-PICO) | Confirmed (maintainer, [#3](https://github.com/mtheli/philips_shaver/issues/3)) |
-| Lolin D32 (ESP32) | Confirmed ([forum](https://community.home-assistant.io/t/philips-bluetooth-shaver-monitoring/858822/)) |
-| [M5Stack NanoC6](https://docs.m5stack.com/en/core/M5NanoC6) (ESP32-C6) | Confirmed ([#7](https://github.com/mtheli/philips_shaver/issues/7)) |
-| [M5Stack AtomS3R](https://docs.m5stack.com/en/core/AtomS3R) (ESP32-S3) | Confirmed (maintainer) |
-| [M5Stack AtomS3U](https://docs.m5stack.com/en/core/AtomS3U) (ESP32-S3) | Confirmed ([#6](https://github.com/mtheli/philips_shaver/issues/6), v0.13.0+) |
-| ESP32-S3 DevKitC-1 | Should work (same SoC) |
-| Generic ESP32-DevKit | Should work (same SoC) |
-| ESP32-C3 | Untested — BLE stack should be compatible |
+| Board | Tested | Status |
+| :--- | :---: | :--- |
+| [M5Stack Atom Lite](https://docs.m5stack.com/en/core/ATOM%20Lite) (ESP32-PICO) | :white_check_mark: | Maintainer; Community ([#3](https://github.com/mtheli/philips_shaver/issues/3)) |
+| [M5Stack AtomS3R](https://docs.m5stack.com/en/core/AtomS3R) (ESP32-S3) | :white_check_mark: | Maintainer — validated incl. reboot/bond persistence ([#6](https://github.com/mtheli/philips_shaver/issues/6)) |
+| [M5Stack AtomS3U](https://docs.m5stack.com/en/core/AtomS3U) (ESP32-S3) | :white_check_mark: | Community ([#6](https://github.com/mtheli/philips_shaver/issues/6), v0.13.0+ / bridge ≥ 1.7.0) |
+| [M5Stack NanoC6](https://docs.m5stack.com/en/core/M5NanoC6) (ESP32-C6) | :white_check_mark: | Community ([#7](https://github.com/mtheli/philips_shaver/issues/7)) |
+| Lolin D32 (classic ESP32) | :white_check_mark: | Community ([forum](https://community.home-assistant.io/t/philips-bluetooth-shaver-monitoring/858822/)) |
+| ESP32-S3 DevKitC-1 | :grey_question: | Should work — same SoC as the confirmed AtomS3R/AtomS3U |
+| Generic ESP32-DevKit | :grey_question: | Should work — same SoC as the confirmed Atom Lite / Lolin D32 |
+| ESP32-C3 | :grey_question: | Untested with this bridge — BLE stack should be compatible |
 
 ## Prerequisites
 
