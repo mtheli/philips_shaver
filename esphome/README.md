@@ -9,6 +9,47 @@ Use this when Home Assistant itself has no Bluetooth adapter in range of
 the shaver, when you want to monitor multiple devices from one bridge, or
 when you prefer a dedicated, always-connected bridge.
 
+Side by side with the Direct BLE path (Home Assistant's own Bluetooth
+adapter), which the integration uses when no bridge is configured:
+
+```text
+  Direct BLE                            ESP bridge
+
+  ┌─────────────────────┐              ┌─────────────────────┐
+  │   Home Assistant    │              │   Home Assistant    │
+  │  ┌───────────────┐  │              │  ┌───────────────┐  │
+  │  │  integration  │  │              │  │  integration  │  │
+  │  └───────┬───────┘  │              │  └───────┬───────┘  │
+  │   bleak / BlueZ     │              │  ESPHome native API │
+  │  ┌───────┴───────┐  │              └──────────┼──────────┘
+  │  │  BT adapter   │  │                    Wi-Fi│ services ▼
+  │  └───────┬───────┘  │                         │ events   ▲
+  └──────────┼──────────┘              ┌──────────┴──────────┐
+             │ BLE                     │        ESP32        │
+             ▼                         │   philips_shaver    │
+      ┌────────────┐                   │  BLE client — owns  │
+      │   shaver   │                   │  connection + bond  │
+      └────────────┘                   └─────┬─────────┬─────┘
+                                          BLE│          │BLE
+                                             ▼          ▼
+                                       ┌──────────┐ ┌──────────┐
+                                       │  shaver  │ │ OneBlade │
+                                       └──────────┘ └──────────┘
+```
+
+- **Where the BLE link lives:** Direct BLE ties the connection to the HA
+  host's adapter — the shaver must be in radio range of your server. With
+  the bridge, the BLE link terminates on the ESP32, which you can place
+  anywhere with Wi-Fi coverage (e.g. in the bathroom).
+- **Who holds the bond:** on the bridge path the ESP stores the LE bond
+  in its own flash (NVS), independent of Home Assistant restarts,
+  container rebuilds, or the host's BlueZ state.
+- **What travels over Wi-Fi:** plain ESPHome traffic — HA calls services
+  (`ble_read_char_<bridge_id>`, …) and the bridge answers with events.
+  No Bluetooth stack is involved on the HA side at all.
+- **Multi-device:** one bridge serves several devices, each as its own
+  slot with its own service set (e.g. shaver + OneBlade).
+
 For end-to-end setup instructions (configuration paths, flashing, multi-device
 setups, troubleshooting) see [`docs/ESP_BRIDGE_SETUP.md`](../docs/ESP_BRIDGE_SETUP.md).
 
@@ -47,6 +88,21 @@ version, which the bridge reports in its status events:
   A 10-second ATT watchdog recovers the queue if the BLE stack ever
   drops a completion event, so a lost read costs one 10 s stall instead
   of a stuck connection.
+
+  ```text
+  HA                ESP                 Device
+  │── N reads ─────►│ queue [████ N]      │
+  │                 │── request #1 ──────►│
+  │◄──── event ─────│◄─── response #1 ────│
+  │◄──── event ─────│── request #2 ──────►│  ◄─ back-to-back at radio
+  │◄──── event ─────│── request #3 ──────►│     pace, no HA round-trip
+  ⋮                 ⋮                     ⋮     in between
+
+  • one timeout budgets the whole batch (15 s + 1 s per read)
+  • waiting behind connection setup is safe: the queue holds the reads
+    instead of letting them time out
+  ```
+
 - **Bridge < 1.10.0 (sequential):** older firmware has a single response
   slot, so overlapping reads would silently drop all but the last reply.
   The integration detects this from the reported version and falls back
@@ -55,11 +111,7 @@ version, which the bridge reports in its status events:
   a slower read phase, and a read fired during connection setup can
   time out on the HA side before the bridge executes it.
 
-Side by side:
-
-```text
-Sequential (bridge < 1.10.0, or the option turned off)
-
+  ```text
   HA                ESP                 Device
   │── read #1 ─────►│                     │
   │                 │── ATT request ─────►│ ╮
@@ -72,21 +124,7 @@ Sequential (bridge < 1.10.0, or the option turned off)
   • per read: radio round-trip + HA↔ESP round-trip
   • each read has its own 5 s timeout → a read fired while the bridge
     is still subscribing can expire before it ever executes
-
-Pipelined (bridge ≥ 1.10.0)
-
-  HA                ESP                 Device
-  │── N reads ─────►│ queue [████ N]      │
-  │                 │── request #1 ──────►│
-  │◄──── event ─────│◄─── response #1 ────│
-  │◄──── event ─────│── request #2 ──────►│  ◄─ back-to-back at radio
-  │◄──── event ─────│── request #3 ──────►│     pace, no HA round-trip
-  ⋮                 ⋮                     ⋮     in between
-
-  • one timeout budgets the whole batch (15 s + 1 s per read)
-  • waiting behind connection setup is safe: the queue holds the reads
-    instead of letting them time out
-```
+  ```
 
 How fast a batch completes is bounded by the BLE **connection
 interval**, which the device itself renegotiates depending on its
