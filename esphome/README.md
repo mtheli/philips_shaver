@@ -51,7 +51,7 @@ adapter), which the integration uses when no bridge is configured:
   slot with its own service set (e.g. shaver + OneBlade).
 
 For end-to-end setup instructions (configuration paths, flashing, multi-device
-setups, troubleshooting) see [`docs/ESP_BRIDGE_SETUP.md`](../docs/ESP_BRIDGE_SETUP.md).
+setups, troubleshooting) see [`SETUP.md`](SETUP.md).
 
 ## Contents
 
