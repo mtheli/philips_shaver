@@ -45,6 +45,7 @@ See [Configuration](#configuration) for setup instructions.
 | Model | Direct BLE | ESP32 Bridge | Tested by |
 | :--- | :---: | :---: | :--- |
 | **Shaver Series 7000** | | | |
+| [S7788](https://www.usa.philips.com/c-p/S7788_82/norelco-shaver-7100-wet-dry-electric-shaver-series-7000) | | :white_check_mark: | Community (#) | 
 | [S7886](https://www.usa.philips.com/c-p/S7886_84/shaver-series-7000-wet-dry-electric-shaver) | :white_check_mark: | | Community ([#5](https://github.com/mtheli/philips_shaver/issues/5)) |
 | [S7887](https://www.usa.philips.com/c-p/S7887_82/shaver-series-7000-wet-dry-electric-shaver) | | :white_check_mark: | Community ([forum](https://community.home-assistant.io/t/philips-bluetooth-shaver-monitoring/858822/8)) |
 | **Shaver Series 9000** | | | |
