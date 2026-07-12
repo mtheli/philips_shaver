@@ -63,7 +63,7 @@ The two modes are mutually exclusive — polling is skipped while a live connect
 | Motor Current Max | `0x0103` | READ | uint16 LE | Maximum motor current rating (mA) |
 | Motor RPM | `0x0104` | NOTIFY, READ | uint16 LE | Raw motor speed. [Divide by 3.036](#motor-rpm-conversion) for RPM |
 | Motor RPM Max | `0x0105` | READ | uint16 LE | Maximum motor RPM (raw, ÷ 3.036) |
-| Total Age | `0x0106` | NOTIFY, READ, WRITE | uint32 LE | Total device operating time (seconds) |
+| Total Age | `0x0106` | NOTIFY, READ, WRITE | uint32 LE | Device age (seconds); only updated on rare firmware events, static or 0 on most models |
 | Operational Turns | `0x0107` | NOTIFY, READ | uint16 LE | Number of times the shaver was turned on |
 | Days Since Last Used | `0x0108` | NOTIFY, READ | uint16 LE | Days elapsed since the last use |
 | Amount of Charges | `0x0109` | NOTIFY, READ | uint16 LE | Total number of charge cycles |
@@ -75,7 +75,7 @@ The two modes are mutually exclusive — polling is skipped while a live connect
 | System Notifications | `0x0110` | NOTIFY, READ, WRITE | 4 bytes | System notification flags |
 | Head Remaining | `0x0117` | NOTIFY, READ | uint8 | Shaver head remaining life (0–100%) |
 | Head Remaining Minutes | `0x0118` | NOTIFY, READ | uint16 LE | Shaver head remaining life (minutes) |
-| Total Running Motor | `0x0112` | READ | uint16 LE | Total motor runtime (unit unclear) |
+| Total Running Motor | `0x0112` | NOTIFY, READ | uint16 LE | Cumulative motor runtime (minutes); not present on all models |
 | Device Type | `0x0119` | READ | UTF-8 string | Device type identifier (e.g. "m" for OneBlade QP4530) |
 | Cleaning Progress | `0x011A` | NOTIFY, READ | uint8 | Cleaning cycle progress (0–100%) |
 

@@ -451,6 +451,22 @@ CHAR_HISTORY_RPM = "8d560208-3cb9-4387-a7e8-b79d826a7025"
 """
 CHAR_TOTAL_AGE = "8d560106-3cb9-4387-a7e8-b79d826a7025"
 
+# Total motor runtime
+"""
+	Unknown Characteristic
+	UUID: 8d560112-3cb9-4387-a7e8-b79d826a7025
+	Properties: NOTIFY, READ
+	Value: (0x) 42-00
+	Descriptors:
+	Client Characteristic Configuration
+	UUID: 0x2902
+
+	uint16 LE, minutes. Unlike 0x0106 (device age, static on most models)
+	this actually increments with motor use. Not present on all models —
+	reads resolve as not_found/None and the sensor stays unknown.
+"""
+CHAR_TOTAL_RUNNING_MOTOR = "8d560112-3cb9-4387-a7e8-b79d826a7025"
+
 # Shaver capabilities
 """
 	Unknown Characteristic => SMART_SHAVER_CHARACTERISTIC_CAPABILITY
@@ -492,6 +508,7 @@ POLL_READ_CHARS = [
     CHAR_CUSTOM_SHAVING_MODE_SETTINGS,
     # CHAR_PRESSURE,
     CHAR_TOTAL_AGE,
+    CHAR_TOTAL_RUNNING_MOTOR,
     CHAR_HANDLE_LOAD_TYPE,
     CHAR_MOTION_TYPE,
     CHAR_APP_HANDLE_SETTINGS,
@@ -586,6 +603,7 @@ CHAR_SERVICE_MAP: dict[str, str] = {
     CHAR_MOTOR_RPM_MAX: SVC_PLATFORM,
     CHAR_MOTOR_RPM_MIN: SVC_PLATFORM,
     CHAR_TOTAL_AGE: SVC_PLATFORM,
+    CHAR_TOTAL_RUNNING_MOTOR: SVC_PLATFORM,
     CHAR_AMOUNT_OF_OPERATIONAL_TURNS: SVC_PLATFORM,
     CHAR_DAYS_SINCE_LAST_USED: SVC_PLATFORM,
     CHAR_AMOUNT_OF_CHARGES: SVC_PLATFORM,

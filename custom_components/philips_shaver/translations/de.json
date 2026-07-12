@@ -296,7 +296,10 @@
         }
       },
       "total_age": {
-        "name": "Gesamtbetriebszeit"
+        "name": "Gerätealter"
+      },
+      "total_running_motor": {
+        "name": "Motor-Gesamtlaufzeit"
       },
       "pressure": {
         "name": "Druck Wert"

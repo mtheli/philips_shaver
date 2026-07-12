@@ -296,7 +296,10 @@
         }
       },
       "total_age": {
-        "name": "Total Operating Time"
+        "name": "Device Age"
+      },
+      "total_running_motor": {
+        "name": "Total Motor Runtime"
       },
       "pressure": {
         "name": "Pressure Value"

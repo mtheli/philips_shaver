@@ -125,7 +125,8 @@ This integration creates a new device for your shaver and provides the following
 | Entity | Type | Description |
 | :--- | :--- | :--- |
 | **Last Session Duration** | Sensor | Duration of the last shaving session in seconds. |
-| **Total Operating Time** | Sensor | Lifetime usage of the shaver. |
+| **Total Motor Runtime** | Sensor | Cumulative motor runtime in minutes. |
+| **Device Age** | Sensor | Firmware-reported device age in seconds. Static on most models (disabled by default). |
 | **Days Since Last Used** | Sensor | Days elapsed since the last use. |
 | **Charge Cycles** | Sensor | Total number of charge cycles. |
 | **Remaining Shaves** | Sensor | Estimated number of shaves remaining based on battery level and usage history. |

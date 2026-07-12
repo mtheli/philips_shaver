@@ -54,6 +54,7 @@ async def async_setup_entry(
         # PhilipsMotorRpmMinSensor(coordinator, entry),  # not present on all models, no known use
         PhilipsModelNumberSensor(coordinator, entry),
         PhilipsTotalAgeSensor(coordinator, entry),
+        PhilipsTotalRunningMotorSensor(coordinator, entry),
     ]
 
     # Handle Load Type requires Control Service (0x0300)
@@ -1087,13 +1088,21 @@ class PhilipsShaverPressureStateSensor(PhilipsShaverEntity, SensorEntity):
 # Total Age Sensor
 # =============================================================================
 class PhilipsTotalAgeSensor(PhilipsShaverEntity, SensorEntity):
-    """Sensor for the total device age (operating seconds)."""
+    """Device age in seconds (0x0106).
+
+    Despite earlier assumptions this is NOT operating time: the firmware
+    only updates it on rare events (factory boot / firmware flash) and it
+    stays static — or permanently 0 — through normal use on most models.
+    Kept default-disabled; see PhilipsTotalRunningMotorSensor for the
+    actual motor runtime.
+    """
 
     _attr_translation_key = "total_age"
     _attr_native_unit_of_measurement = UnitOfTime.SECONDS
     _attr_device_class = SensorDeviceClass.DURATION
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
     _attr_icon = "mdi:history"
 
     def __init__(
@@ -1118,6 +1127,34 @@ class PhilipsTotalAgeSensor(PhilipsShaverEntity, SensorEntity):
         minutes = (seconds % 3600) // 60
 
         return {"formatted_age": f"{days}d {hours}h {minutes}m", "raw_seconds": seconds}
+
+
+# =============================================================================
+# Total Motor Runtime Sensor
+# =============================================================================
+class PhilipsTotalRunningMotorSensor(PhilipsShaverEntity, SensorEntity):
+    """Cumulative motor runtime in minutes (0x0112, uint16 LE).
+
+    Increments with actual motor use. Not present on all models — the
+    poll read then resolves to None and the sensor stays unknown.
+    """
+
+    _attr_translation_key = "total_running_motor"
+    _attr_native_unit_of_measurement = UnitOfTime.MINUTES
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:engine"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._device_id}_total_running_motor"
+
+    @property
+    def native_value(self) -> int | None:
+        return self.coordinator.data.get("total_running_motor")
 
 
 # =============================================================================

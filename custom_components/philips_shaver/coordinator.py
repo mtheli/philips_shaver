@@ -69,6 +69,7 @@ from .const import (
     CHAR_SERIAL_NUMBER,
     CHAR_SHAVING_TIME,
     CHAR_TOTAL_AGE,
+    CHAR_TOTAL_RUNNING_MOTOR,
     CHAR_TRAVEL_LOCK,
     CHAR_SHAVING_MODE,
     CHAR_SHAVING_MODE_SETTINGS,
@@ -507,6 +508,10 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if raw := results.get(CHAR_TOTAL_AGE):
             total_age_value = int.from_bytes(raw, "little")
             new_data["total_age"] = total_age_value
+
+        # Total motor runtime (uint16 LE, minutes)
+        if raw := results.get(CHAR_TOTAL_RUNNING_MOTOR):
+            new_data["total_running_motor"] = int.from_bytes(raw, "little")
 
         # Handle Load Type
         if raw := results.get(CHAR_HANDLE_LOAD_TYPE):
