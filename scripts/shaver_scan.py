@@ -10,6 +10,9 @@ whether any future model does.
 Usage:
   python3 shaver_scan.py              # Auto-detect nearby Philips shaver/OneBlade
   python3 shaver_scan.py AA:BB:CC:DD:EE:FF  # Scan specific MAC address
+  python3 shaver_scan.py AA:BB:CC:DD:EE:FF --fixture xp9201.json
+                                      # Capture an anonymized test fixture
+                                      # for tests/fixtures/
 
 Requirements:
   pip install bleak
@@ -982,7 +985,9 @@ def _remove_shaver_bonds() -> list[str]:
             continue
         mac, name = parts[1], parts[2]
         low = name.lower()
-        if not any(tag in low for tag in ("oneblade", "shaver", "philips xp", "philips s")):
+        # "philips qp" covers OneBlade models that advertise as
+        # "Philips QP4530" rather than "OneBlade".
+        if not any(tag in low for tag in ("oneblade", "shaver", "philips xp", "philips s", "philips qp")):
             continue
         try:
             subprocess.run(
@@ -993,6 +998,20 @@ def _remove_shaver_bonds() -> list[str]:
         except Exception:
             pass
     return removed
+
+
+# ATT/BlueZ error fragments that mean "this read needs a bond/encryption".
+# Shavers use lazy encryption: connect + discovery run unbonded, individual
+# reads can come back with INSUF_AUTHENTICATION (XP9400, issue #3).
+_AUTH_ERROR_HINTS = (
+    "insufficient", "authentication", "encryption", "not permitted",
+    "not paired", "not authorized", "0x05", "0x0f",
+)
+
+
+def _is_auth_error(msg: str) -> bool:
+    low = msg.lower()
+    return any(hint in low for hint in _AUTH_ERROR_HINTS)
 
 
 async def _do_dbus_pair(mac: str) -> bool:
@@ -1013,6 +1032,59 @@ async def _do_dbus_pair(mac: str) -> bool:
         return False
 
 
+async def _read_char_into(client, char, char_info, char_entry, device_info) -> str:
+    """Read one characteristic into ``char_entry``. Returns a status string:
+    "ok", "auth" (needs bonding), "link_lost", or "error"."""
+    try:
+        value = await client.read_gatt_char(char)
+    except BleakError as e:
+        msg = str(e)
+        print(f"    Read error: {e}")
+        # These errors mean the link is dead; remaining reads will all
+        # raise the same thing.
+        if (
+            "Service Discovery has not been performed" in msg
+            or "Not connected" in msg
+            or "disconnected" in msg.lower()
+        ):
+            return "link_lost"
+        return "auth" if _is_auth_error(msg) else "error"
+    except Exception as e:
+        print(f"    Read error: {e}")
+        return "auth" if _is_auth_error(str(e)) else "error"
+
+    hex_str = value.hex()
+    char_entry["value_hex"] = hex_str
+    decoded = None
+    if char_info and char_info[2]:
+        try:
+            decoded = char_info[2](value)
+        except Exception as dec_err:
+            decoded = f"(decode error: {dec_err})"
+    try:
+        text = value.decode("utf-8")
+        if text.isprintable() and text.strip():
+            char_entry["value_text"] = text
+            value_str = f"{hex_str} = \"{text}\""
+        else:
+            value_str = hex_str
+    except (UnicodeDecodeError, ValueError):
+        value_str = hex_str
+
+    if char_info and char_info[1] in ("device_info", "standard_ble"):
+        device_info[char_info[0]] = (
+            char_entry["value_text"]
+            if char_entry["value_text"] is not None
+            else hex_str
+        )
+
+    if decoded is not None:
+        print(f"    Value: {value_str}  →  {decoded}")
+    else:
+        print(f"    Value: {value_str}")
+    return "ok"
+
+
 async def scan_device(
     address: str,
     mtu: int | None = None,
@@ -1021,6 +1093,9 @@ async def scan_device(
     pair: bool = False,
     probe_product_1: bool = False,
     probe_known_ports: bool = False,
+    json_path: str | None = None,
+    fixture: bool = False,
+    adv_name: str | None = None,
 ):
     """Connect to a shaver and dump all GATT services."""
     if remove_bonds:
@@ -1031,13 +1106,14 @@ async def scan_device(
                 print(f"  - {entry}")
             print()
 
+    paired = False
     if pair:
         # Shavers use LE Secure Connections with Numeric Comparison — the
         # integration registers a BlueZ Agent1 that auto-confirms. Doing
         # this BEFORE the bleak connect means the resulting bond is valid
         # when CCCD writes later require encryption. The helper disconnects
         # the D-Bus session once pairing completes.
-        await _do_dbus_pair(address)
+        paired = await _do_dbus_pair(address)
 
     print(f"Connecting to {address} ...")
     async with BleakClient(address, timeout=30) as client:
@@ -1051,16 +1127,26 @@ async def scan_device(
 
         has_legacy = False
         has_newer = False
-        service_count = 0
         lost_connection = False
 
-        for service in client.services:
-            service_count += 1
+        # Snapshot the service table into plain Python objects up front. If
+        # the device drops the link mid-scan, iterating the live
+        # ``client.services`` property would raise; a snapshot keeps the
+        # structure usable and lets us still write the JSON we gathered.
+        services = list(client.services)
+        service_count = len(services)
+        gatt_services: list[dict] = []
+        device_info: dict[str, str] = {}
+
+        for service in services:
             svc_low = service.uuid.lower()
             if svc_low.startswith(SHAVER_LEGACY_PREFIX):
                 has_legacy = True
             if svc_low.startswith(NEWER_PREFIX):
                 has_newer = True
+
+            svc_entry: dict = {"uuid": service.uuid, "characteristics": []}
+            gatt_services.append(svc_entry)
 
             print(f"Service: {service.uuid}")
             if service.description and service.description != service.uuid:
@@ -1070,44 +1156,33 @@ async def scan_device(
                 char_info = KNOWN_CHARS.get(char.uuid.lower())
                 char_label = f"  [{char_info[0]}]" if char_info else ""
                 print(f"  Char: {char.uuid}  [{props}]  handle=0x{char.handle:04X}{char_label}")
+                char_entry = {
+                    "uuid": char.uuid,
+                    "name": char_info[0] if char_info else None,
+                    "properties": list(char.properties),
+                    "handle": char.handle,
+                    "value_hex": None,
+                    "value_text": None,
+                }
+                svc_entry["characteristics"].append(char_entry)
                 if "read" in char.properties and not lost_connection:
-                    try:
-                        value = await client.read_gatt_char(char)
-                        hex_str = value.hex()
-                        decoded = None
-                        if char_info and char_info[2]:
-                            try:
-                                decoded = char_info[2](value)
-                            except Exception as dec_err:
-                                decoded = f"(decode error: {dec_err})"
-                        try:
-                            text = value.decode("utf-8")
-                            if text.isprintable() and text.strip():
-                                value_str = f"{hex_str} = \"{text}\""
-                            else:
-                                value_str = hex_str
-                        except (UnicodeDecodeError, ValueError):
-                            value_str = hex_str
-
-                        if decoded is not None:
-                            print(f"    Value: {value_str}  →  {decoded}")
-                        else:
-                            print(f"    Value: {value_str}")
-                    except BleakError as e:
-                        msg = str(e)
-                        print(f"    Read error: {e}")
-                        # These errors mean the link is dead; remaining reads
-                        # will all raise the same thing. Skip them but keep
-                        # enumerating characteristics so the report is complete.
-                        if (
-                            "Service Discovery has not been performed" in msg
-                            or "Not connected" in msg
-                            or "disconnected" in msg.lower()
-                        ):
-                            lost_connection = True
-                            print("    (link lost — skipping remaining reads)")
-                    except Exception as e:
-                        print(f"    Read error: {e}")
+                    status = await _read_char_into(
+                        client, char, char_info, char_entry, device_info
+                    )
+                    # Lazy encryption: the first read that demands a bond
+                    # triggers pairing (auto-confirm agent), then a retry —
+                    # same reactive pattern the integration uses. Without
+                    # this, encrypted values end up null in the capture.
+                    if status == "auth" and not paired:
+                        print("    → read needs encryption, pairing ...")
+                        paired = await _do_dbus_pair(address)
+                        if paired and client.is_connected:
+                            status = await _read_char_into(
+                                client, char, char_info, char_entry, device_info
+                            )
+                    if status == "link_lost":
+                        lost_connection = True
+                        print("    (link lost — skipping remaining reads)")
                 for desc in char.descriptors:
                     print(f"    Desc: {desc.uuid}  handle=0x{desc.handle:04X}")
             print()
@@ -1138,6 +1213,81 @@ async def scan_device(
             await probe.run()
         elif has_newer:
             print("\nSkipping Condor probe because the link is no longer healthy.")
+
+        if json_path:
+            _write_capture(
+                json_path,
+                address=address,
+                adv_name=adv_name,
+                protocol=protocol,
+                device_info=device_info,
+                gatt_services=gatt_services,
+                anonymize=fixture,
+            )
+
+
+# Placeholder identity used when writing anonymized fixtures. Same vendor
+# prefix as the Sonicare test fixtures so captures are recognizable as
+# sanitized at a glance.
+_FIXTURE_MAC = "24:E5:AA:00:00:01"
+# Characteristics whose values identify the individual unit; their bytes are
+# zeroed in fixture mode (structure and length are preserved).
+_PRIVATE_CHAR_NAMES = {"Serial Number", "System ID"}
+
+
+def _anonymize_snapshot(snapshot: dict) -> None:
+    """Strip unit-identifying data in place: MAC, serial number, system ID."""
+    snapshot["address"] = _FIXTURE_MAC
+    for service in snapshot["gatt_services"]:
+        for char in service["characteristics"]:
+            if char.get("name") in _PRIVATE_CHAR_NAMES:
+                if char.get("value_hex"):
+                    if char.get("value_text"):
+                        char["value_text"] = "0" * len(char["value_text"])
+                        char["value_hex"] = char["value_text"].encode().hex()
+                    else:
+                        char["value_hex"] = "00" * (len(char["value_hex"]) // 2)
+    for key in _PRIVATE_CHAR_NAMES:
+        if key in snapshot["device_info"]:
+            snapshot["device_info"][key] = "0" * len(snapshot["device_info"][key])
+
+
+def _write_capture(
+    path: str,
+    *,
+    address: str,
+    adv_name: str | None,
+    protocol: str,
+    device_info: dict,
+    gatt_services: list,
+    anonymize: bool,
+) -> None:
+    """Write a structured snapshot of the scan to a JSON file.
+
+    The shape matches the Sonicare capture format so ``tests/conftest.py``
+    helpers work unchanged: ``gatt_services[*].characteristics[*]`` carries
+    uuid/name/properties/handle/value_hex/value_text. With ``anonymize``
+    (the ``--fixture`` flag) the MAC and serial number are scrubbed so the
+    file can go straight into ``tests/fixtures/``.
+    """
+    snapshot = {
+        "captured_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "address": address,
+        "adv_name": adv_name,
+        "protocol": protocol,
+        "device_info": device_info,
+        "gatt_services": gatt_services,
+    }
+    if anonymize:
+        _anonymize_snapshot(snapshot)
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(snapshot, fh, indent=2, ensure_ascii=False, sort_keys=False)
+            fh.write("\n")
+        label = "Fixture" if anonymize else "Capture"
+        print(f"\n{label} written to {path}")
+    except OSError as e:
+        print(f"\n!!! Could not write capture to {path}: {e}")
 
 
 async def main():
@@ -1201,8 +1351,29 @@ async def main():
             "GetPorts for enumerating real ports."
         ),
     )
+    parser.add_argument(
+        "--json",
+        metavar="PATH",
+        default=None,
+        help=(
+            "Write a structured snapshot (device info + full GATT map with "
+            "properties, handles and read values) to PATH. Same shape as the "
+            "Sonicare captures."
+        ),
+    )
+    parser.add_argument(
+        "--fixture",
+        metavar="PATH",
+        default=None,
+        help=(
+            "Like --json, but anonymized for direct use as a test fixture in "
+            "tests/fixtures/: MAC and serial number are scrubbed. "
+            "Suggested naming: <model>_<variant>.json (e.g. xp9201.json)."
+        ),
+    )
     args = parser.parse_args()
 
+    adv_name = None
     if args.mac:
         print(f"Scanning for {args.mac} (10s)...")
         device = await BleakScanner.find_device_by_address(args.mac, timeout=10)
@@ -1210,11 +1381,13 @@ async def main():
             print(f"Device {args.mac} not found. If it is connected to another process (e.g. bluetoothctl),")
             sys.exit(1)
         print(f"Found: {device.name} ({device.address})")
+        adv_name = device.name
         address = args.mac
     else:
-        address, _adv = await find_shaver()
+        address, adv = await find_shaver()
         if not address:
             sys.exit(1)
+        adv_name = adv.local_name if adv else None
 
     await scan_device(
         address,
@@ -1224,6 +1397,9 @@ async def main():
         pair=args.pair,
         probe_product_1=args.probe_product_1,
         probe_known_ports=args.probe_known_ports,
+        json_path=args.fixture or args.json,
+        fixture=args.fixture is not None,
+        adv_name=adv_name,
     )
 
 

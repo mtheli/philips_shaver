@@ -1,0 +1,632 @@
+{
+  "captured_at": "2026-07-12T23:33:19",
+  "address": "24:E5:AA:00:00:01",
+  "adv_name": "Philips QP4530",
+  "protocol": "Both Shaver Legacy + Newer Condor (first-ever find on a shaver)",
+  "device_info": {
+    "Battery Level": "^",
+    "Manufacturer Name": "Philips",
+    "Serial Number": "0000000000000000000000000000000000000000",
+    "Software Revision": "502",
+    "Model Number": "Philips QP4530",
+    "Hardware Revision": "300006520671"
+  },
+  "gatt_services": [
+    {
+      "uuid": "8d560600-3cb9-4387-a7e8-b79d826a7025",
+      "characteristics": [
+        {
+          "uuid": "8d560601-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 113,
+          "value_hex": "0001",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560602-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 115,
+          "value_hex": "300b0000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560604-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 119,
+          "value_hex": "0000000001000000000000002801280014011400",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560603-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "write"
+          ],
+          "handle": 117,
+          "value_hex": null,
+          "value_text": null
+        }
+      ]
+    },
+    {
+      "uuid": "0000180f-0000-1000-8000-00805f9b34fb",
+      "characteristics": [
+        {
+          "uuid": "00002a19-0000-1000-8000-00805f9b34fb",
+          "name": "Battery Level",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 15,
+          "value_hex": "5e",
+          "value_text": "^"
+        }
+      ]
+    },
+    {
+      "uuid": "8d560100-3cb9-4387-a7e8-b79d826a7025",
+      "characteristics": [
+        {
+          "uuid": "8d560108-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Days Since Last Used",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 48,
+          "value_hex": "0600",
+          "value_text": null
+        },
+        {
+          "uuid": "8d5601ff-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 92,
+          "value_hex": "302e31000000000000000000000000000000000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560109-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Amount of Charges",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 51,
+          "value_hex": "0300",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56010f-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Shaving Time",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 64,
+          "value_hex": "4300",
+          "value_text": null
+        },
+        {
+          "uuid": "8d5601fe-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 90,
+          "value_hex": "31302e323538000000000000000000000000000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560118-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Head Remaining Minutes",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 83,
+          "value_hex": "7e00",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560106-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Total Age",
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 42,
+          "value_hex": "00000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560116-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 78,
+          "value_hex": "0807",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560104-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Motor RPM",
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 37,
+          "value_hex": "6419",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56010c-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Travel Lock",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 57,
+          "value_hex": "00",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560101-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 30,
+          "value_hex": "0601",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560115-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 76,
+          "value_hex": "00000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560102-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Motor Current",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 32,
+          "value_hex": "a800",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560119-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Device Type",
+          "properties": [
+            "read"
+          ],
+          "handle": 86,
+          "value_hex": "6d00",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560117-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Head Remaining",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 80,
+          "value_hex": "4a",
+          "value_text": "J"
+        },
+        {
+          "uuid": "8d560112-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 73,
+          "value_hex": "5000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560110-3cb9-4387-a7e8-b79d826a7025",
+          "name": "System Notifications",
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 67,
+          "value_hex": "20000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56010e-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Blade Replacement",
+          "properties": [
+            "write"
+          ],
+          "handle": 62,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "8d56010a-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Device State",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 54,
+          "value_hex": "02",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560111-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 70,
+          "value_hex": "02",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560103-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Motor Current Max",
+          "properties": [
+            "read"
+          ],
+          "handle": 35,
+          "value_hex": "e803",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56010d-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Cleaning Reminder",
+          "properties": [
+            "write"
+          ],
+          "handle": 60,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "8d5601fd-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 88,
+          "value_hex": "302e325f7374640000000000000000000000000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560105-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Motor RPM Max",
+          "properties": [
+            "read"
+          ],
+          "handle": 40,
+          "value_hex": "0000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560107-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Operational Turns",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 45,
+          "value_hex": "2c00",
+          "value_text": null
+        }
+      ]
+    },
+    {
+      "uuid": "8d560700-3cb9-4387-a7e8-b79d826a7025",
+      "characteristics": [
+        {
+          "uuid": "8d560703-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Speed",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 127,
+          "value_hex": "0000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560705-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Speed Zone Threshold",
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 132,
+          "value_hex": "00004b00960046",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560704-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 130,
+          "value_hex": "96b1920001000012000600010090c492000100001300040000007dec930001000013000c0000006bd69500000000020050000900faa49e000100002a00190001000730590000000002001c0001009b9b5e0000000002003c000400936a62000000000300490000007eb3670000000002004f00010054ed7000000000020033000400a788770000000002004400050056287a000000000200240000009d1d7e0000000002003e0004000061830000000002004d000b00119d8c00000000020065000000d25d8d000100002a000100000017718d00010000570002000000f77a8d0001000040000100000044948d000100001a0000000000cb8c92000000000b0010000100",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560706-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Speed Verdict",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 134,
+          "value_hex": "01",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560702-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Groomer Capabilities",
+          "properties": [
+            "read"
+          ],
+          "handle": 125,
+          "value_hex": "01000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560701-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 123,
+          "value_hex": "0001",
+          "value_text": null
+        }
+      ]
+    },
+    {
+      "uuid": "8d560200-3cb9-4387-a7e8-b79d826a7025",
+      "characteristics": [
+        {
+          "uuid": "8d56020a-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 108,
+          "value_hex": "00",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560208-3cb9-4387-a7e8-b79d826a7025",
+          "name": "History RPM",
+          "properties": [
+            "read"
+          ],
+          "handle": 103,
+          "value_hex": "0000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56020b-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 110,
+          "value_hex": "1900",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560201-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 95,
+          "value_hex": "0201",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560202-3cb9-4387-a7e8-b79d826a7025",
+          "name": "History Timestamp",
+          "properties": [
+            "read"
+          ],
+          "handle": 97,
+          "value_hex": "00000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560209-3cb9-4387-a7e8-b79d826a7025",
+          "name": "History Sync Status",
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 105,
+          "value_hex": "14",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560206-3cb9-4387-a7e8-b79d826a7025",
+          "name": "History Avg Current",
+          "properties": [
+            "read"
+          ],
+          "handle": 99,
+          "value_hex": "0000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560207-3cb9-4387-a7e8-b79d826a7025",
+          "name": "History Duration",
+          "properties": [
+            "read"
+          ],
+          "handle": 101,
+          "value_hex": "0000",
+          "value_text": null
+        }
+      ]
+    },
+    {
+      "uuid": "0000180a-0000-1000-8000-00805f9b34fb",
+      "characteristics": [
+        {
+          "uuid": "00002a29-0000-1000-8000-00805f9b34fb",
+          "name": "Manufacturer Name",
+          "properties": [
+            "read"
+          ],
+          "handle": 19,
+          "value_hex": "5068696c697073",
+          "value_text": "Philips"
+        },
+        {
+          "uuid": "00002a25-0000-1000-8000-00805f9b34fb",
+          "name": "Serial Number",
+          "properties": [
+            "read"
+          ],
+          "handle": 23,
+          "value_hex": "0000000000000000000000000000000000000000",
+          "value_text": null
+        },
+        {
+          "uuid": "00002a28-0000-1000-8000-00805f9b34fb",
+          "name": "Software Revision",
+          "properties": [
+            "read"
+          ],
+          "handle": 27,
+          "value_hex": "353032",
+          "value_text": "502"
+        },
+        {
+          "uuid": "00002a24-0000-1000-8000-00805f9b34fb",
+          "name": "Model Number",
+          "properties": [
+            "read"
+          ],
+          "handle": 21,
+          "value_hex": "5068696c69707320515034353330",
+          "value_text": "Philips QP4530"
+        },
+        {
+          "uuid": "00002a27-0000-1000-8000-00805f9b34fb",
+          "name": "Hardware Revision",
+          "properties": [
+            "read"
+          ],
+          "handle": 25,
+          "value_hex": "333030303036353230363731",
+          "value_text": "300006520671"
+        }
+      ]
+    },
+    {
+      "uuid": "00001801-0000-1000-8000-00805f9b34fb",
+      "characteristics": [
+        {
+          "uuid": "00002a05-0000-1000-8000-00805f9b34fb",
+          "name": "Service Changed",
+          "properties": [
+            "indicate"
+          ],
+          "handle": 11,
+          "value_hex": null,
+          "value_text": null
+        }
+      ]
+    },
+    {
+      "uuid": "e50ba3c0-af04-4564-92ad-fef019489de6",
+      "characteristics": [
+        {
+          "uuid": "e50b0005-af04-4564-92ad-fef019489de6",
+          "name": "Proto Config",
+          "properties": [
+            "read"
+          ],
+          "handle": 148,
+          "value_hex": "031414",
+          "value_text": null
+        },
+        {
+          "uuid": "e50b0003-af04-4564-92ad-fef019489de6",
+          "name": "Proto TX",
+          "properties": [
+            "notify"
+          ],
+          "handle": 143,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "e50b0002-af04-4564-92ad-fef019489de6",
+          "name": "Proto RX ACK",
+          "properties": [
+            "notify"
+          ],
+          "handle": 140,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "e50b0004-af04-4564-92ad-fef019489de6",
+          "name": "Proto TX ACK",
+          "properties": [
+            "write-without-response"
+          ],
+          "handle": 146,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "e50b0001-af04-4564-92ad-fef019489de6",
+          "name": "Proto RX",
+          "properties": [
+            "write-without-response"
+          ],
+          "handle": 138,
+          "value_hex": null,
+          "value_text": null
+        }
+      ]
+    }
+  ]
+}

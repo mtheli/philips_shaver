@@ -1,0 +1,974 @@
+{
+  "captured_at": "2026-07-12T23:37:19",
+  "address": "24:E5:AA:00:00:01",
+  "adv_name": "Philips XP9201",
+  "protocol": "Both Shaver Legacy + Newer Condor (first-ever find on a shaver)",
+  "device_info": {
+    "Model Number": "XP9201",
+    "Firmware Revision": "300012593881",
+    "Software Revision": "300011042361-1.3.4-MP-0-g438773a-2025-07-04",
+    "Serial Number": "00000000000000000000",
+    "Hardware Revision": "300011042261",
+    "Manufacturer Name": "Philips",
+    "Battery Level": "Z"
+  },
+  "gatt_services": [
+    {
+      "uuid": "8d560200-3cb9-4387-a7e8-b79d826a7025",
+      "characteristics": [
+        {
+          "uuid": "8d560206-3cb9-4387-a7e8-b79d826a7025",
+          "name": "History Avg Current",
+          "properties": [
+            "read"
+          ],
+          "handle": 100,
+          "value_hex": "0000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56020a-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 109,
+          "value_hex": "00",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56020b-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 111,
+          "value_hex": "5100",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560209-3cb9-4387-a7e8-b79d826a7025",
+          "name": "History Sync Status",
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 106,
+          "value_hex": "14",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560201-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 96,
+          "value_hex": "0201",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560207-3cb9-4387-a7e8-b79d826a7025",
+          "name": "History Duration",
+          "properties": [
+            "read"
+          ],
+          "handle": 102,
+          "value_hex": "0000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560202-3cb9-4387-a7e8-b79d826a7025",
+          "name": "History Timestamp",
+          "properties": [
+            "read"
+          ],
+          "handle": 98,
+          "value_hex": "00000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560208-3cb9-4387-a7e8-b79d826a7025",
+          "name": "History RPM",
+          "properties": [
+            "read"
+          ],
+          "handle": 104,
+          "value_hex": "0000",
+          "value_text": null
+        }
+      ]
+    },
+    {
+      "uuid": "8d560600-3cb9-4387-a7e8-b79d826a7025",
+      "characteristics": [
+        {
+          "uuid": "8d560601-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 114,
+          "value_hex": "0001",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560602-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 116,
+          "value_hex": "900a0000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560604-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 120,
+          "value_hex": "00000000000000000100000000000000223a2200",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560603-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "write"
+          ],
+          "handle": 118,
+          "value_hex": null,
+          "value_text": null
+        }
+      ]
+    },
+    {
+      "uuid": "e50ba3c0-af04-4564-92ad-fef019489de6",
+      "characteristics": [
+        {
+          "uuid": "e50b0003-af04-4564-92ad-fef019489de6",
+          "name": "Proto TX",
+          "properties": [
+            "notify"
+          ],
+          "handle": 216,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "e50b0007-af04-4564-92ad-fef019489de6",
+          "name": "Proto Client Config",
+          "properties": [
+            "write-without-response"
+          ],
+          "handle": 209,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "e50b0006-af04-4564-92ad-fef019489de6",
+          "name": "Proto Server Config",
+          "properties": [
+            "notify"
+          ],
+          "handle": 211,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "e50b0001-af04-4564-92ad-fef019489de6",
+          "name": "Proto RX",
+          "properties": [
+            "write-without-response"
+          ],
+          "handle": 222,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "e50b0002-af04-4564-92ad-fef019489de6",
+          "name": "Proto RX ACK",
+          "properties": [
+            "notify"
+          ],
+          "handle": 219,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "e50b0004-af04-4564-92ad-fef019489de6",
+          "name": "Proto TX ACK",
+          "properties": [
+            "write-without-response"
+          ],
+          "handle": 214,
+          "value_hex": null,
+          "value_text": null
+        }
+      ]
+    },
+    {
+      "uuid": "0000180a-0000-1000-8000-00805f9b34fb",
+      "characteristics": [
+        {
+          "uuid": "00002a24-0000-1000-8000-00805f9b34fb",
+          "name": "Model Number",
+          "properties": [
+            "read"
+          ],
+          "handle": 21,
+          "value_hex": "585039323031",
+          "value_text": "XP9201"
+        },
+        {
+          "uuid": "00002a26-0000-1000-8000-00805f9b34fb",
+          "name": "Firmware Revision",
+          "properties": [
+            "read"
+          ],
+          "handle": 27,
+          "value_hex": "333030303132353933383831",
+          "value_text": "300012593881"
+        },
+        {
+          "uuid": "00002a28-0000-1000-8000-00805f9b34fb",
+          "name": "Software Revision",
+          "properties": [
+            "read"
+          ],
+          "handle": 29,
+          "value_hex": "3330303031313034323336312d312e332e342d4d502d302d67343338373733612d323032352d30372d3034",
+          "value_text": "300011042361-1.3.4-MP-0-g438773a-2025-07-04"
+        },
+        {
+          "uuid": "00002a25-0000-1000-8000-00805f9b34fb",
+          "name": "Serial Number",
+          "properties": [
+            "read"
+          ],
+          "handle": 23,
+          "value_hex": "3030303030303030303030303030303030303030",
+          "value_text": "00000000000000000000"
+        },
+        {
+          "uuid": "00002a27-0000-1000-8000-00805f9b34fb",
+          "name": "Hardware Revision",
+          "properties": [
+            "read"
+          ],
+          "handle": 25,
+          "value_hex": "333030303131303432323631",
+          "value_text": "300011042261"
+        },
+        {
+          "uuid": "00002a29-0000-1000-8000-00805f9b34fb",
+          "name": "Manufacturer Name",
+          "properties": [
+            "read"
+          ],
+          "handle": 19,
+          "value_hex": "5068696c697073",
+          "value_text": "Philips"
+        }
+      ]
+    },
+    {
+      "uuid": "8d560100-3cb9-4387-a7e8-b79d826a7025",
+      "characteristics": [
+        {
+          "uuid": "8d56010f-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Shaving Time",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 64,
+          "value_hex": "1400",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560107-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Operational Turns",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 45,
+          "value_hex": "6800",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560101-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 32,
+          "value_hex": "0901",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560117-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Head Remaining",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 80,
+          "value_hex": "5c",
+          "value_text": "\\"
+        },
+        {
+          "uuid": "8d56010d-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Cleaning Reminder",
+          "properties": [
+            "write"
+          ],
+          "handle": 60,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "8d560116-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 78,
+          "value_hex": "0807",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56010a-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Device State",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 54,
+          "value_hex": "02",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560108-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Days Since Last Used",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 48,
+          "value_hex": "0400",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560111-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 70,
+          "value_hex": "02",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560112-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 73,
+          "value_hex": "ef00",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56010c-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Travel Lock",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 57,
+          "value_hex": "00",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560110-3cb9-4387-a7e8-b79d826a7025",
+          "name": "System Notifications",
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 67,
+          "value_hex": "02000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56010e-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Blade Replacement",
+          "properties": [
+            "write"
+          ],
+          "handle": 62,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "8d560115-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 76,
+          "value_hex": "00000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560109-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Amount of Charges",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 51,
+          "value_hex": "0500",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56011a-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Cleaning Progress",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 86,
+          "value_hex": "64",
+          "value_text": "d"
+        },
+        {
+          "uuid": "8d5601ff-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 93,
+          "value_hex": "302e32000000000000000000000000000000000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d5601fe-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 91,
+          "value_hex": "31302e323933000000000000000000000000000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560102-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Motor Current",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 34,
+          "value_hex": "4504",
+          "value_text": null
+        },
+        {
+          "uuid": "8d5601fd-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 89,
+          "value_hex": "4f4c45445f312e305f306638313961390000000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560103-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Motor Current Max",
+          "properties": [
+            "read"
+          ],
+          "handle": 37,
+          "value_hex": "d007",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560118-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Head Remaining Minutes",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 83,
+          "value_hex": "7c07",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560104-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Motor RPM",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 39,
+          "value_hex": "8118",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560106-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Total Age",
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 42,
+          "value_hex": "00000000",
+          "value_text": null
+        }
+      ]
+    },
+    {
+      "uuid": "00001801-0000-1000-8000-00805f9b34fb",
+      "characteristics": [
+        {
+          "uuid": "00002a05-0000-1000-8000-00805f9b34fb",
+          "name": "Service Changed",
+          "properties": [
+            "indicate"
+          ],
+          "handle": 11,
+          "value_hex": null,
+          "value_text": null
+        }
+      ]
+    },
+    {
+      "uuid": "8d560300-3cb9-4387-a7e8-b79d826a7025",
+      "characteristics": [
+        {
+          "uuid": "8d560302-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Capabilities",
+          "properties": [
+            "read"
+          ],
+          "handle": 126,
+          "value_hex": "69000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560323-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 180,
+          "value_hex": "0000000000000000000000000000000000000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560316-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 138,
+          "value_hex": "19324b",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56030e-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 148,
+          "value_hex": "0000000001000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560303-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 128,
+          "value_hex": "00",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56032c-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 191,
+          "value_hex": "00000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560319-3cb9-4387-a7e8-b79d826a7025",
+          "name": "App Handle Settings",
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 167,
+          "value_hex": "97000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56032e-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 196,
+          "value_hex": "01",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560315-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 136,
+          "value_hex": "564f6b00010f002900ac027b000000f25b4a0002280008007b016200000071fb4c000126000600ef02b9000000eaf05000021700000052016e00000059345600030f000300be006300000029d85800010f001b002d023b000000d77b5b00041b001100ac02ea011d007e705f00020f000500c101ac0000002226600000bf0400000000000000007f43600000c9020000000000000000d34d600000ca0000000000000000001b67600000e7000000000000000000461262000124002700f8013600000077626300011c0013001d027f0000001361650001ee000000060000000000b384650001c90000000b00020000000094650000f600000000000000000018ab660000f000000000000000000054c1660000d600000000000000000062aa6800010f001f009e0148000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560321-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "write"
+          ],
+          "handle": 175,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "8d560320-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "notify"
+          ],
+          "handle": 172,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "8d560305-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Motion Type",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 133,
+          "value_hex": "33",
+          "value_text": "3"
+        },
+        {
+          "uuid": "8d56032d-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 193,
+          "value_hex": "0000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560301-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 124,
+          "value_hex": "0e01",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560312-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Lightring Color OK",
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 154,
+          "value_hex": "37ff00ff",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560313-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Lightring Color High",
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 156,
+          "value_hex": "ff000fff",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56031b-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 150,
+          "value_hex": "0000000001000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560327-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 140,
+          "value_hex": "01",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560332-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Shaving Mode Settings",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 205,
+          "value_hex": "bd18f401dc05a00f3c00",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560317-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 146,
+          "value_hex": "055e006f009a01f8000113564f6b000457003700d900a6000613f25b4a0005bb00b000ce019b00031371fb4c000639003100fc0071000413eaf05000051a002700a0005200021359345600054400620060018c00021329d8580005a200ac005e0233010013d77b5b00054b00660034019c0003137e705f0000bf04000000000000ce122226600000c902000000000000ce127f43600000ca00000000000000cd12d34d600000e700000000000000cb121b6760000586006f0018016c000513461262000578008a004801810070137762630006dd0008000f000000c9121361650006bc00070013000000ca12b384650000f600000000000000c9120094650000f000000000000000c71218ab660000d600000000000000c81254c16600052e00550008018900071362aa6800",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56031a-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Cleaning Cycles",
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 164,
+          "value_hex": "3400",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56031e-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 162,
+          "value_hex": "00000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56031f-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 170,
+          "value_hex": "f005000000000000564f6b009d04000000000000f25b4a00730600000000000071fb4c006804000000000000eaf05000c40300000000000059345600220500000000000029d858006f07000000000000d77b5b0012050000000000007e705f00280500000000000022266000f6020000000000007f436000d900000000000000d34d6000f6000000000000001b676000000500000000000046126200250300000000000077626300960000000000000013616500a400000000000000b3846500b30000000000000000946500210100000000000018ab6600870000000000000054c16600a40400000000000062aa6800",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56031d-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 160,
+          "value_hex": "00000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56032a-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Shaving Mode",
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 186,
+          "value_hex": "03",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56032b-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 189,
+          "value_hex": "02",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56030c-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Pressure",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 143,
+          "value_hex": "0000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560328-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 182,
+          "value_hex": "02000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56032f-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 198,
+          "value_hex": "0000000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560311-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Lightring Color Low",
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 152,
+          "value_hex": "008fffff",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560331-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Lightring Brightness",
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 203,
+          "value_hex": "cd",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560322-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Handle Load Type",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 177,
+          "value_hex": "0400",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560304-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 131,
+          "value_hex": "00",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56031c-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Lightring Color Motion",
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 158,
+          "value_hex": "bb35bbff",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560329-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 184,
+          "value_hex": "ffffffff",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560330-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Custom Shaving Settings",
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 201,
+          "value_hex": "bd18f401dc05a00f3c00",
+          "value_text": null
+        }
+      ]
+    },
+    {
+      "uuid": "0000180f-0000-1000-8000-00805f9b34fb",
+      "characteristics": [
+        {
+          "uuid": "00002a19-0000-1000-8000-00805f9b34fb",
+          "name": "Battery Level",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 15,
+          "value_hex": "5a",
+          "value_text": "Z"
+        }
+      ]
+    }
+  ]
+}
