@@ -646,7 +646,7 @@ function $d8078e452c66bdbe$export$625550452a3fa3ec(hass, key) {
 
 
 // Written by the release sync script (philips_shaver scripts/sync_card.sh).
-const $8ee5ce714273e53b$export$d5e7ce6d07daf10f = "0.18.0";
+const $8ee5ce714273e53b$export$d5e7ce6d07daf10f = "0.20.0";
 const $8ee5ce714273e53b$export$9b657414b7dffe40 = "bundled";
 
 
@@ -1586,7 +1586,27 @@ if ($5b8472df96c6a1cc$var$winner) {
         type: $5b8472df96c6a1cc$var$TAG,
         name: "Philips Shaver Card",
         description: "Custom card for the Philips Shaver integration with pressure gauge, battery, and diagnostics.",
-        preview: true
+        preview: true,
+        // Card picker suggestion (HA 2026.6+): suggest this card for any
+        // philips_shaver entity. The picked entity may sit on a sub-device
+        // (e.g. Connection), so normalize to the device owning the battery
+        // entity within the same config entry — same shape as getStubConfig.
+        getEntitySuggestion: (hass, entityId)=>{
+            const entity = hass.entities?.[entityId];
+            if (!entity || entity.platform !== "philips_shaver") return null;
+            const devices = hass.devices || {};
+            const entryIds = devices[entity.device_id]?.config_entries || [];
+            const main = Object.values(hass.entities).find((e)=>e.platform === "philips_shaver" && e.translation_key === "battery" && (e.device_id === entity.device_id || (devices[e.device_id]?.config_entries || []).some((ce)=>entryIds.includes(ce))));
+            const deviceId = (main ?? entity).device_id;
+            // setConfig rejects a falsy device_id — better no suggestion than
+            // one whose preview renders an error card.
+            return deviceId ? {
+                config: {
+                    type: `custom:${$5b8472df96c6a1cc$var$TAG}`,
+                    device_id: deviceId
+                }
+            } : null;
+        }
     });
     console.info(`%c PHILIPS-SHAVER-CARD %c v${(0, $8ee5ce714273e53b$export$d5e7ce6d07daf10f)} [${(0, $8ee5ce714273e53b$export$9b657414b7dffe40)}] `, "color:#fff;background:#1c1c1c;padding:2px 6px;border-radius:4px 0 0 4px;font-weight:700", "color:#1c1c1c;background:#ffab40;padding:2px 6px;border-radius:0 4px 4px 0;font-weight:700");
 }
