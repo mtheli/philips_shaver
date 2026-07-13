@@ -175,6 +175,14 @@
       "battery": {
         "name": "Batterie"
       },
+      "charging_status": {
+        "name": "Ladestatus",
+        "state": {
+          "not_charging": "Lädt nicht",
+          "charging": "Lädt",
+          "full_charge": "Vollständig geladen"
+        }
+      },
       "remaining_shaves": {
         "name": "Verbleibende Rasuren"
       },

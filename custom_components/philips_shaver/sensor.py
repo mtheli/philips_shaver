@@ -37,6 +37,7 @@ async def async_setup_entry(
 
     entities: list[PhilipsShaverEntity] = [
         PhilipsBatterySensor(coordinator, entry),
+        PhilipsChargingStatusSensor(coordinator, entry),
         PhilipsRemainingShavesSensor(coordinator, entry),
         PhilipsAmountOfChargesSensor(coordinator, entry),
         PhilipsShaverAmountOfOperationalTurnsSensor(coordinator, entry),
@@ -155,6 +156,44 @@ class PhilipsBatterySensor(PhilipsShaverEntity, RestoreEntity, SensorEntity):
             return int(value)
         except (ValueError, TypeError):
             return None
+
+
+class PhilipsChargingStatusSensor(PhilipsShaverEntity, SensorEntity):
+    """Charging status as an enum (not_charging / charging / full_charge).
+
+    The device only reports "charging" while on the plug — including at
+    100% — so "full_charge" is derived from device state plus battery
+    level. State names follow the Matter battery charge state sensor.
+    """
+
+    _attr_translation_key = "charging_status"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["not_charging", "charging", "full_charge"]
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._device_id}_charging_status"
+
+    @property
+    def native_value(self) -> str | None:
+        state = self.coordinator.data.get("device_state")
+        if state is None or state == "unknown":
+            return None
+        if state != "charging":
+            return "not_charging"
+        if self.coordinator.data.get("battery") == 100:
+            return "full_charge"
+        return "charging"
+
+    @property
+    def icon(self) -> str:
+        return {
+            "not_charging": "mdi:power-plug-off-outline",
+            "charging": "mdi:battery-charging",
+            "full_charge": "mdi:battery-check",
+        }.get(self.native_value, "mdi:battery-unknown")
 
 
 # Shaver battery constants (standard algorithm)
