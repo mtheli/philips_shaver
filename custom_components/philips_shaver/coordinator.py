@@ -8,6 +8,7 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr, issue_registry as ir
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.config_entries import ConfigEntry
 
@@ -97,6 +98,43 @@ from .utils import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+STORAGE_VERSION = 1
+# Debounced: shaving sessions update data every second, so the actual disk
+# write lands once, shortly after the burst ends. Store flushes any pending
+# save on HA shutdown by itself.
+STORAGE_SAVE_DELAY = 10
+
+# Live session state is not persisted — the shaver is asleep again by the
+# time HA comes back up, so restoring "shaving" (or live motor/pressure
+# readings) would be wrong. ``app_handle_settings_raw`` is a bytes
+# write-cache with a live-read fallback, so it is re-read on connect.
+UNPERSISTED_KEYS = {
+    "device_state",
+    "motor_rpm",
+    "motor_current_ma",
+    "pressure",
+    "pressure_state",
+    "speed",
+    "speed_verdict",
+    "motion_type_value",
+    "handle_load_type",
+    "handle_load_type_value",
+    "cleaning_progress",
+    "app_handle_settings_raw",
+}
+
+# RGB tuples — JSON round-trips them as lists, so restore converts back.
+_COLOR_KEYS = ("color_low", "color_ok", "color_high", "color_motion")
+
+
+def _storage_key(entry_id: str) -> str:
+    return f"{DOMAIN}.{entry_id}"
+
+
+async def async_remove_stored_data(hass: HomeAssistant, entry_id: str) -> None:
+    """Delete the persisted device data of a removed config entry."""
+    await Store(hass, STORAGE_VERSION, _storage_key(entry_id)).async_remove()
 
 # Characteristics to subscribe for live notifications.
 # Ordered by priority: real-time data first (subscribed before device sleeps).
@@ -241,6 +279,62 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "system_notifications": 0,
             "last_seen": None,
         }
+
+        # Persists the last known device data across HA restarts — the shaver
+        # sleeps between sessions, so without this every entity would stay
+        # empty until the next time it is used (same pattern as the Sonicare
+        # integration and core's bluetooth.passive_update_processor store).
+        self._store: Store[dict[str, Any]] = Store(
+            hass, STORAGE_VERSION, _storage_key(entry.entry_id)
+        )
+
+    # ------------------------------------------------------------------
+    # Persisted device data
+    # ------------------------------------------------------------------
+
+    async def async_load_stored_data(self) -> None:
+        """Merge the persisted device data into the initial dataset.
+
+        Called once during setup, before live monitoring starts, so the
+        entities come up with the last known values instead of empty ones.
+        Live reads overwrite these as soon as the shaver is next seen.
+        """
+        stored = await self._store.async_load()
+        if not stored:
+            return
+        restored = {k: v for k, v in stored.items() if k not in UNPERSISTED_KEYS}
+        last_seen = restored.get("last_seen")
+        if isinstance(last_seen, str):
+            try:
+                restored["last_seen"] = datetime.fromisoformat(last_seen)
+            except ValueError:
+                restored.pop("last_seen")
+        for key in _COLOR_KEYS:
+            if isinstance(restored.get(key), list):
+                restored[key] = tuple(restored[key])
+        self.data = {**(self.data or {}), **restored}
+        _LOGGER.debug(
+            "Restored %d stored values for %s", len(restored), self.address
+        )
+
+    @callback
+    def async_set_updated_data(self, data: dict[str, Any]) -> None:
+        """Publish new data and schedule a debounced save to disk."""
+        super().async_set_updated_data(data)
+        self._store.async_delay_save(self._data_to_save, STORAGE_SAVE_DELAY)
+
+    @callback
+    def _data_to_save(self) -> dict[str, Any]:
+        """Serialize the persistable subset of ``self.data`` for storage."""
+        data = self.data or {}
+        out = {
+            k: v
+            for k, v in data.items()
+            if not k.startswith("_") and k not in UNPERSISTED_KEYS
+        }
+        if isinstance(out.get("last_seen"), datetime):
+            out["last_seen"] = out["last_seen"].isoformat()
+        return out
 
     async def async_start(self) -> None:
         """Start live monitoring. Call after setup is complete."""

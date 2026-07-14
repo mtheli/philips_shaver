@@ -25,7 +25,7 @@ from .const import (
     DEFAULT_PIPELINED_READS,
     CHAR_SYSTEM_NOTIFICATIONS,
 )
-from .coordinator import PhilipsShaverCoordinator
+from .coordinator import PhilipsShaverCoordinator, async_remove_stored_data
 from .frontend import async_register_card
 from .transport import BleakTransport, EspBridgeTransport
 
@@ -205,7 +205,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {"coordinator": coordinator}
 
     # Non-blocking: shaver sleeps most of the time, don't block HA startup.
-    # Sensors will show "Unknown" briefly until the device wakes up.
+    # Entities come up with the persisted last-known values (or "Unknown" on
+    # a fresh install) until the device next wakes up.
+    await coordinator.async_load_stored_data()
     coordinator.async_set_updated_data(coordinator.data or {})
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -506,6 +508,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     Coord-side `unpair()` early-returns when mode != standalone, so calling
     `ble_unpair` against a Mode A bridge is a harmless silent no-op.
     """
+    await async_remove_stored_data(hass, entry.entry_id)
+
     if entry.data.get(CONF_TRANSPORT_TYPE) != TRANSPORT_ESP_BRIDGE:
         return
     esp_device_name = entry.data.get(CONF_ESP_DEVICE_NAME)

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
 
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.components.bluetooth import async_last_service_info
@@ -83,23 +82,22 @@ class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
 
     @property
     def available(self) -> bool:
-        """Return True if the device is reachable (BLE range or ESP bridge data)."""
+        """Return True once the device has ever been seen.
 
-        if not self._is_esp_bridge:
-            # Direct BLE: check if device is advertising
-            service_info = async_last_service_info(self.hass, self._device_id)
-            if service_info is not None:
-                return True
-        elif self.coordinator.transport.is_connected:
-            # ESP bridge: trust the bridge's live connection state
+        The shaver is a sleepy device — it is out of BLE reach between
+        sessions as its normal state, so availability can't hinge on being
+        currently reachable (same reasoning as core's Oral-B integration).
+        Once it has been seen — live or restored from storage — the last
+        known values stay available; live connectivity is exposed on the
+        Connection sub-device instead.
+        """
+        if self.coordinator.data and self.coordinator.data.get("last_seen"):
             return True
 
-        # ESP bridge / BLE fallback: check last_seen freshness (10 min timeout)
-        last_seen = self.coordinator.data.get("last_seen") if self.coordinator.data else None
-        if last_seen:
-            return (datetime.now(timezone.utc) - last_seen).total_seconds() < 600
-
-        return False
+        # Never seen (fresh install): fall back to reachability
+        if self._is_esp_bridge:
+            return self.coordinator.transport.is_connected
+        return async_last_service_info(self.hass, self._device_id) is not None
 
 
 class PhilipsConnectionEntity(PhilipsShaverEntity):
