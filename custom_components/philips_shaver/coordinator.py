@@ -222,6 +222,11 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ha_bluetooth, "async_clear_advertisement_history"
         )
         self._wake_event = asyncio.Event()
+        # Wake REASON for _wake_event: True only when a real ADV/RSSI signal
+        # arrived (_handle_wake). The disconnect callback sets the event too
+        # (to nudge the loop), so the reconnect loop must not treat a bare
+        # set event as "device is awake".
+        self._adv_wake = False
         self._unsub_advertisement = None
 
         _LOGGER.debug(
@@ -360,7 +365,17 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not self.transport.is_connected and self.data:
             self.data["_connecting"] = True
             self.async_set_updated_data(self.data)
+        self._adv_wake = True
         self._wake_event.set()
+
+    def _consume_wake(self) -> None:
+        """Consume a pending wake: event and wake-reason flag together.
+
+        The two form one unit of state — clearing only one of them would
+        desync the reconnect gate.
+        """
+        self._wake_event.clear()
+        self._adv_wake = False
 
     @callback
     def _clear_adv_history(self) -> None:
@@ -388,9 +403,18 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         @callback
         def _advertisement_callback(service_info, change):
-            # Ignore stale/cached history data (fires on registration)
+            # Ignore stale/cached history data (fires on registration, and on
+            # BlueZ RSSI-invalidation events for cached devices). Such an
+            # event still re-populated habluetooth's dedup history, spending
+            # the one-shot _clear_adv_history arm — re-open the guard, or the
+            # next real (identical-payload) ADV would be deduplicated away
+            # and this callback would never fire again.
             if service_info.rssi is not None and service_info.rssi <= -127:
-                _LOGGER.debug("ADV ignored (stale RSSI %s)", service_info.rssi)
+                _LOGGER.debug(
+                    "%s: ADV ignored (stale RSSI %s) — re-arming dedup guard",
+                    service_info.address, service_info.rssi,
+                )
+                self._clear_adv_history()
                 return
             if not self.transport.is_connected:
                 _LOGGER.info(
@@ -697,16 +721,22 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Direct BLE: wait for ADV/D-Bus signal
             # ESP bridge: skips — connect() sets up listeners, then we wait below
             if not self._is_esp_bridge and not self.transport.is_connected:
-                if self._wake_event.is_set():
-                    self._wake_event.clear()
+                if self._wake_event.is_set() and self._adv_wake:
+                    self._consume_wake()
                     _LOGGER.info("Advertisement already pending — connecting to %s", self.address)
                 else:
+                    # A set wake event without _adv_wake is the disconnect
+                    # nudge, not a wake. Connecting on it blind-hammers a
+                    # device that just went to sleep while the dedup guard
+                    # stays closed — so consume the event and arm the ADV
+                    # path instead.
+                    self._consume_wake()
                     # Re-open the dedup guard so the next ADV wakes us even
                     # though the payload is identical to the last one seen.
                     self._clear_adv_history()
                     _LOGGER.debug("Waiting for advertisement from %s...", self.address)
                     await self._wake_event.wait()
-                    self._wake_event.clear()
+                    self._consume_wake()
                     _LOGGER.info("Advertisement received — connecting to %s", self.address)
 
             # ---- Connect and set up live monitoring ----
@@ -740,6 +770,10 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             if self.data:
                                 self.data["device_state"] = "off"
                                 self.data.pop("_connecting", None)
+                            # ADVs seen before the drop no longer prove the
+                            # device is awake — require a fresh ADV to
+                            # reconnect (see _adv_wake).
+                            self._adv_wake = False
                             # Wake the loop so it observes the disconnect
                             # before the device reconnects (~0.3 s on the
                             # shaver's hourly link drop) — otherwise the
