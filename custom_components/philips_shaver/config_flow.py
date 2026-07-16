@@ -239,12 +239,22 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         # (including deduplicated identical ones — dedup only suppresses callback
         # dispatch, not the history write), so an awake shaver is never misread.
         last = async_last_service_info(self.hass, address, connectable=True)
+        # A BlueZ RSSI-invalidation event (RSSI -127) also bumps the history
+        # timestamp without a packet on the air — treat it as "not seen", or
+        # the sentinel keeps the entry fresh and a stale BLEDevice slips past
+        # the gate (seen after an adapter power-cycle, where the doomed
+        # connects were then misread as a stale bond).
+        stale_rssi = (
+            last is not None and last.rssi is not None and last.rssi <= -127
+        )
         age = None if last is None else (time.monotonic() - last.time)
-        if last is None or age > _STALE_ADV_MAX_SECONDS:
+        if last is None or stale_rssi or age > _STALE_ADV_MAX_SECONDS:
             _LOGGER.info(
                 "%s: no recent connectable advertisement (%s) — device asleep",
                 address,
-                "never seen" if last is None else f"{age:.0f}s ago",
+                "never seen" if last is None
+                else "stale RSSI -127" if stale_rssi
+                else f"{age:.0f}s ago",
             )
             raise DeviceAsleepException
 
