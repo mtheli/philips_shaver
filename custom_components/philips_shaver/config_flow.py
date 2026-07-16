@@ -575,6 +575,12 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         """Check if any ESP bridge is connected to the given MAC."""
         esphome_entries = self.hass.config_entries.async_entries("esphome")
         for entry in esphome_entries:
+            # Disabled bridges cannot hold a connection — probing them only
+            # burns the 10 s bridge timeout (their stale services may still
+            # be registered, so the service-based detection alone would
+            # wrongly pick them up).
+            if entry.disabled_by:
+                continue
             device_name = entry.data.get("device_name")
             if not device_name:
                 continue
