@@ -66,7 +66,7 @@ Other BLE-enabled Philips shavers and groomers using the same GATT services may 
 
 ## Lovelace Card
 
-A dedicated dashboard card — the **Philips Shaver Card** — ships with this integration. No separate installation and no dashboard resource setup needed: it is available as soon as the integration is set up. Add it via the dashboard card picker or in YAML:
+A dedicated dashboard card — the **Philips Shaver Card** — ships with this integration. No separate installation and no dashboard resource setup needed: the integration registers the card automatically (you'll see one entry under *Settings → Dashboards → Resources*, which it keeps up to date). Add it via the dashboard card picker or in YAML:
 
 ```yaml
 type: custom:philips-shaver-card

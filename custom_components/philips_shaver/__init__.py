@@ -26,7 +26,11 @@ from .const import (
     CHAR_SYSTEM_NOTIFICATIONS,
 )
 from .coordinator import PhilipsShaverCoordinator, async_remove_stored_data
-from .frontend import async_register_card
+from .frontend import (
+    async_ensure_card_resource,
+    async_register_card,
+    async_remove_card_resource,
+)
 from .transport import BleakTransport, EspBridgeTransport
 
 _LOGGER = logging.getLogger(__name__)
@@ -180,6 +184,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Philips Shaver from a config entry."""
+    # Removing the last entry deletes the card's Lovelace resource — a later
+    # re-add must restore it without a restart (idempotent otherwise).
+    await async_ensure_card_resource(hass)
+
     # Create transport based on config
     transport_type = entry.data.get(CONF_TRANSPORT_TYPE)
     if transport_type == TRANSPORT_ESP_BRIDGE:
@@ -509,6 +517,16 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     `ble_unpair` against a Mode A bridge is a harmless silent no-op.
     """
     await async_remove_stored_data(hass, entry.entry_id)
+
+    # Last entry gone: drop the card's Lovelace resource entry, otherwise it
+    # would 404 once the integration no longer serves the static path.
+    remaining = [
+        other
+        for other in hass.config_entries.async_entries(DOMAIN)
+        if other.entry_id != entry.entry_id
+    ]
+    if not remaining:
+        await async_remove_card_resource(hass)
 
     if entry.data.get(CONF_TRANSPORT_TYPE) != TRANSPORT_ESP_BRIDGE:
         return
