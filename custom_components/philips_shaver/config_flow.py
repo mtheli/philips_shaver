@@ -580,6 +580,21 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             # be registered, so the service-based detection alone would
             # wrongly pick them up).
             if entry.disabled_by:
+                _LOGGER.debug(
+                    "%s: bridge check — skipping disabled ESPHome entry '%s'",
+                    mac, entry.title,
+                )
+                continue
+            # Same for bridges whose ESPHome API link is down: the probe
+            # runs over that link, so it can only time out. runtime_data is
+            # ESPHome's RuntimeEntryData; fall back to probing if the
+            # attribute layout ever changes.
+            runtime = getattr(entry, "runtime_data", None)
+            if runtime is not None and getattr(runtime, "available", True) is False:
+                _LOGGER.debug(
+                    "%s: bridge check — skipping offline ESPHome entry '%s'",
+                    mac, entry.title,
+                )
                 continue
             device_name = entry.data.get("device_name")
             if not device_name:
