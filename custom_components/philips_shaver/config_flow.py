@@ -922,6 +922,10 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         # translations, hence the icon route.
         esphome_entries = self.hass.config_entries.async_entries("esphome")
         options: list[SelectOptionDict] = []
+        # Per-slot probe results, keyed by underscored ESP name. The slot
+        # picker reuses these instead of re-probing the same bridges seconds
+        # later; health check and capabilities fetch still probe fresh.
+        self._probed_bridges: dict[str, list[tuple[str, dict | None]]] = {}
         for entry in esphome_entries:
             # A disabled entry cannot serve as a bridge — offering it would
             # only fail later with a generic cannot_connect.
@@ -952,6 +956,13 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 probe_results = await self._probe_shaver_bridges(
                     esp_service_id, bridge_ids
                 )
+            by_did = {
+                (info.get("bridge_id") or "").lower(): info
+                for info in probe_results
+            }
+            self._probed_bridges[esp_service_id] = [
+                (did, by_did.get(did.lower())) for did in bridge_ids
+            ]
             slot_info = ""
             is_offline = False
             if probe_results:
@@ -1152,7 +1163,20 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             finally:
                 unsub()
 
-        results = await asyncio.gather(*[_probe(did) for did in self._esp_bridge_ids])
+        # Reuse the probes collected while building the ESP dropdown when they
+        # cover this ESP's slots — they are seconds old, and probing again only
+        # delays the picker (Sonicare pattern). Zeroconf and other entry paths
+        # have no cache and probe as before.
+        if not hasattr(self, "_probed_bridges"):
+            self._probed_bridges = {}
+        cached = self._probed_bridges.get(self.fetched_esp_device_name)
+        if cached is not None and {d for d, _ in cached} == set(self._esp_bridge_ids):
+            results = cached
+        else:
+            results = await asyncio.gather(
+                *[_probe(did) for did in self._esp_bridge_ids]
+            )
+            self._probed_bridges[self.fetched_esp_device_name] = results
 
         self._esp_device_info = {}
         options: list[SelectOptionDict] = []
