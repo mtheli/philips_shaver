@@ -8,6 +8,13 @@
   underlying stack (Bluedroid fixes ship via ESP-IDF), so this answers
   the first support question of any bug report automatically. Surfaced
   in Home Assistant as the new "ESP Build" diagnostic sensor.
+- **New `ble_unpair_mac(mac)` service.** Clears a bond by MAC from the
+  controller's shared NVS store — useful for an orphaned bond that no
+  slot has an identity to target. Because the store is slot-independent,
+  the service is registered once per node (not per bridge_id), so a
+  dual-slot board exposes a single copy instead of one per slot. Emits
+  `bond_removed` / `bond_not_found` (distinct from the slot-unpair
+  `unpaired` event).
 - Fixed `-Wformat` warnings under the ESPHome 2026.7 native toolchain
   (GCC 14.2 defines `uint32_t` as `long unsigned int`). No behaviour
   change.

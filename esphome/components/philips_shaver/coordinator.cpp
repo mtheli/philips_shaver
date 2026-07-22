@@ -22,6 +22,29 @@ static espbt::ESPBTUUID parse_uuid(const std::string &uuid_str) {
   return espbt::ESPBTUUID::from_raw(uuid_str);
 }
 
+static bool parse_mac_to_bda(const std::string &mac, uint8_t out[6]) {
+  if (mac.length() != 17)
+    return false;
+  auto hex_nibble = [](char c) -> int {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+  };
+  for (int i = 0; i < 6; i++) {
+    int hi_pos = i * 3;
+    int lo_pos = hi_pos + 1;
+    if (i < 5 && mac[hi_pos + 2] != ':')
+      return false;
+    int h = hex_nibble(mac[hi_pos]);
+    int l = hex_nibble(mac[lo_pos]);
+    if (h < 0 || l < 0)
+      return false;
+    out[i] = (uint8_t)((h << 4) | l);
+  }
+  return true;
+}
+
 void ShaverCoordinator::emit_(const std::string &event_type,
                                const std::map<std::string, std::string> &data) {
   if (this->bridge_ != nullptr)
@@ -1427,6 +1450,66 @@ void ShaverCoordinator::set_pair_mode(bool enable, uint32_t timeout_s) {
   if (!this->target_mac_.empty())
     data["target_mac"] = this->target_mac_;
   this->emit_(EVENT_STATUS, data);
+}
+
+void ShaverCoordinator::remove_bond_by_mac(const std::string &mac) {
+  uint8_t bda[6] = {0};
+  if (!parse_mac_to_bda(mac, bda)) {
+    ESP_LOGW(this->log_tag_.c_str(),
+             "unpair_mac: cannot parse MAC '%s' — ignoring", mac.c_str());
+    this->emit_(EVENT_STATUS, {
+                                  {"status", "bond_removal_failed"},
+                                  {"mac", mac},
+                                  {"reason", "bad_mac"},
+                                  {"version", PHILIPS_SHAVER_VERSION},
+                              });
+    return;
+  }
+
+  ESP_LOGW(this->log_tag_.c_str(),
+           "unpair_mac: removing any bond for %s (slot-independent)",
+           mac.c_str());
+
+  bool removed = false;
+  // Targeted removal.
+  if (esp_ble_remove_bond_device(bda) == ESP_OK) {
+    removed = true;
+    ESP_LOGI(this->log_tag_.c_str(), "unpair_mac: bond removed for %s",
+             mac.c_str());
+  }
+
+  // Safety-net sweep — only entries whose BDA matches the requested MAC, so
+  // bonds for other slots / components on this same chip stay intact.
+  int total = esp_ble_get_bond_device_num();
+  if (total > 0) {
+    auto *list = (esp_ble_bond_dev_t *) malloc(sizeof(esp_ble_bond_dev_t) * total);
+    if (list != nullptr) {
+      if (esp_ble_get_bond_device_list(&total, list) == ESP_OK) {
+        for (int i = 0; i < total; i++) {
+          if (memcmp(list[i].bd_addr, bda, 6) != 0)
+            continue;  // belongs to another device — leave alone
+          if (esp_ble_remove_bond_device(list[i].bd_addr) == ESP_OK) {
+            removed = true;
+            ESP_LOGI(this->log_tag_.c_str(),
+                     "unpair_mac: swept lingering bond for %s", mac.c_str());
+          }
+        }
+      }
+      free(list);
+    }
+  }
+
+  if (!removed)
+    ESP_LOGI(this->log_tag_.c_str(),
+             "unpair_mac: no stored bond found for %s", mac.c_str());
+  // Distinct status from the slot-unpair `unpaired` event so the config
+  // flow's slot-unpair listener never mistakes this manual call for its own.
+  this->emit_(EVENT_STATUS, {
+                                {"status",
+                                 removed ? "bond_removed" : "bond_not_found"},
+                                {"mac", mac},
+                                {"version", PHILIPS_SHAVER_VERSION},
+                            });
 }
 
 void ShaverCoordinator::unpair() {

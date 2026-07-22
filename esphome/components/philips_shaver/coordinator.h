@@ -89,6 +89,12 @@ class ShaverCoordinator {
   // Called by Bridge service `ble_unpair`. Removes the BLE bond, clears
   // any cached identity (Worker side via callback) and disconnects.
   void unpair();
+  // Called by HA service ble_unpair_mac. Removes the Bluedroid bond for an
+  // explicit MAC, independent of any slot's persisted identity — recovers
+  // orphaned bonds that the slot-scoped unpair() can't target. Touches only
+  // the given address; leaves other slots' bonds and this slot's identity
+  // untouched.
+  void remove_bond_by_mac(const std::string &mac);
   // Discovery-only: arm UUID-scan for timeout_s seconds, emit one
   // scan_result event per unique MAC observed, then scan_complete.
   // Does NOT connect.

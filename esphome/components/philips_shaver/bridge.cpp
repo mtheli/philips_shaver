@@ -11,6 +11,10 @@ namespace philips_shaver {
 
 static const char *const TAG = "philips_shaver.bridge";
 
+// Node-wide guard: only the first bridge instance registers the
+// slot-independent ble_unpair_mac service. See setup().
+bool ShaverBridge::unpair_mac_registered_ = false;
+
 std::string ShaverBridge::svc_name_(const std::string &action) {
   if (this->bridge_id_.empty())
     return action;
@@ -54,6 +58,16 @@ void ShaverBridge::setup() {
                           {"enabled", "timeout_s"});
   this->register_service(&ShaverBridge::on_unpair,
                           this->svc_name_("ble_unpair"), {});
+  // ble_unpair_mac removes a bond by MAC from the controller's shared NVS
+  // bond store — it is slot-independent, so register it once per node
+  // (not per bridge_id) or a dual-slot board would expose two identical
+  // copies. The first instance to run setup() claims it; its coordinator
+  // can service it since the bond store is global to the controller.
+  if (!ShaverBridge::unpair_mac_registered_) {
+    ShaverBridge::unpair_mac_registered_ = true;
+    this->register_service(&ShaverBridge::on_unpair_mac,
+                            "ble_unpair_mac", {"mac"});
+  }
   this->register_service(&ShaverBridge::on_scan,
                           this->svc_name_("ble_scan"), {"timeout_s"});
   this->register_service(&ShaverBridge::on_pair_mac,
@@ -180,6 +194,11 @@ void ShaverBridge::on_pair_mode(bool enabled, std::string timeout_s) {
 void ShaverBridge::on_unpair() {
   if (this->coord_ != nullptr)
     this->coord_->unpair();
+}
+
+void ShaverBridge::on_unpair_mac(std::string mac) {
+  if (this->coord_ != nullptr)
+    this->coord_->remove_bond_by_mac(mac);
 }
 
 void ShaverBridge::on_scan(std::string timeout_s) {
