@@ -193,8 +193,11 @@
       "bridge_version": {
         "name": "Bridge Version"
       },
+      "bridge_build": {
+        "name": "ESP Build"
+      },
       "bridge_boot_time": {
-        "name": "Bridge Last Boot"
+        "name": "ESP Last Boot"
       },
       "adapter": {
         "name": "Adapter"
@@ -379,7 +382,7 @@
         }
       },
       "esp_bridge_alive": {
-        "name": "Bridge Status",
+        "name": "ESP Connected",
         "state": {
           "on": "Online",
           "off": "Offline"
