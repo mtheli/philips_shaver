@@ -202,6 +202,9 @@ The integration supports two connection methods:
 > The shaver must be **fully unpaired** (from your phone **and** the device itself) before connecting to Home Assistant.
 > Follow the [Unpairing Guide](docs/UNPAIRING.md) for step-by-step instructions.
 
+> [!TIP]
+> Want to see the setup dialogs before you start? The **[interactive config-flow walkthrough](https://mtheli.github.io/philips_shaver/config_flow_walkthrough.html)** lets you click through every screen of the setup — normal path, conditional branches, errors and aborts — with example data ([HTML source](docs/config_flow_walkthrough.html)).
+
 ### Option A: Direct Bluetooth (Pairing)
 
 1.  Ensure the shaver is **turned on**.

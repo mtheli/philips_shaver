@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Philips Shaver — config flow walkthrough</title>
+<style>
+  :root {
+    --paper: #f2f5f9;
+    --surface: #ffffff;
+    --surface2: #f7fafd;
+    --ink: #1a2332;
+    --muted: #5c6b7e;
+    --line: #dbe2ea;
+    --accent: #0277bd;
+    --accent-ink: #01579b;
+    --accent-soft: #e5f2fb;
+    --ok: #2e7d32;
+    --ok-soft: #e7f3e8;
+    --warn: #a15c00;
+    --warn-soft: #fdf3e3;
+    --err: #c62828;
+    --err-soft: #fdecea;
+    --code-bg: #eef2f7;
+    --shadow: 0 1px 2px rgba(16,24,40,.06), 0 4px 14px rgba(16,24,40,.07);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0f141b; --surface: #171f2a; --surface2: #131a24; --ink: #e7edf5;
+      --muted: #93a1b3; --line: #2a3547; --accent: #58b8f0; --accent-ink: #8fd0f7;
+      --accent-soft: #10344d; --ok: #66bb6a; --ok-soft: #16301b; --warn: #e0a458;
+      --warn-soft: #33280f; --err: #ef6e64; --err-soft: #3a1f1e; --code-bg: #0e1621;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 18px rgba(0,0,0,.35);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 15px/1.55 system-ui, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 34px 20px 90px; }
+  code, .mono {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, monospace;
+    font-size: .88em;
+  }
+  code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; }
+
+  .eyebrow { text-transform: uppercase; letter-spacing: .09em; font-size: 11.5px; font-weight: 600; color: var(--accent); margin: 0 0 6px; }
+  h1 { font-size: 24px; line-height: 1.2; margin: 0 0 6px; font-weight: 700; text-wrap: balance; }
+  .sub { color: var(--muted); margin: 0 0 8px; max-width: 66ch; font-size: 13.5px; }
+  .stamp { color: var(--muted); margin: 0 0 22px; font-size: 12px; }
+
+  /* breadcrumb trail */
+  .trail { display: flex; flex-wrap: wrap; gap: 4px 2px; align-items: center; margin: 0 0 16px; min-height: 26px; }
+  .crumb {
+    border: 0; cursor: pointer; font: inherit; font-size: 12px;
+    font-family: ui-monospace, Menlo, monospace;
+    background: var(--surface); color: var(--muted); border: 1px solid var(--line);
+    border-radius: 99px; padding: 2px 10px;
+  }
+  .crumb:hover { color: var(--accent-ink); border-color: var(--accent); }
+  .crumb:focus-visible, .opt:focus-visible, .reset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .crumb.cur { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+  .trail .sep { color: var(--muted); font-size: 11px; padding: 0 2px; }
+  .reset {
+    border: 0; cursor: pointer; font: inherit; font-size: 12px; margin-left: auto;
+    color: var(--muted); background: transparent; padding: 2px 8px; border-radius: 6px;
+  }
+  .reset:hover { color: var(--err); background: var(--err-soft); }
+
+  /* dialog mockup */
+  .stage { min-height: 200px; }
+  .dlg {
+    background: var(--surface); border-radius: 14px; box-shadow: var(--shadow);
+    border: 1px solid var(--line); overflow: hidden;
+  }
+  .dlg-head { display: flex; align-items: center; gap: 10px; padding: 16px 20px 0; }
+  .dlg-head .x { color: var(--muted); font-size: 18px; line-height: 1; margin-left: auto; }
+  .dlg-title { font-size: 17.5px; font-weight: 600; }
+  .dlg-body { padding: 12px 20px 8px; font-size: 13.5px; line-height: 1.55; overflow-x: auto; }
+  .dlg-body p { margin: 0 0 10px; }
+  .dlg-body table { border-collapse: collapse; margin: 4px 0 10px; }
+  .dlg-body td { padding: 2px 14px 2px 0; vertical-align: top; }
+  .dlg-body pre {
+    background: var(--code-bg); border-radius: 8px; padding: 10px 12px; overflow-x: auto;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; line-height: 1.5; margin: 8px 0 10px;
+  }
+  .alert { border-radius: 8px; padding: 8px 12px; margin: 0 0 10px; font-size: 13px; display: flex; gap: 8px; }
+  .alert.error { background: var(--err-soft); color: var(--err); }
+  .alert.warn { background: var(--warn-soft); color: var(--warn); }
+  .alert.good { background: var(--ok-soft); color: var(--ok); }
+  .formerr { color: var(--err); font-size: 12.5px; margin: 6px 0 10px; }
+
+  .field { margin: 10px 0 12px; }
+  .field .flabel { font-size: 11.5px; color: var(--accent); margin-bottom: 2px; }
+  .field .fbox {
+    border: 1px solid var(--line); border-bottom: 2px solid var(--accent);
+    border-radius: 6px 6px 0 0; background: var(--surface2);
+    padding: 8px 12px; font-size: 13.5px; display: flex; justify-content: space-between; gap: 8px;
+  }
+  .field .fbox .caret { color: var(--muted); }
+  .field .fhelp { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .radio { display: flex; gap: 10px; align-items: baseline; padding: 5px 2px; font-size: 13.5px; }
+  .radio .dot { width: 15px; height: 15px; border-radius: 50%; border: 2px solid var(--muted); flex: none; align-self: center; }
+  .radio.sel .dot { border-color: var(--accent); box-shadow: inset 0 0 0 3.5px var(--surface), inset 0 0 0 10px var(--accent); }
+  .switchrow { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; padding: 8px 2px; border-bottom: 1px solid var(--line); }
+  .switchrow:last-of-type { border-bottom: 0; }
+  .switchrow .sl { font-size: 13.5px; }
+  .switchrow .sd { font-size: 12px; color: var(--muted); margin-top: 1px; max-width: 46ch; }
+  .toggle { flex: none; width: 40px; height: 20px; border-radius: 99px; background: var(--line); position: relative; margin-top: 2px; }
+  .toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+  .toggle.on { background: var(--accent); }
+  .toggle.on::after { left: 22px; }
+  .menuopt {
+    display: flex; align-items: center; gap: 12px; border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; margin: 8px 0; font-weight: 500; font-size: 14px;
+  }
+  .menuopt .chev { margin-left: auto; color: var(--muted); }
+  .menuopt .ic { color: var(--accent); font-size: 16px; }
+  .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 4px 14px 14px; }
+  .fakebtn { color: var(--accent); font-weight: 600; font-size: 13.5px; letter-spacing: .02em; padding: 8px 14px; border-radius: 8px; text-transform: uppercase; }
+  .progressbar { height: 4px; border-radius: 99px; background: var(--accent-soft); overflow: hidden; margin: 14px 0 8px; }
+  .progressbar > div { width: 40%; height: 100%; background: var(--accent); border-radius: 99px; animation: slide 1.6s ease-in-out infinite alternate; }
+  .progressbar.det > div { animation: none; }
+  @keyframes slide { from { margin-left: 0; } to { margin-left: 60%; } }
+  @media (prefers-reduced-motion: reduce) { .progressbar > div { animation: none; } }
+
+  /* discovery tile */
+  .tile {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    box-shadow: var(--shadow); padding: 18px 20px 12px; max-width: 340px;
+  }
+  .tile .tname { font-weight: 600; font-size: 15px; }
+  .tile .tsub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .tile .tactions { display: flex; gap: 6px; margin-top: 14px; }
+
+  /* terminal cards */
+  .term { border-radius: 14px; padding: 22px 24px; box-shadow: var(--shadow); border: 1px solid var(--line); background: var(--surface); }
+  .term.good { border-left: 4px solid var(--ok); }
+  .term.bad { border-left: 4px solid var(--err); }
+  .term .ttl { font-weight: 700; font-size: 16.5px; margin-bottom: 6px; }
+  .term.good .ttl { color: var(--ok); }
+  .term.bad .ttl { color: var(--err); }
+  .term p { margin: 0; font-size: 13.5px; }
+  .term .abkey { margin-top: 10px; }
+
+  /* meta line under dialog */
+  .meta {
+    font-size: 12px; color: var(--muted); padding: 10px 6px 0; display: flex;
+    flex-wrap: wrap; gap: 6px 12px; align-items: baseline;
+  }
+  .meta .sid {
+    font-family: ui-monospace, Menlo, monospace; color: var(--accent-ink);
+    background: var(--accent-soft); border-radius: 5px; padding: 1px 7px; font-size: 11.5px;
+  }
+  .meta .src { font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
+  .metanote { font-size: 12px; color: var(--muted); padding: 4px 6px 0; max-width: 80ch; }
+
+  /* options panel */
+  .nextpanel { margin-top: 26px; }
+  .nextpanel .nhead {
+    text-transform: uppercase; letter-spacing: .09em; font-size: 11px; font-weight: 700;
+    color: var(--muted); margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+  }
+  .nextpanel .nhead::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+  .optgrid { display: flex; flex-direction: column; gap: 8px; }
+  .optghead {
+    text-transform: uppercase; letter-spacing: .08em; font-size: 10.5px; font-weight: 700;
+    color: var(--muted); margin: 10px 2px 0;
+  }
+  .optghead:first-child { margin-top: 0; }
+  .opt {
+    display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+    border-radius: 10px; padding: 10px 14px; cursor: pointer; font: inherit; font-size: 13.5px;
+  }
+  .opt:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .opt .tag {
+    flex: none; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    border-radius: 5px; padding: 2px 7px;
+  }
+  .opt.kind-main .tag { background: var(--accent-soft); color: var(--accent-ink); }
+  .opt.kind-cond .tag { background: var(--code-bg); color: var(--muted); }
+  .opt.kind-err .tag { background: var(--warn-soft); color: var(--warn); }
+  .opt.kind-abort .tag { background: var(--err-soft); color: var(--err); }
+  .opt.kind-err:hover { border-color: var(--warn); background: var(--warn-soft); }
+  .opt.kind-abort:hover { border-color: var(--err); background: var(--err-soft); }
+  .opt .olabel { flex: 1; }
+  .opt .onum {
+    flex: none; font-family: ui-monospace, Menlo, monospace; font-weight: 700;
+    font-size: 12px; background: var(--accent); color: #fff;
+    border-radius: 6px; padding: 2px 8px; letter-spacing: .03em;
+  }
+  .opt .onum.abortnum { background: var(--err); }
+  .opt .otarget { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; color: var(--muted); flex: none; }
+  .opt .arr { color: var(--muted); flex: none; }
+  @media (max-width: 560px) { .opt .otarget { display: none; } }
+
+  /* step number badge above the stage */
+  .stepbadge {
+    display: inline-flex; align-items: baseline; gap: 8px; margin: 0 0 10px;
+    font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--muted);
+  }
+  .stepbadge .no {
+    background: var(--accent); color: #fff; border-radius: 6px; padding: 2px 9px;
+    font-weight: 700; font-size: 12.5px; letter-spacing: .03em;
+  }
+  .stepbadge.abort .no { background: var(--err); }
+
+  /* step index */
+  .index { margin: 0 0 18px; }
+  .index summary {
+    cursor: pointer; font-size: 12px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .08em; font-weight: 600; user-select: none;
+  }
+  .index summary:hover { color: var(--accent-ink); }
+  .indexgrid { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0 4px; }
+  .ixchip {
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+    border-radius: 8px; padding: 3px 10px; cursor: pointer; font: inherit; font-size: 12px;
+    display: inline-flex; gap: 7px; align-items: baseline;
+  }
+  .ixchip:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .ixchip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .ixchip .no { font-family: ui-monospace, Menlo, monospace; font-weight: 700; color: var(--accent-ink); font-size: 11px; }
+  .ixchip.abort .no { color: var(--err); }
+  .ixchip .nm { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <p class="eyebrow">philips_shaver · interactive walkthrough</p>
+  <h1>Play through the config flow</h1>
+  <p class="sub">One screen at a time, with every possible continuation below it — the normal path, conditional branches, errors (which stay in the dialog) and aborts. The breadcrumbs at the top lead back. Example data: XP9201 (i9000 Prestige) &amp; OneBlade QP4530 · ESP node <code>atom-s3r</code> with the slots <code>shaver</code> (“Bathroom Shaver”) and <code>oneblade</code> (“Beard Trimmer”).</p>
+  <p class="stamp">Last updated: 2026-07-22 · philips_shaver v0.24.0 — source references point at <code>config_flow.py</code> of that version.</p>
+
+  <details class="index"><summary>Step index (S0–S20, A1–A4)</summary>
+    <div class="indexgrid" id="index"></div>
+  </details>
+
+  <div class="trail" id="trail"></div>
+  <div class="stage" id="stage"></div>
+  <div class="nextpanel">
+    <div class="nhead">What can happen next</div>
+    <div class="optgrid" id="opts"></div>
+  </div>
+</div>
+
+<script>
+const MAC = "AA:BB:CC:11:22:33";
+const MAC2 = "AA:BB:CC:44:55:66";
+
+function dlg(title, body, actions, meta, note) {
+  return `<div class="dlg">
+    <div class="dlg-head"><span class="dlg-title">${title}</span><span class="x">✕</span></div>
+    <div class="dlg-body">${body}</div>
+    <div class="dlg-actions">${(actions||[]).map(a=>`<span class="fakebtn">${a}</span>`).join("")}</div>
+  </div>
+  ${meta ? `<div class="meta">${meta}</div>` : ""}
+  ${note ? `<div class="metanote">${note}</div>` : ""}`;
+}
+function meta(sid, src) { return `<span class="sid">${sid}</span><span class="src">${src}</span>`; }
+function errline(key, text) { return `<div class="formerr">⚠ ${text} <span class="mono">(${key})</span></div>`; }
+function detbar(pct, label) {
+  return `<div class="progressbar det"><div style="width:${pct}%"></div></div>
+    <p style="color:var(--muted)">${label}</p>`;
+}
+
+const ERRORS = {
+  cannot_connect: "Failed to connect to the shaver. Please ensure it is powered on, in range, and not connected to another device (e.g. your phone).",
+  device_asleep: "The shaver is asleep. Wake it (press the power button or place it on its charging stand), then try again.",
+  device_not_found: "Device not found. Please ensure it is powered on and in range.",
+  pairing_failed: "Bluetooth pairing failed. Make sure the shaver is switched on and not connected to another device (phone / GroomTribe / OneBlade app). If it keeps failing, the shaver may still hold an old bond on its side — clear Bluetooth on the shaver (model-specific: long-press the power button until the Bluetooth LED clears, or unpair it in the app), then retry.",
+  service_call_failed: "Could not arm pair-mode on the ESP bridge. The bridge may be offline or a too-old firmware version. Update the bridge to v1.8.0 or newer and retry.",
+  pair_timeout: "No shaver appeared during the 60-second pair-mode window. Make sure the shaver is on and advertising, and try again.",
+  pair_failed_stale_bond: "Pairing failed with repeated auth errors. The shaver still holds the previous bond on its side and is rejecting fresh pairing. Clear Bluetooth on the shaver (model-specific: long-press the power button until the BT LED clears, or unpair via the GroomTribe / OneBlade app), then retry.",
+  no_esphome_devices: "No ESPHome devices found. Please set up an ESPHome device with the BLE bridge component first.",
+  unknown: "Unexpected error. Check the logs (Settings → System → Logs) for details.",
+  unpair_unconfirmed: "Couldn't confirm the bridge cleared the bond — it may need a reboot. Make sure it's online, then try again.",
+  unpair_offline: "Couldn't reach the ESP bridge to clear the bond. Make sure it's online and powered, then try again.",
+};
+const ABORTS = {
+  already_configured: "Device is already configured. — Detail variant: “This shaver is already configured via Direct Bluetooth (status: active). Remove or re-enable the existing entry first.”",
+  no_devices_found: "No supported Philips devices were found on this ESP bridge.",
+  esp_not_reachable: "The ESP bridge did not respond on any of its slots. Make sure it is powered and online.",
+  not_supported: "This ESPHome device does not host a Philips Shaver bridge component.",
+};
+
+// option kinds: main (normal path) / cond (conditional branch) / err (error, stays in the dialog) / abort
+const SCREENS = {
+
+  start: {
+    render: () => `<div class="term">
+        <div class="ttl">Entry points</div>
+        <p>The flow can start in three ways. Pick one below.</p>
+      </div>`,
+    opts: [
+      ["main","A discovery card appears (the shaver advertises its services)","disc_bt"],
+      ["main","“+ Add integration” in the settings","user"],
+      ["main","Zeroconf: ESPHome device with the bridge component discovered","disc_zeroconf"],
+    ],
+  },
+
+  disc_bt: {
+    render: () => `<div class="tile">
+        <div class="tname">Philips Shaver</div>
+        <div class="tsub">Discovered · Bluetooth (${MAC})</div>
+        <div class="tactions"><span class="fakebtn">Add</span><span class="fakebtn" style="color:var(--muted)">Ignore</span></div>
+      </div>
+      <div class="meta">${meta("bluetooth","config_flow.py:721")}</div>
+      <div class="metanote">UI-less routing step: sets the <code>unique_id</code> from the advertised address. If an ESP bridge slot already holds this shaver (identity or live MAC — probed via the 3-second <code>ble_get_info</code> event round-trip), the flow switches to the ESP path.</div>`,
+    opts: [
+      ["main","Add","bluetooth_confirm"],
+      ["cond","An ESP bridge already holds this shaver → ESP path","esp_slot_action"],
+      ["abort","Shaver is already set up","abort_already_configured"],
+    ],
+  },
+
+  disc_zeroconf: {
+    render: () => `<div class="tile">
+        <div class="tname">ESP32 Bridge (atom-s3r)</div>
+        <div class="tsub">Discovered · ESPHome (Shaver bridge)</div>
+        <div class="tactions"><span class="fakebtn">Configure</span><span class="fakebtn" style="color:var(--muted)">Ignore</span></div>
+      </div>
+      <div class="meta">${meta("zeroconf","config_flow.py:632")}</div>
+      <div class="metanote">UI-less routing step: verifies the ESPHome device hosts Shaver bridge services (a Sonicare bridge sharing the service-name pattern never answers on our event channel), then continues based on the slot situation. Already-configured slots are matched on identity∪MAC plus a config-entry fallback — the live MAC reads <code>00:00:…</code> while the shaver is asleep.</div>`,
+    opts: [
+      ["cond","Bridge hosts several slots → device selection","esp_select_device"],
+      ["cond","Exactly one (unconfigured) slot → straight on","esp_slot_action"],
+      ["abort","No Shaver bridge component on the device","abort_not_supported"],
+      ["abort","All slots are already set up","abort_already_configured"],
+    ],
+  },
+
+  user: {
+    render: () => dlg("Philips Shaver",
+      `<p>Choose how to connect to your shaver.</p>
+       <div class="menuopt"><span class="ic">🖥</span> Direct Bluetooth <span class="chev">›</span></div>
+       <div class="menuopt"><span class="ic">📡</span> ESP32 Bridge (ESPHome) <span class="chev">›</span></div>`,
+      [], meta("user","config_flow.py:1149")),
+    opts: [
+      ["main","Direct Bluetooth","user_bleak"],
+      ["main","ESP32 Bridge (ESPHome)","esp_bridge"],
+    ],
+  },
+
+  bluetooth_confirm: {
+    render: (s) => dlg("Confirm detected device",
+      `${s.variant==="asleep" ? `<div class="alert error">⚠ <span>The shaver is asleep — wake it (press the power button or place it on its charging stand), then click Read capabilities again.</span></div>` : ""}
+       ${s.variant==="failed" ? `<div class="alert error">⚠ <span>Could not read the shaver. Make sure it is switched on and in range, then click Read capabilities to try again. Details are in the logs (Settings → System → Logs).</span></div>` : ""}
+       <p><b>Philips XP9201</b> discovered at <code>${MAC}</code>${s.variant==="proxy" ? " via <b>Bluetooth proxy</b> (atom-lite, −61 dBm)" : " via <b>Direct Bluetooth</b> (hci0, −68 dBm)"}.</p>
+       ${s.variant==="proxy" ? `<div class="alert warn">⚠ <span>This connection would go through the Bluetooth proxy <b>atom-lite</b> (−61 dBm).<br><br>Philips shavers cannot pair over a standard Bluetooth proxy — setup and live updates over this path will fail.<br><br>Your local adapter <b>hci0</b> also sees the shaver (−78 dBm) — Home Assistant connects through the strongest signal, so move the shaver closer to it to prefer that path.</span></div>` : ""}
+       <p>ℹ️ <b>Before continuing, please verify:</b><br>
+       1. ⬜ Shaver is <b>turned on</b> or on its <b>charging stand</b><br>
+       2. ⬜ Shaver is <b>unpaired</b> from your phone — remove from Bluetooth settings <b>and</b> GroomTribe / OneBlade app</p>
+       <p>Pairing will be handled automatically during setup. The integration will then connect to the device to read hardware capabilities. This may take a few seconds.</p>`,
+      ["Read capabilities"], meta("bluetooth_confirm","config_flow.py:731"),
+      "The “via …” line and the proxy warning are computed per render from the connectable scanners that currently see the shaver (strongest first; stale BlueZ −127 entries are filtered). No scanner sees it → no prediction. On submit, a D-Bus pre-check takes a shortcut to the pairing step when BlueZ knows the device is unpaired (skipped when a remote scanner is the likely carrier — the BlueZ bond state says nothing about a proxy link)."),
+    opts: [
+      ["main","Read capabilities → probe runs behind a progress bar","probing"],
+      ["cond","D-Bus pre-check: not paired → straight to the pairing dialog","pair"],
+      ["cond","Proxy would carry the connection → hard warning shown","bluetooth_confirm",{variant:"proxy"}],
+      ["cond","Shaver was asleep on submit → alert appears, card stays open","bluetooth_confirm",{variant:"asleep"}],
+    ],
+  },
+
+  probing: {
+    render: () => dlg("Confirm detected device",
+      detbar(45, "Connecting to Philips XP9201 and reading its data — usually a few seconds; if several connection attempts are needed (weak signal, first contact after a pairing problem) this can take up to two minutes…"),
+      [], meta("probing · ble_probing","config_flow.py:991"),
+      "The probe runs as a background task behind <code>async_show_progress</code> with a determinate bar; a wall-clock ticker keeps the bar moving while <code>establish_connection</code> retries internally (stale bond: 4 attempts, ~85 s). <code>ble_probe_finish</code> routes the boxed outcome back to whichever step started the probe."),
+    opts: [
+      ["main","Probe succeeds (services + device info read)","show_capabilities_direct"],
+      ["cond","Missing bond (auth error on the encrypted reads) → pairing","pair"],
+      ["cond","Visible but unreachable — likely stale bond → pairing (removes + re-pairs)","pair"],
+      ["cond","Probe rode a Bluetooth proxy and hit the missing bond → hard dead-end","not_paired_proxy"],
+      ["err","Shaver fell asleep → alert on the confirm card","bluetooth_confirm",{variant:"asleep"}],
+      ["err","Read failed → alert on the confirm card","bluetooth_confirm",{variant:"failed"}],
+    ],
+  },
+
+  user_bleak: {
+    render: (s) => dlg("Direct Bluetooth",
+      `<p>Select your shaver from the list of discovered devices, or choose “Other” to enter its Bluetooth MAC address manually.</p>
+       <p><b>Important:</b> switch the shaver on (press the power button or place it on its charging stand) before clicking Submit — it must stay on so its services can be read.</p>
+       <div class="field">
+         <div class="flabel">MAC Address</div>
+         <div class="fbox"><span>Philips XP9201 (${MAC}) — 3s ago, −68 dBm, via hci0</span><span class="caret">▾</span></div>
+         <div class="fhelp">Other entries: “Philips QP4530 (${MAC2}) — 7s ago, −74 dBm, via atom-lite (proxy)” · “Other — enter address manually”</div>
+       </div>
+       ${s.error ? errline(s.error, ERRORS[s.error]) : ""}`,
+      ["Submit"], meta("user_bleak","config_flow.py:1158"),
+      "The picker lists devices that advertise the proprietary shaver services, freshest first, with advertisement age, RSSI and the scanner that would likely carry the connect (“(proxy)” marks a remote one). The sentinel entry switches to a free-text MAC field. Submit runs the same D-Bus pre-check and probe as the discovery path."),
+    opts: [
+      ["main","Submit → probe runs behind a progress bar","probing"],
+      ["cond","D-Bus pre-check: not paired → straight to the pairing dialog","pair"],
+      {group:"Errors / abort"},
+      ["err","Error: cannot_connect","user_bleak",{error:"cannot_connect"}],
+      ["err","Error: device_asleep","user_bleak",{error:"device_asleep"}],
+      ["abort","Address is already a config entry","abort_already_configured"],
+    ],
+  },
+
+  pair: {
+    render: (s) => s.phase==="pairing"
+      ? dlg("Pair Device",
+          detbar(45, "Pairing with Philips XP9201 and reading its data — this can take up to a minute…"),
+          [], meta("pair · pairing","config_flow.py:2477"),
+          "One background task: D-Bus pair + trust (a stale BlueZ bond is removed first), a short settle for key distribution, then the capabilities probe. <code>ble_probe_finish</code> routes the outcome.")
+      : dlg("Pair Device",
+      `<p><b>Philips XP9201</b> needs to be paired with this system.</p>
+       <p>ℹ️ <b>Before pairing, please verify:</b><br>
+       1. ⬜ Shaver is <b>turned on</b> or on its <b>charging stand</b><br>
+       2. ⬜ Shaver is <b>not connected</b> to your phone — remove from Bluetooth settings <b>and</b> GroomTribe / OneBlade app</p>
+       ${s.error ? errline(s.error, ERRORS[s.error]) : ""}`,
+      ["Start pairing"], meta("pair","config_flow.py:2477")),
+    opts: [
+      ["main","Start pairing → progress (pair + probe in one task)","pair",{phase:"pairing"}],
+      ["main","Pairing + probe succeed","show_capabilities_direct"],
+      {group:"Errors"},
+      ["err","Pairing rejected (pairing_failed)","pair",{error:"pairing_failed"}],
+      ["err","Shaver fell asleep (device_asleep)","pair",{error:"device_asleep"}],
+      ["err","Post-pairing connect failed (cannot_connect)","pair",{error:"cannot_connect"}],
+      ["cond","Paired, but reads still refused → manual instructions","not_paired"],
+    ],
+  },
+
+  not_paired: {
+    render: () => dlg("Pairing Required",
+      `<p><b>Philips XP9201</b> is not paired with this system.</p>
+       <p>Open the <b>Terminal &amp; SSH</b> addon (install it first if needed) and run the pairing script:</p>
+       <pre>bash /config/custom_components/philips_shaver/scripts/pair.sh</pre>
+       <p>The script will scan for nearby Philips devices and guide you through the pairing process.</p>`,
+      ["Retry"], meta("not_paired","config_flow.py:2542"),
+      "Fallback when D-Bus is unavailable or the automatic pairing keeps failing. Retry re-runs the probe (with the D-Bus pre-check on the discovery path); if the connection rides a proxy this time, the proxy dead-end (S9) is rendered instead."),
+    opts: [
+      ["main","Retry — pairing worked, probe succeeds","probing"],
+      ["cond","Retry rode a proxy this time → proxy dead-end","not_paired_proxy"],
+    ],
+  },
+
+  not_paired_proxy: {
+    render: () => dlg("Pairing Required",
+      `<div class="alert error">⚠ <span>This connection runs through the standard Bluetooth proxy <b>atom-lite</b>. Philips shavers pair via LE Secure Connections, which a standard Bluetooth proxy cannot complete — pairing over this path will not succeed, and pairing tools on the Home Assistant host have no effect on it.</span></div>
+       <p><b>${MAC}</b> requires <b>BLE bonding</b> before it can be read — and on this connection the pairing cannot succeed.</p>
+       <p>Working alternatives:</p>
+       <p>1. Set the shaver up via a <b>local Bluetooth adapter</b> on the Home Assistant host.<br>
+       2. Use the dedicated <b>ESP32 bridge</b> (see the integration documentation).</p>
+       <p>If a local adapter is also in range, move the shaver closer to it and click <b>Retry</b> — Home Assistant connects through the strongest signal.</p>`,
+      ["Retry"], meta("not_paired_proxy","config_flow.py:2587"),
+      "Hard dead-end, unlike the Sonicare sibling dialog: shavers demand authenticated LESC (numeric comparison), which a stock proxy's <code>io_capability: none</code> can never satisfy — verified at the protocol level (status=5 on every read, no proxy-side SMP attempt). The dedicated ESP32 bridge pairs fine because its firmware ships DisplayYesNo + auto-confirm. Retry re-probes; if a local adapter carries the connect now, the normal pairing machinery applies again."),
+    opts: [
+      ["main","Retry — local adapter carries the connect now → probe","probing"],
+      ["cond","Retry — proxy still the strongest → same dead-end","not_paired_proxy"],
+    ],
+  },
+
+  esp_bridge: {
+    render: (s) => dlg("ESP32 Bridge (ESPHome)",
+      `<p>Select the ESPHome device that acts as the BLE bridge for your shaver.</p>
+       <div class="field">
+         <div class="flabel">ESPHome Bridge Device</div>
+         <div class="fbox"><span>Atom S3R (atom-s3r), 2 🔗</span><span class="caret">▾</span></div>
+         <div class="fhelp">🔗 paired slot · 🟢 empty slot · ⚪ ESP offline</div>
+       </div>
+       ${s.error ? errline(s.error, ERRORS[s.error]) : ""}`,
+      ["Submit"], meta("esp_bridge","config_flow.py:1560"),
+      "Candidates are verified with a parallel <code>ble_get_info</code> event probe (3 s per node) — non-Shaver bridges never answer and are filtered out; disabled ESPHome entries are skipped, offline ones stay visible with the ⚪ marker but are not probed. A single reachable ESP skips this dropdown entirely. The probe results are cached for the slot picker."),
+    opts: [
+      ["main","Submit — bridge hosts several slots","esp_select_device"],
+      ["cond","Only one reachable ESP → dropdown skipped automatically","esp_select_device"],
+      ["err","No ESPHome bridge found (free-text fallback)","esp_bridge",{error:"no_esphome_devices"}],
+    ],
+  },
+
+  esp_select_device: {
+    render: () => dlg("Select BLE Device",
+      `<p>This ESP bridge has multiple Philips devices connected. Select the device you want to add.</p>
+       <p>✅ already configured · 🔒 bonded · 🔓 unpaired · 🟢 online · ⚪ offline</p>
+       <div class="radio sel"><span class="dot"></span><span>🔒 ⚪ Bathroom Shaver — ${MAC}</span></div>
+       <div class="radio"><span class="dot"></span><span>🔒 ⚪ Beard Trimmer — ${MAC2}</span></div>
+       <div class="field" style="margin-top:6px"><div class="fhelp">Entries without status icons are empty bridges in pair-mode. Switch on the shaver you want to bond before submitting.</div></div>`,
+      ["Submit"], meta("esp_select_device","config_flow.py:1627"),
+      "Label priority: YAML <code>friendly_name</code> → advertised BLE name → slot id. Reuses the dropdown's probe results when they cover this ESP's slots; pairing and unpairing always re-fetch."),
+    opts: [
+      ["main","Bonded slot WITHOUT an entry selected → action menu","esp_slot_action"],
+      ["cond","Empty pair-mode slot selected","request_pair"],
+      ["abort","Slot is already a config entry","abort_already_configured"],
+      ["abort","No slot answered the probe","abort_esp_not_reachable"],
+      ["abort","Bridge reports no supported devices","abort_no_devices_found"],
+    ],
+  },
+
+  esp_slot_action: {
+    render: () => dlg("Bonded shaver found",
+      `<p>The slot <b>atom_s3r / Bathroom Shaver</b> is already bonded to a shaver on the bridge, but it isn't set up in Home Assistant yet.</p>
+       <p>What would you like to do?</p>
+       <div class="menuopt"><span class="ic">🪒</span> Set up this shaver <span class="chev">›</span></div>
+       <div class="menuopt"><span class="ic">🔓</span> Unpair it from the bridge <span class="chev">›</span></div>`,
+      [], meta("esp_slot_action","config_flow.py:1839"),
+      "Appears for a bonded slot WITHOUT a config entry — e.g. an orphaned bond left behind after its entry was deleted while the bridge was offline. Only NVS-held identities qualify: a YAML-pinned slot re-bonds automatically, so unpairing it would be a confusing no-op. Bond ≠ entry: <code>already_configured</code> only triggers when an entry exists."),
+    opts: [
+      ["main","Set up this shaver (bond already exists → just read capabilities)","esp_bridge_status"],
+      ["main","Unpair it from the bridge (free the slot)","reset_bridge"],
+    ],
+  },
+
+  esp_bridge_status: {
+    render: (s) => s.phase==="reading"
+      ? dlg("Connection via ESP32 Bridge",
+          detbar(60, "Reading the shaver over atom_s3r / Bathroom Shaver…"),
+          [], meta("esp_bridge_status · esp_reading","config_flow.py:1903"),
+          "The capabilities read runs as a background task; <code>esp_read_finish</code> handles the result.")
+      : dlg("Connection via ESP32 Bridge",
+      `<p>Setting up <b>Philips XP9201</b> via <b>ESP32 Bridge</b>.</p>
+       <p>✅ Bridge <b>atom_s3r / Bathroom Shaver</b> is reachable.</p>
+       ${s.error ? `<div class="alert error">⚠ <span>Couldn't read the shaver over the bridge. Make sure it's switched on and the bridge is online, then try again.</span></div>` : ""}
+       <table><tbody>
+         <tr><td><b>Version</b></td><td>v1.12.0</td></tr>
+         <tr><td><b>BLE</b></td><td>❌ Disconnected</td></tr>
+         <tr><td><b>Paired</b></td><td>✅ Yes</td></tr>
+         <tr><td><b>Shaver MAC</b></td><td><code>${MAC}</code></td></tr>
+       </tbody></table>
+       <p>Make sure the shaver is <b>turned on</b> (press the power button or place it on its charging stand) and <b>keep it on</b>, then click <b>Read capabilities</b>.</p>`,
+      ["Read capabilities"], meta("esp_bridge_status","config_flow.py:1903"),
+      "A failed read is injected as an <code>&lt;ha-alert&gt;</code> into the status placeholder — <code>errors[]</code> does not render on schema-less forms. A Mode-B slot with no bound shaver routes straight to pair-mode instead of showing this screen."),
+    opts: [
+      ["main","Read capabilities → progress","esp_bridge_status",{phase:"reading"}],
+      ["main","Read succeeds","show_capabilities_esp"],
+      ["err","Shaver asleep / bridge timeout → alert","esp_bridge_status",{error:1}],
+      ["cond","Empty Mode-B slot → pair-mode instead of this screen","request_pair"],
+    ],
+  },
+
+  esp_bridge_status_connected: {
+    render: (s) => dlg("Connection via ESP32 Bridge",
+      `<p>Setting up <b>Philips XP9201</b> via <b>ESP32 Bridge</b>.</p>
+       <p>✅ Bridge <b>atom_s3r / Bathroom Shaver</b> is reachable.</p>
+       ${s.variant==="paired" ? `<div class="alert good">✅ <span>Pairing successful — the bridge is now bonded to your shaver.</span></div>` : ""}
+       <table><tbody>
+         <tr><td><b>Version</b></td><td>v1.12.0</td></tr>
+         <tr><td><b>BLE</b></td><td>✅ Connected</td></tr>
+         <tr><td><b>Paired</b></td><td>✅ Yes</td></tr>
+         <tr><td><b>Shaver MAC</b></td><td><code>${MAC}</code></td></tr>
+       </tbody></table>
+       <p>The bridge is already connected to your shaver. <b>Keep it switched on</b> — click <b>Read capabilities</b> to finish setup.</p>`,
+      ["Read capabilities"], meta("esp_bridge_status_connected","config_flow.py:2123"),
+      "Alias of <code>esp_bridge_status</code> with its own text. The green success alert appears once, right after <code>wait_pair</code> completed a fresh bond."),
+    opts: [
+      ["main","Read capabilities → progress","esp_bridge_status",{phase:"reading"}],
+    ],
+  },
+
+  request_pair: {
+    render: (s) => dlg("Pair shaver to ESP bridge",
+      `${s.variant==="unpaired" ? `<div class="alert good">✅ <span>Bond removed — the slot is free. Switch on the shaver you want to bond, then start pairing.</span></div>` : ""}
+       <p>Bridge <b>atom_s3r / Bathroom Shaver</b> has no shaver bonded yet.</p>
+       <p>1. Make sure the shaver is <b>turned on</b> and <b>not connected to your phone</b> (remove it from Bluetooth settings and the GroomTribe / OneBlade app).</p>
+       <p>2. Place the shaver close to the bridge.</p>
+       <p>3. Click <b>Start pairing</b> below — the bridge will scan for <b>60 seconds</b>. Trigger the shaver's BLE-advertise mode (model-specific: hold the power button or place it on the charging stand).</p>
+       <p>Once the bond is established you'll return to the bridge status screen — finish setup there with <b>Read capabilities</b>.</p>
+       ${s.error ? errline(s.error, ERRORS[s.error]) : ""}`,
+      ["Start pairing"], meta("request_pair","config_flow.py:2134")),
+    opts: [
+      ["main","Start pairing","wait_pair"],
+    ],
+  },
+
+  wait_pair: {
+    render: (s) => {
+      const scanning = s.phase === "scanning";
+      return dlg("Pair shaver to ESP bridge",
+        scanning
+          ? detbar(45, "Looking for your shaver and bonding — keep it switched on and close to the bridge. This can take up to a minute.")
+          : `<div class="progressbar"><div></div></div>
+             <p style="color:var(--muted)">Arming pair-mode on atom_s3r / Bathroom Shaver…</p>`,
+        [], meta(scanning ? "wait_pair · pair_scanning" : "wait_pair · pair_arming","config_flow.py:2157"),
+        "Two <code>async_show_progress</code> phases (<code>pair_arming</code> → <code>pair_scanning</code>) instead of one blocking 65-second spinner. The scanning phase ticks a determinate bar along the bridge's 60-second pair window. The outcome lands in <code>_pair_result</code> and <code>async_step_pair_finish</code> renders it — a clean bond returns to the status screen with a success banner; anything else stands the bridge down so a stray shaver in the leftover window isn't auto-bonded.");
+    },
+    opts: [
+      ["main","Phase 1 done (armed) → scanning phase with a timed bar","wait_pair",{phase:"scanning"}],
+      ["main","Event pair_complete → status screen + success banner","esp_bridge_status_connected",{variant:"paired"}],
+      ["err","Event pair_timeout → back with an error","request_pair",{error:"pair_timeout"}],
+      ["err","pair_failed (auth_max_failures — the shaver still holds its old bond)","request_pair",{error:"pair_failed_stale_bond"}],
+      ["err","Arming fails (bridge offline / firmware &lt; 1.8.0)","request_pair",{error:"service_call_failed"}],
+    ],
+  },
+
+  reset_bridge: {
+    render: (s) => s.phase==="unpairing"
+      ? dlg("Reset bridge bond",
+          `<div class="progressbar"><div></div></div>
+           <p style="color:var(--muted)">Removing the bond on atom_s3r / Bathroom Shaver…</p>`,
+          [], meta("reset_bridge · unpairing","config_flow.py:2368"),
+          "Waits for the bridge's <code>unpaired</code> event (the bridge defers it ~2 s so the BLE stack can settle); <code>reset_finish</code> renders the outcome.")
+      : dlg("Reset bridge bond",
+      `${s.error ? `<div class="alert error">⚠ <span>${ERRORS[s.error]}</span></div>` : ""}
+       <p>Slot <b>atom_s3r / Bathroom Shaver</b> is currently bonded to <b>${MAC}</b>.</p>
+       <p>Clicking <b>Unpair and reset</b> will remove the BLE bond on the bridge and clear the saved identity. After that you can pair a different shaver.</p>
+       <p>The shaver keeps its own half of the bond. If pairing this same shaver again later fails with repeated auth errors, clear Bluetooth on the shaver first (model-specific: long-press the power button until the Bluetooth LED clears, or unpair it in the GroomTribe / OneBlade app).</p>`,
+      ["Unpair and reset"], meta("reset_bridge","config_flow.py:2368"),
+      "Reached via the slot menu (S12). Only continues to pair-mode on a confirmed <code>unpaired</code> event — a silent failure surfaces as an alert instead of dropping back onto the still-bonded status screen. The same confirmed-unpair helper runs on config-entry removal. Errors are injected as an <code>&lt;ha-alert&gt;</code> — <code>errors[\"base\"]</code> does not render on this schema-less step."),
+    opts: [
+      ["main","Unpair and reset → progress","reset_bridge",{phase:"unpairing"}],
+      ["main","Confirmed (unpaired event) → slot free → pair-mode + success notice","request_pair",{variant:"unpaired"}],
+      ["err","No confirmation within ~4 s (bridge wedged) → alert","reset_bridge",{error:"unpair_unconfirmed"}],
+      ["err","Bridge offline / call fails → alert","reset_bridge",{error:"unpair_offline"}],
+    ],
+  },
+
+  show_capabilities_direct: {
+    render: () => capDialog("Connected via <b>Direct Bluetooth</b> (hci0 (00:0A:CD:46:B2:2D))."),
+    opts: [
+      ["main","Set up — entry is created","created"],
+    ],
+  },
+  show_capabilities_esp: {
+    render: () => capDialog("Connected via <b>ESP32 Bridge</b> (atom_s3r / Bathroom Shaver)."),
+    opts: [
+      ["main","Set up — entry is created","created"],
+    ],
+  },
+
+  created: {
+    render: () => `<div class="term good">
+        <div class="ttl">✅ Config entry created</div>
+        <p>“Bathroom Shaver” is set up. The coordinator starts and entities appear; with the ESP transport the bridge manages the connection.</p>
+      </div>`,
+    opts: [
+      ["main","Open the integration's options (options flow)","options"],
+      ["cond","Play through a new flow","start"],
+    ],
+  },
+
+  options: {
+    render: () => dlg("Philips Shaver Options",
+      `<div class="switchrow"><div><div class="sl">Notification throttle (ms)</div><div class="sd">Minimum interval between BLE notification events forwarded by the ESP bridge. Lower values give faster updates but may overload the ESP.</div></div><span class="mono" style="color:var(--muted)">500</span></div>
+       <div class="switchrow"><div><div class="sl">Pipelined GATT reads</div><div class="sd">Send poll reads to the ESP bridge as one concurrent batch. Requires bridge firmware 1.10.0+.</div></div><span class="toggle on"></span></div>`,
+      ["Submit"], meta("options · init","config_flow.py:136"),
+      "Second flow class (OptionsFlowWithReload), reachable at any time from the integration page — ESP transport only; a Direct-BLE entry currently has no options and the dialog closes immediately."),
+    opts: [
+      ["main","Submit — options saved (entry reload)","created"],
+    ],
+  },
+};
+
+function capDialog(statusLine) {
+  return dlg("Philips Shaver — Philips XP9201",
+    `<div class="alert good">✅ <span>${statusLine}</span></div>
+     <p><b>Device Information</b></p>
+     <table><tbody>
+       <tr><td><b>Model</b></td><td>XP9201</td></tr>
+       <tr><td><b>Firmware</b></td><td>300012593881</td></tr>
+       <tr><td><b>Battery</b></td><td>52%</td></tr>
+       <tr><td><b>MAC</b></td><td><code>${MAC}</code></td></tr>
+       <tr><td><b>BLE Security</b></td><td>Bonded (encrypted)</td></tr>
+     </tbody></table>
+     <table><tbody>
+       <tr><td><b>Hardware Capabilities</b></td><td><b>Detected Services</b></td></tr>
+       <tr><td>✅ Motion Sensing</td><td>✅ Device Information</td></tr>
+       <tr><td>⬜ Brush Programs</td><td>✅ Battery</td></tr>
+       <tr><td>⬜ Motion Speed Sensing</td><td>✅ Platform</td></tr>
+       <tr><td>✅ Pressure Feedback</td><td>✅ History</td></tr>
+       <tr><td>⬜ Unit Cleaning</td><td>✅ Control</td></tr>
+       <tr><td>✅ Cleaning Mode</td><td>✅ Serial / Diagnostic</td></tr>
+       <tr><td>✅ Light Ring</td><td>❌ Smart Groomer</td></tr>
+     </tbody></table>
+     <p style="color:var(--muted)">❌ The Smart Groomer service is only available on OneBlade / QP models.</p>
+     <div class="field">
+       <div class="flabel">Name</div>
+       <div class="fbox"><span>Bathroom Shaver</span></div>
+       <div class="fhelp">How this shaver appears in Home Assistant. Pick something that distinguishes it from any other shavers you have (e.g., "Bathroom", "John's").</div>
+     </div>`,
+    ["Set up"], meta("show_capabilities","config_flow.py:2653"),
+    "The connection line renders as a success alert, matching the pairing banner. The tables are runtime HTML in placeholders; the family-aware ❌ footer explains services that are expectedly absent on this model (a OneBlade shows the mirror image: Smart Groomer ✅, Control/Serial ❌). The name prefills from the slot's YAML friendly_name, the model, or a MAC suffix.");
+}
+
+// abort screens generated from ABORTS
+for (const [key, text] of Object.entries(ABORTS)) {
+  SCREENS["abort_"+key] = {
+    render: () => `<div class="term bad">
+        <div class="ttl">Flow aborted</div>
+        <p>${text}</p>
+        <p class="abkey"><span class="mono" style="color:var(--err)">abort: ${key}</span></p>
+      </div>`,
+    opts: [["main","Restart the flow","start"]],
+  };
+}
+
+// ---------- step numbering ----------
+const ORDER = [
+  "start", "disc_bt", "disc_zeroconf", "user", "user_bleak", "bluetooth_confirm",
+  "probing", "pair", "not_paired", "not_paired_proxy", "esp_bridge",
+  "esp_select_device", "esp_slot_action", "esp_bridge_status",
+  "esp_bridge_status_connected", "request_pair", "wait_pair", "reset_bridge",
+  "show_capabilities_direct", "show_capabilities_esp", "created", "options",
+];
+const ABORT_ORDER = ["abort_already_configured", "abort_no_devices_found",
+  "abort_esp_not_reachable", "abort_not_supported"];
+const NUM = {};
+ORDER.forEach((id, i) => NUM[id] = "S" + i);
+ABORT_ORDER.forEach((id, i) => NUM[id] = "A" + (i + 1));
+function shortName(id) {
+  return id.replace(/^abort_/, "abort:").replace(/^disc_/, "discovery:");
+}
+
+// ---------- engine ----------
+let history = [{ id: "start", state: {} }];
+
+function go(id, state) {
+  const cur = history[history.length-1];
+  if (cur.id === id) {
+    // same screen (error/variant rerender): replace state, don't grow trail
+    cur.state = state || {};
+  } else {
+    history.push({ id, state: state || {} });
+  }
+  render();
+}
+function jump(idx) { history = history.slice(0, idx+1); render(); }
+function restart() { history = [{ id: "start", state: {} }]; render(); }
+
+function render() {
+  const cur = history[history.length-1];
+  const screen = SCREENS[cur.id];
+
+  const trail = document.getElementById("trail");
+  trail.replaceChildren();
+  history.forEach((h, i) => {
+    if (i > 0) {
+      const sep = document.createElement("span");
+      sep.className = "sep"; sep.textContent = "›";
+      trail.appendChild(sep);
+    }
+    const b = document.createElement("button");
+    b.className = "crumb" + (i === history.length-1 ? " cur" : "");
+    b.textContent = shortName(h.id) + " " + (NUM[h.id] || "?");
+    b.addEventListener("click", () => jump(i));
+    trail.appendChild(b);
+  });
+  const rst = document.createElement("button");
+  rst.className = "reset"; rst.textContent = "⟲ Restart";
+  rst.addEventListener("click", restart);
+  trail.appendChild(rst);
+
+  const isAbort = cur.id.startsWith("abort_");
+  document.getElementById("stage").innerHTML =
+    `<div class="stepbadge${isAbort ? " abort" : ""}"><span>${shortName(cur.id)}</span><span class="no">${NUM[cur.id] || "?"}</span></div>`
+    + screen.render(cur.state);
+
+  const opts = document.getElementById("opts");
+  opts.replaceChildren();
+  const kindLabel = { main: "Next", cond: "If", err: "Error", abort: "Abort" };
+  screen.opts.forEach((entry) => {
+    if (!Array.isArray(entry)) {
+      const h = document.createElement("div");
+      h.className = "optghead";
+      h.textContent = entry.group;
+      opts.appendChild(h);
+      return;
+    }
+    const [kind, label, target, state] = entry;
+    const b = document.createElement("button");
+    b.className = "opt kind-" + kind;
+    const abortCls = target.startsWith("abort_") ? " abortnum" : "";
+    b.innerHTML = `<span class="tag">${kindLabel[kind]}</span><span class="olabel">${label}</span><span class="arr">→</span><span class="otarget">${shortName(target)}</span><span class="onum${abortCls}">${NUM[target] || "?"}</span>`;
+    b.addEventListener("click", () => go(target, state));
+    opts.appendChild(b);
+  });
+  window.scrollTo({ top: 0, behavior: "instant" });
+}
+
+// step index (direct jump)
+const ix = document.getElementById("index");
+[...ORDER, ...ABORT_ORDER].forEach((id) => {
+  const b = document.createElement("button");
+  b.className = "ixchip" + (id.startsWith("abort_") ? " abort" : "");
+  b.innerHTML = `<span class="nm">${shortName(id)}</span><span class="no">${NUM[id]}</span>`;
+  b.addEventListener("click", () => go(id, {}));
+  ix.appendChild(b);
+});
+
+render();
+</script>
+
+</body>
+</html>
