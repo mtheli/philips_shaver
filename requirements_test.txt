@@ -3,3 +3,7 @@ pytest-homeassistant-custom-component==0.13.205
 # imports the usb component's module-level `from serial.tools.list_ports` —
 # so the test collection needs pyserial even though nothing here uses it.
 pyserial==3.5
+# The config-flow tests import config_flow.py, whose ZeroconfServiceInfo
+# fallback for the pinned HA 2025.1 stack goes through
+# homeassistant.components.zeroconf — which needs the zeroconf package.
+zeroconf

@@ -37,7 +37,7 @@
       },
       "user_bleak": {
         "title": "Direct Bluetooth",
-        "description": "Enter the Bluetooth MAC address of the shaver.",
+        "description": "Select your shaver from the list of discovered devices, or choose “Other” to enter its Bluetooth MAC address manually.\n\n**Important:** switch the shaver on (press the power button or place it on its charging stand) before clicking Submit — it must stay on so its services can be read.",
         "data": {
           "address": "MAC Address"
         }
@@ -54,7 +54,7 @@
       },
       "bluetooth_confirm": {
         "title": "Confirm detected device",
-        "description": "{status}Do you want to add the detected Philips Shaver **{name}** to Home Assistant?\n\nℹ️ **Before continuing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **unpaired** from your phone\n   — Remove from Bluetooth settings **and** GroomTribe / OneBlade app\n\nPairing will be handled automatically during setup. The integration will then connect to the device to read hardware capabilities. This may take a few seconds.",
+        "description": "{status}**{name}** discovered at `{address}`{via}.\n\n{transport}ℹ️ **Before continuing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **unpaired** from your phone\n   — Remove from Bluetooth settings **and** GroomTribe / OneBlade app\n\nPairing will be handled automatically during setup. The integration will then connect to the device to read hardware capabilities. This may take a few seconds.",
         "submit": "Read capabilities"
       },
       "esp_select_device": {
@@ -65,6 +65,14 @@
         },
         "data_description": {
           "esp_bridge_id": "Entries without status icons are empty bridges in pair-mode. Switch on the shaver you want to bond before submitting."
+        }
+      },
+      "esp_slot_action": {
+        "title": "Bonded shaver found",
+        "description": "The slot **{target}** is already bonded to a shaver on the bridge, but it isn't set up in Home Assistant yet.\n\nWhat would you like to do?",
+        "menu_options": {
+          "slot_setup": "Set up this shaver",
+          "slot_unpair": "Unpair it from the bridge"
         }
       },
       "esp_bridge_status": {
@@ -79,8 +87,13 @@
       },
       "request_pair": {
         "title": "Pair shaver to ESP bridge",
-        "description": "Bridge **{target}** has no shaver bonded yet.\n\n1. Make sure the shaver is **turned on** and **not connected to your phone** (remove it from Bluetooth settings and the GroomTribe / OneBlade app).\n2. Place the shaver close to the bridge.\n3. Click **Start pairing** below — the bridge will scan for **60 seconds**. Trigger the shaver's BLE-advertise mode (model-specific: hold the power button or place it on the charging stand).\n\nOnce the bond is established, capabilities will be probed automatically.",
+        "description": "{notice}Bridge **{target}** has no shaver bonded yet.\n\n1. Make sure the shaver is **turned on** and **not connected to your phone** (remove it from Bluetooth settings and the GroomTribe / OneBlade app).\n2. Place the shaver close to the bridge.\n3. Click **Start pairing** below — the bridge will scan for **60 seconds**. Trigger the shaver's BLE-advertise mode (model-specific: hold the power button or place it on the charging stand).\n\nOnce the bond is established you'll return to the bridge status screen — finish setup there with **Read capabilities**.",
         "submit": "Start pairing"
+      },
+      "reset_bridge": {
+        "title": "Reset bridge bond",
+        "description": "{error}Slot **{target}** is currently bonded to **{identity_address}**.\n\nClicking **Unpair and reset** will remove the BLE bond on the bridge and clear the saved identity. After that you can pair a different shaver.\n\nThe shaver keeps its own half of the bond. If pairing this same shaver again later fails with repeated auth errors, clear Bluetooth on the shaver first (model-specific: long-press the power button until the Bluetooth LED clears, or unpair it in the GroomTribe / OneBlade app).",
+        "submit": "Unpair and reset"
       },
       "pair": {
         "title": "Pair Device",
@@ -90,6 +103,11 @@
       "not_paired": {
         "title": "Pairing Required",
         "description": "**{name}** is not paired with this system.\n\n{pairing_help}\n\n`{pair_cmd}`\n\nThe script will scan for nearby Philips devices and guide you through the pairing process.",
+        "submit": "Retry"
+      },
+      "not_paired_proxy": {
+        "title": "Pairing Required",
+        "description": "{alert}**{address}** requires **BLE bonding** before it can be read — and on this connection the pairing cannot succeed.\n\nWorking alternatives:\n\n1. Set the shaver up via a **local Bluetooth adapter** on the Home Assistant host.\n2. Use the dedicated **ESP32 bridge** (see the integration documentation).\n\nIf a local adapter is also in range, move the shaver closer to it and click **Retry** — Home Assistant connects through the strongest signal.",
         "submit": "Retry"
       },
       "show_capabilities": {
@@ -113,14 +131,23 @@
       "not_paired": "The shaver is not paired with this system.",
       "out_of_slots": "No Bluetooth adapter could reach the device. Either all connection slots are in use, or the device is out of range. Ensure the shaver is powered on and close to the Bluetooth adapter, and try removing unused Bluetooth devices if needed.",
       "connection_aborted": "Connection was aborted. The device may be out of range or connected through an unsupported Bluetooth proxy. This integration requires direct Bluetooth or the dedicated ESP32 BLE bridge — standard ESPHome Bluetooth Proxies are not supported.",
-      "pairing_failed": "Bluetooth pairing failed. Ensure the shaver is powered on and not connected to another device. If the problem persists, try turning the shaver off and back on, or pair manually via terminal.",
+      "pairing_failed": "Bluetooth pairing failed. Make sure the shaver is switched on and not connected to another device (phone / GroomTribe / OneBlade app). If it keeps failing, the shaver may still hold an old bond on its side — clear Bluetooth on the shaver (model-specific: long-press the power button until the Bluetooth LED clears, or unpair it in the app), then retry.",
       "service_call_failed": "Could not arm pair-mode on the ESP bridge. The bridge may be offline or a too-old firmware version. Update the bridge to v1.8.0 or newer and retry.",
       "pair_timeout": "No shaver appeared during the 60-second pair-mode window. Make sure the shaver is on and advertising, and try again.",
       "pair_failed_stale_bond": "Pairing failed with repeated auth errors. The shaver still holds the previous bond on its side and is rejecting fresh pairing. Clear Bluetooth on the shaver (model-specific: long-press the power button until the BT LED clears, or unpair via the GroomTribe / OneBlade app), then retry.",
-      "unknown": "Unexpected error. Please check the logs."
+      "unknown": "Unexpected error. Check the logs (Settings → System → Logs) for details."
+    },
+    "progress": {
+      "ble_probing": "Connecting to {name} and reading its data — usually a few seconds; if several connection attempts are needed (weak signal, first contact after a pairing problem) this can take up to two minutes…",
+      "pairing": "Pairing with {name} and reading its data — this can take up to a minute…",
+      "pair_arming": "Arming pair-mode on {target}…",
+      "pair_scanning": "Looking for your shaver and bonding — keep it switched on and close to the bridge. This can take up to a minute.",
+      "unpairing": "Removing the bond on {target}…",
+      "esp_reading": "Reading the shaver over {target}…"
     },
     "abort": {
       "already_configured": "Device is already configured.",
+      "already_configured_detail": "This shaver is already configured via **{transport}** (status: {status}). Remove or re-enable the existing entry first.",
       "already_in_progress": "Configuration flow is already in progress.",
       "no_devices_found": "No supported Philips Shaver devices were found in range.",
       "esp_not_reachable": "The ESP bridge is not reachable. Make sure the ESP is powered on and connected to your network, then retry."

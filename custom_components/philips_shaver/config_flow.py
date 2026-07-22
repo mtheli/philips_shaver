@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import asyncio
@@ -11,15 +12,27 @@ from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
-    OptionsFlowWithReload,
 )
+
+try:  # HA ≥ 2025.8
+    from homeassistant.config_entries import OptionsFlowWithReload
+except ImportError:  # pragma: no cover — older cores + the pinned CI
+    # test stack (pytest-homeassistant-custom-component ships HA 2025.1).
+    # Fallback loses only the automatic entry reload on options save.
+    from homeassistant.config_entries import OptionsFlow as OptionsFlowWithReload
 from homeassistant.core import Event, callback
-from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
+
+try:  # HA ≥ 2025.2
+    from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
+except ImportError:  # pragma: no cover — pinned CI test stack (HA 2025.1)
+    from homeassistant.components.zeroconf import ZeroconfServiceInfo
 from homeassistant.components.bluetooth import (
     BluetoothServiceInfoBleak,
     async_ble_device_from_address,
+    async_discovered_service_info,
     async_last_service_info,
 )
+from homeassistant.data_entry_flow import AbortFlow
 from bleak import BleakClient
 from bleak.exc import BleakError
 from bleak_retry_connector import (
@@ -77,7 +90,16 @@ from .const import (
     MIN_NOTIFY_THROTTLE,
     MAX_NOTIFY_THROTTLE,
 )
-from .transport import EspBridgeTransport, describe_connection_path
+from .transport import (
+    UNPAIR_FAILED,
+    UNPAIR_OK,
+    UNPAIR_UNAVAILABLE,
+    EspBridgeTransport,
+    async_unpair_bridge_slot,
+    describe_available_paths,
+    describe_connection_path,
+    is_local_bluez_connection,
+)
 from .exceptions import (
     DeviceAsleepException,
     DeviceNotFoundException,
@@ -98,6 +120,17 @@ _LOGGER = logging.getLogger(__name__)
 # prove the device is reachable; the device advertises every ~1-2 s while awake,
 # so a stricter window cleanly separates "awake now" from "asleep".
 _STALE_ADV_MAX_SECONDS = 15.0
+
+# Sentinel option in the Direct-BLE picker that switches to free-text entry.
+# Picked when the user wants to type a MAC that isn't currently advertising.
+_MANUAL_ADDRESS = "__manual__"
+
+# Proprietary service UUIDs shavers carry in their advertisements — the same
+# set the bluetooth manifest matches on; used to filter the discovered-device
+# picker (standard Battery/DeviceInfo UUIDs would match half the room).
+_SHAVER_ADV_UUIDS = {
+    u.lower() for u in PHILIPS_SERVICE_UUIDS if u.lower().startswith("8d560")
+}
 
 
 class PhilipsShaverOptionsFlow(OptionsFlowWithReload):
@@ -178,8 +211,84 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     fetched_name: str | None = None
     fetched_transport_type: str | None = None
     fetched_esp_device_name: str | None = None
+    fetched_esp_bridge_id: str = ""
     fetched_bridge_info: dict[str, str] | None = None
     _pair_address: str | None = None  # MAC for D-Bus pairing step
+
+    # Transport of the last probe that actually connected. None until a
+    # probe establishes a connection; deliberately NOT reset on failed
+    # connects so a retry that never reaches the device keeps showing
+    # the pairing dialog that matches the last known transport.
+    _probe_via_proxy: bool | None = None
+    _probe_proxy_name: str | None = None
+    # One-shot marker: wait_pair just bonded the bridge, so the next
+    # esp_bridge_status render acknowledges the success.
+    _just_paired: bool = False
+    # Set once the user picked an action for a bonded-but-unconfigured
+    # slot, so re-entering the health check doesn't re-show the menu.
+    _slot_action_chosen: bool = False
+    # One-shot marker: reset_bridge just cleared the bond, so the next
+    # request_pair render confirms the slot is free.
+    _just_unpaired: bool = False
+    # The ESP auto-route out of bluetooth_confirm probes bridge slots for
+    # seconds — run it once per flow, not on every re-render.
+    _esp_redirect_checked: bool = False
+    # Progress state: unpair (reset_bridge) and ESP capabilities read.
+    _unpair_task: asyncio.Task | None = None
+    _unpair_outcome: str = ""
+    _esp_caps_task: asyncio.Task | None = None
+    _esp_caps_result: dict[str, Any] | None = None
+    _esp_read_error: str = ""
+    # Pair-mode progress state (async_show_progress two-phase flow).
+    _pair_arm_task: asyncio.Task | None = None
+    _pair_scan_task: asyncio.Task | None = None
+    _pair_future: asyncio.Future | None = None
+    _pair_unsub: Callable[[], None] | None = None
+    _pair_svc_name: str = ""
+    _pair_result: dict[str, str] | None = None
+    # Direct-BLE probe progress state, shared by bluetooth_confirm,
+    # user_bleak and the D-Bus pair step; ble_probe_finish routes the
+    # outcome back to whichever step started the probe.
+    _ble_probe_task: asyncio.Task | None = None
+    _ble_probe_result: dict[str, Any] | None = None
+    _ble_probe_origin: str = ""
+    _ble_probe_address: str = ""
+    # One-shot <ha-alert> for the next bluetooth_confirm render
+    # (errors[] doesn't render on that schema-less step).
+    _confirm_status: str = ""
+    # One-shot errors["base"] for the next user_bleak / pair render.
+    _manual_error: str = ""
+    _pair_error: str = ""
+    # user_bleak: user picked the "enter manually" sentinel — render the
+    # free-text field instead of the discovered-device picker.
+    _manual_address_entry: bool = False
+    # ESP dropdown values whose node answered no probe (⚪) — the sole-ESP
+    # auto-select must not skip the picker for one of these.
+    _offline_esp_values: frozenset = frozenset()
+
+    def _abort_if_already_configured(self) -> None:
+        """Abort with a detailed message when this unique_id already exists.
+
+        Names the transport and status (active/disabled) of the existing
+        entry — a plain "already configured" regularly sends users hunting
+        for a duplicate they can't find because the entry is disabled or
+        lives on the other transport.
+        """
+        for entry in self._async_current_entries():
+            if entry.unique_id and entry.unique_id == self.unique_id:
+                transport = entry.data.get(CONF_TRANSPORT_TYPE)
+                transport_label = (
+                    "ESP32 Bridge" if transport == TRANSPORT_ESP_BRIDGE
+                    else "Direct Bluetooth"
+                )
+                status = "disabled" if entry.disabled_by is not None else "active"
+                raise AbortFlow(
+                    "already_configured_detail",
+                    description_placeholders={
+                        "transport": transport_label,
+                        "status": status,
+                    },
+                )
 
     @staticmethod
     async def _read_with_auth_retry(
@@ -225,6 +334,39 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 client.read_gatt_char(char_uuid), timeout=timeout
             )
 
+    def _bump_progress(self, value: float) -> None:
+        """Advance the determinate progress bar, if this core supports it.
+
+        ``async_update_progress`` arrived in HA 2025.5 — on older cores the
+        progress step simply keeps its indeterminate spinner. Calls made
+        while no progress step is showing fire an update event nothing
+        listens to; harmless.
+        """
+        update = getattr(self, "async_update_progress", None)
+        if update is not None:
+            update(min(1.0, max(0.0, value)))
+
+    async def _creep_progress(
+        self, start: float, end: float, duration: float
+    ) -> None:
+        """Creep the bar on wall-clock time while a long single await runs.
+
+        ``establish_connection`` retries internally for up to ~90 s
+        against an unreachable device or a stale bond without any
+        callback we could hook — without this the bar sits frozen at the
+        pre-connect milestone the whole time. The caller cancels the
+        task the moment the await returns; real milestones then overwrite
+        whatever the creep reached.
+        """
+        loop = self.hass.loop
+        t0 = loop.time()
+        while True:
+            await asyncio.sleep(2.0)
+            frac = min(1.0, (loop.time() - t0) / duration)
+            self._bump_progress(start + (end - start) * frac)
+            if frac >= 1.0:
+                return
+
     async def _async_fetch_capabilities(
         self,
         address,
@@ -264,16 +406,46 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
         client: BleakClient | None = None
         try:
-            client = await establish_connection(
-                BleakClient, device, "philips_shaver", timeout=15
+            # Progress milestones: the connect is a single await and by far
+            # the longest leg, so the bar sits low until it lands, then
+            # advances per characteristic read.
+            self._bump_progress(0.05)
+            # use_services_cache skips a full service re-discovery on
+            # reconnects (retry after wake / not_paired retry); the 30 s
+            # budget matches Sonicare — with the probe running as a
+            # progress task a longer connect no longer freezes the dialog.
+            # A stale bond makes establish_connection retry internally for
+            # up to ~90 s (4 attempts) — creep the bar toward the
+            # post-connect milestone so the dialog visibly keeps working.
+            creep = self.hass.async_create_task(
+                self._creep_progress(0.05, 0.38, 90.0)
             )
+            try:
+                client = await establish_connection(
+                    BleakClient, device, "philips_shaver",
+                    use_services_cache=True, timeout=30.0,
+                )
+            finally:
+                creep.cancel()
 
             if not client.is_connected:
                 raise CannotConnectException("BLE connection failed")
             _LOGGER.info("Connected to %s, address=%s", device.name, address)
+            self._bump_progress(0.4)
 
             capabilities["connection_path"] = describe_connection_path(
                 self.hass, client, device
+            )
+            # Remember which transport carried this probe: a later
+            # NotPairedException must route to the matching pairing
+            # dialog (host instructions vs. proxy guidance) and decide
+            # whether the D-Bus pairing machinery applies at all.
+            self._probe_via_proxy = not is_local_bluez_connection(client)
+            # Scanner names carry the adapter MAC in parentheses — strip it
+            # for the dialog (same as _short_scanner in the preview).
+            self._probe_proxy_name = (
+                capabilities["connection_path"].split(" (")[0]
+                if self._probe_via_proxy else None
             )
             _LOGGER.info(
                 "%s: capabilities probe connected via %s",
@@ -284,6 +456,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             _LOGGER.info("Reading services from %s...", address)
             services = client.services
             capabilities["services"] = [str(s.uuid) for s in services]
+            self._bump_progress(0.45)
 
             # Probe battery level to verify pairing (requires encryption).
             # Any read failure here indicates the device is not paired —
@@ -351,6 +524,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                         "D-Bus EOF during encrypted read"
                     )
 
+            self._bump_progress(0.6)
             _LOGGER.info("Reading capabilities from %s...", address)
             if services.get_characteristic(CHAR_CAPABILITIES):
                 try:
@@ -382,6 +556,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             else:
                 capabilities["capabilities"] = 0
 
+            self._bump_progress(0.7)
             # Read model number and firmware for display in capabilities step
             for char_uuid, key in (
                 (CHAR_MODEL_NUMBER, "model_number"),
@@ -409,6 +584,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                     except Exception:
                         pass
 
+            self._bump_progress(0.85)
             # Read Device Type (0x0119) — "OneBlade" for OneBlade, model number for shavers
             if services.get_characteristic(CHAR_DEVICE_TYPE):
                 try:
@@ -420,6 +596,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 except Exception:
                     pass
 
+            self._bump_progress(0.95)
             # Read Groomer Capabilities (0x0702) when Smart Groomer Service is present
             if services.get_characteristic(CHAR_GROOMER_CAPABILITIES):
                 try:
@@ -484,42 +661,44 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             for entry in self._async_current_entries()
             if entry.unique_id
         }
+        # (esp_device_name, esp_bridge_id) tuples that already have a
+        # ConfigEntry — a probe-independent fallback: the info event's
+        # ``mac`` is the live remote_bda, which reads 00:00:… while the
+        # shaver is disconnected (asleep, ESP freshly booted), so a
+        # MAC-only check would re-offer an already-configured slot.
+        configured_bridges = {
+            (
+                entry.data.get(CONF_ESP_DEVICE_NAME, ""),
+                entry.data.get(CONF_ESP_BRIDGE_ID, ""),
+            )
+            for entry in self._async_current_entries()
+            if entry.data.get(CONF_TRANSPORT_TYPE) == TRANSPORT_ESP_BRIDGE
+        }
 
         unconfigured = False
         found_any = False
         for did in bridge_ids:
-            svc_name = f"{device_name}_ble_get_info"
-            if did:
-                svc_name += f"_{did}"
-            info_future: asyncio.Future[dict[str, str]] = self.hass.loop.create_future()
-
-            @callback
-            def _on_status(event: Event, _did=did) -> None:
-                if (event.data.get("status") == "info"
-                        # HA lowercases service names, so an uppercase bridge_id
-                        # (e.g. a model number) yields a lowercase suffix while
-                        # the event echoes the original case — compare lowercased.
-                        and event.data.get("bridge_id", "").lower() == _did.lower()
-                        and not info_future.done()):
-                    info_future.set_result(dict(event.data))
-
-            unsub = self.hass.bus.async_listen(
-                "esphome.philips_shaver_ble_status", _on_status
-            )
-            try:
-                await self.hass.services.async_call(
-                    "esphome", svc_name, {}, blocking=True
-                )
-                info = await asyncio.wait_for(info_future, timeout=3.0)
+            # Direct ConfigEntry match — skip the probe; the entry also
+            # proves this is a Shaver bridge (it answered ours once).
+            if (device_name, did) in configured_bridges:
                 found_any = True
-                mac = info.get("mac", "")
-                if not mac or mac.upper() not in configured_macs:
-                    unconfigured = True
-                    break
-            except (asyncio.TimeoutError, Exception):
-                pass  # Not our bridge type or not responding — skip
-            finally:
-                unsub()
+                continue
+            info = await self._probe_bridge_info(device_name, did)
+            if info is None:
+                continue  # Not our bridge type or not responding — skip
+            found_any = True
+            # Prefer identity_address (NVS-persisted, used as the
+            # ConfigEntry unique_id) over mac (live remote_bda, zeroed
+            # while the shaver is disconnected).
+            identity = info.get("identity_address", "").upper()
+            mac = info.get("mac", "").upper()
+            known = {
+                m for m in (identity, mac)
+                if m and m != "00:00:00:00:00:00"
+            }
+            if not known or not known.intersection(configured_macs):
+                unconfigured = True
+                break
 
         if not found_any:
             # No bridge responded on our event — not a Shaver bridge
@@ -544,7 +723,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Handle the bluetooth discovery step."""
         await self.async_set_unique_id(discovery_info.address)
-        self._abort_if_unique_id_configured()
+        self._abort_if_already_configured()
 
         self.discovery_info = discovery_info
         return await self.async_step_bluetooth_confirm()
@@ -553,9 +732,19 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Confirm discovery and fetch capabilities."""
+        assert self.discovery_info is not None
+        # Progress re-invocations of a running probe land here first —
+        # before the ESP auto-route, whose slot probes would add seconds
+        # of latency to every re-entry.
+        if (progress := self._ble_probe_progress("bluetooth_confirm")) is not None:
+            return progress
+
         # On first display, check if an ESP bridge is already connected
-        # to this shaver — redirect to ESP flow if so.
-        if user_input is None:
+        # to this shaver — redirect to ESP flow if so. Checked once per
+        # flow: re-renders after a failed probe must not repeat the
+        # multi-second slot probes.
+        if user_input is None and not self._esp_redirect_checked:
+            self._esp_redirect_checked = True
             esp = await self._find_esp_bridge_for_mac(
                 self.discovery_info.address
             )
@@ -577,170 +766,385 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 self.context["title_placeholders"] = {
                     "name": f"ESP32 Bridge ({esp['device_name'].replace('_', '-')})"
                 }
-                return await self.async_step_esp_bridge_status()
+                return await self._esp_bridge_health_check()
 
-        return await self._async_bluetooth_confirm(user_input, "bluetooth_confirm")
+        if user_input is not None:
+            address = self.discovery_info.address
+            # Quick D-Bus pre-check: if the device is known to BlueZ but
+            # not paired, skip the slow bleak connection attempts (~80s)
+            # and go straight to the pairing step. Skipped when a remote
+            # scanner is the likely carrier — the BlueZ bond state says
+            # nothing about a proxy-carried connection.
+            paths = describe_available_paths(self.hass, address)
+            likely_proxy = bool(paths) and not paths[0]["is_local"]
+            if not likely_proxy:
+                from .dbus_pairing import is_dbus_available, async_is_device_paired
+
+                if is_dbus_available():
+                    paired = await async_is_device_paired(address)
+                    if paired is False:
+                        _LOGGER.info(
+                            "D-Bus pre-check: %s is not paired — "
+                            "skipping to pairing step",
+                            address,
+                        )
+                        self._pair_address = address
+                        return await self.async_step_pair()
+
+            return self._start_ble_probe("bluetooth_confirm", address)
+
+        # One-shot outcome from ble_probe_finish. errors["base"] does not
+        # render on this schema-less confirmation step, so failures are
+        # injected as an <ha-alert> into the description; ha-markdown
+        # renders it as a real coloured alert box.
+        status = self._confirm_status
+        self._confirm_status = ""
+
+        self.context["title_placeholders"] = {
+            "name": f"Bluetooth ({self.discovery_info.address})"
+        }
+
+        via, warning = self._transport_lines()
+        return self.async_show_form(
+            step_id="bluetooth_confirm",
+            description_placeholders={
+                "name": self.discovery_info.name or self.discovery_info.address,
+                "address": self.discovery_info.address,
+                "status": status,
+                "via": via,
+                "transport": warning,
+            },
+        )
+
+    @staticmethod
+    def _short_scanner(p: dict) -> str:
+        # Scanner names carry the adapter MAC in parentheses; strip it —
+        # the dialog cares about *which* device, not its MAC.
+        return str(p["name"]).split(" (")[0]
+
+    def _transport_lines(self) -> tuple[str, str]:
+        """Return ``(via_suffix, warning)`` for the discovery confirm step.
+
+        ``via_suffix`` names the likely carrier inline after "discovered
+        at <mac>", mirroring the capabilities dialog's
+        ``via <class> (<detail>)`` framing: "Direct Bluetooth" for a
+        local adapter, "Bluetooth proxy" for a remote scanner.
+
+        ``warning`` is a proxy-only <ha-alert>. Unlike the Sonicare
+        integration (where proxy pairing is model-dependent), Philips
+        shavers use LE Secure Connections with numeric comparison, which
+        a standard Bluetooth proxy cannot complete — pairing over one
+        fails outright, so the warning is unconditional and hard.
+
+        habluetooth routes by signal strength, so the strongest scanner
+        is only the *likely* carrier; recomputed each render so the
+        ranking stays current.
+        """
+        address = self.discovery_info.address if self.discovery_info else ""
+        paths = describe_available_paths(self.hass, address)
+        if not paths:
+            return "", ""
+
+        def _rssi(p: dict) -> str:
+            return f" ({p['rssi']} dBm)" if p["rssi"] is not None else ""
+
+        best = paths[0]
+        best_name = self._short_scanner(best)
+        best_rssi = f", {best['rssi']} dBm" if best["rssi"] is not None else ""
+
+        if best["is_local"]:
+            via = f" via **Direct Bluetooth** ({best_name}{best_rssi})"
+            return via, ""
+
+        via = f" via **Bluetooth proxy** ({best_name}{best_rssi})"
+
+        # Markdown is not parsed inside an HTML block, so the warning uses
+        # <b>/<br> for emphasis and paragraph breaks.
+        local = next((p for p in paths if p["is_local"]), None)
+        if local is None:
+            tail = (
+                "Set the shaver up via a local Bluetooth adapter or the "
+                "dedicated ESP32 bridge instead."
+            )
+        else:
+            tail = (
+                f"Your local adapter <b>{self._short_scanner(local)}</b> "
+                f"also sees the shaver{_rssi(local)} — Home Assistant "
+                "connects through the strongest signal, so move the "
+                "shaver closer to it to prefer that path."
+            )
+        warning = (
+            '<ha-alert alert-type="warning">'
+            "This connection would go through the Bluetooth proxy "
+            f"<b>{best_name}</b>{_rssi(best)}."
+            "<br><br>Philips shavers cannot pair over a standard Bluetooth "
+            "proxy — setup and live updates over this path will fail."
+            f"<br><br>{tail}</ha-alert>\n\n"
+        )
+        return via, warning
+
+    # ------------------------------------------------------------------
+    # Direct BLE probe as a progress task (discovery + manual + pair)
+    # ------------------------------------------------------------------
+    def _ble_probe_placeholders(self) -> dict[str, str]:
+        name = ""
+        if self.discovery_info:
+            name = self.discovery_info.name or self.discovery_info.address
+        return {"name": name or self._ble_probe_address or ""}
+
+    def _ble_probe_progress(
+        self, step_id: str, action: str = "ble_probing"
+    ) -> ConfigFlowResult | None:
+        """Progress bookkeeping for a running direct-BLE probe.
+
+        Returns None when no probe is in flight (the caller renders its
+        form as usual), the progress view while the task runs, and the
+        transition to ``ble_probe_finish`` once it is done.
+        """
+        task = self._ble_probe_task
+        if task is None:
+            return None
+        if not task.done():
+            return self.async_show_progress(
+                step_id=step_id,
+                progress_action=action,
+                progress_task=task,
+                description_placeholders=self._ble_probe_placeholders(),
+            )
+        self._ble_probe_result = task.result()
+        self._ble_probe_task = None
+        return self.async_show_progress_done(next_step_id="ble_probe_finish")
+
+    def _start_ble_probe(self, step_id: str, address: str | None) -> ConfigFlowResult:
+        """Kick off the capabilities probe as a background progress task."""
+        self._ble_probe_origin = step_id
+        self._ble_probe_address = address or ""
+        self._ble_probe_task = self.hass.async_create_task(
+            self._async_ble_probe(address or "")
+        )
+        return self.async_show_progress(
+            step_id=step_id,
+            progress_action="ble_probing",
+            progress_task=self._ble_probe_task,
+            description_placeholders=self._ble_probe_placeholders(),
+        )
+
+    async def _async_ble_probe(self, address: str) -> dict[str, Any]:
+        """Run the capabilities probe (progress task) and box the outcome."""
+        try:
+            data = await self._async_fetch_capabilities(address)
+            # Label BLE security for the capabilities dialog. On a proxy
+            # connection the bond lives in the proxy's NVS — BlueZ can't
+            # see it, but every readable shaver characteristic is
+            # encrypt-gated, so a successful probe implies encryption.
+            if self._probe_via_proxy:
+                data["pairing"] = "bonded"
+            else:
+                from .dbus_pairing import is_dbus_available, async_is_device_paired
+
+                if is_dbus_available():
+                    paired = await async_is_device_paired(address)
+                    # None = indeterminate (device not in the BlueZ tree,
+                    # D-Bus hiccup) — better no row than a wrong one.
+                    if paired is not None:
+                        data["pairing"] = "bonded" if paired else "open_gatt"
+            return {"ok": True, "data": data}
+        except DeviceAsleepException:
+            return {"ok": False, "error": "asleep"}
+        except NotPairedException:
+            _LOGGER.error("Device %s is not paired", address)
+            return {"ok": False, "error": "not_paired"}
+        except DeviceNotFoundException:
+            _LOGGER.error("Device %s not found in range", address)
+            return {"ok": False, "error": "device_not_found"}
+        except CannotConnectException:
+            _LOGGER.error("Cannot connect to %s", address)
+            return {"ok": False, "error": "cannot_connect"}
+        except BleakOutOfConnectionSlotsError:
+            _LOGGER.error("No connection slot available for %s", address)
+            return {"ok": False, "error": "out_of_slots"}
+        except BleakAbortedError:
+            _LOGGER.error(
+                "Connection aborted for %s — device may be out of range "
+                "or using an unsupported Bluetooth proxy",
+                address,
+            )
+            return {"ok": False, "error": "connection_aborted"}
+        except BleakNotFoundError:
+            # If habluetooth sees the device (advertisements) but bleak
+            # can't connect, the most likely cause is a stale bond in
+            # BlueZ preventing new connections.
+            if async_ble_device_from_address(self.hass, address):
+                _LOGGER.warning(
+                    "Device %s is visible but unreachable — likely stale bond",
+                    address,
+                )
+                return {"ok": False, "error": "stale_bond"}
+            _LOGGER.error(
+                "Device %s not found by any Bluetooth adapter", address
+            )
+            return {"ok": False, "error": "device_not_found"}
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Unexpected error during capabilities fetch")
+            return {"ok": False, "error": "unknown"}
+
+    async def async_step_ble_probe_finish(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Route the probe outcome captured by the progress step.
+
+        Success continues to show_capabilities; failures go back to the
+        origin step — rendered as errors[] on the manual/pair forms and
+        as an <ha-alert> on the schema-less discovery confirm.
+        """
+        result = self._ble_probe_result or {}
+        self._ble_probe_result = None
+        origin = self._ble_probe_origin
+        address = self._ble_probe_address
+
+        if result.get("ok"):
+            self.fetched_data = result["data"]
+            self.fetched_address = address
+            self.fetched_name = (
+                self.discovery_info.name if self.discovery_info else None
+            ) or address
+            self.fetched_transport_type = TRANSPORT_BLEAK
+            return await self.async_step_show_capabilities()
+
+        error = result.get("error", "unknown")
+
+        if error in ("not_paired", "stale_bond"):
+            self._pair_address = address
+            # A proxy-carried connection cannot complete the shaver's
+            # LESC pairing, and host-side tools (D-Bus agent, pair.sh)
+            # have no effect on it — route to the hard proxy dialog
+            # instead of the pairing machinery.
+            if self._probe_via_proxy:
+                return await self.async_step_not_paired_proxy()
+            if origin == "pair":
+                if error == "stale_bond":
+                    self._pair_error = "pairing_failed"
+                    return await self.async_step_pair()
+                # D-Bus pairing succeeded but the device still refuses
+                # reads — fall back to the manual instructions.
+                _LOGGER.error(
+                    "Pairing succeeded but device still not accessible "
+                    "for %s — falling back to manual instructions",
+                    address,
+                )
+                return await self.async_step_not_paired()
+            return await self._route_to_pairing()
+
+        if origin == "pair":
+            if error == "asleep":
+                self._pair_error = "device_asleep"
+            elif error == "pairing_failed":
+                self._pair_error = "pairing_failed"
+            elif error == "unknown":
+                self._pair_error = "pairing_failed"
+            else:
+                self._pair_error = "cannot_connect"
+            return await self.async_step_pair()
+
+        if origin == "user_bleak":
+            self._manual_error = (
+                "device_asleep" if error == "asleep" else error
+            )
+            return await self.async_step_user_bleak()
+
+        # Discovery origin — keep the flow alive: an abort would dismiss
+        # the discovery card, and ADV deduplication stops HA from
+        # re-creating it when the shaver wakes.
+        if error == "asleep":
+            self._confirm_status = (
+                '<ha-alert alert-type="error">The shaver is asleep — wake '
+                "it (press the power button or place it on its charging "
+                "stand), then click Read capabilities again.</ha-alert>\n\n"
+            )
+        elif error == "connection_aborted":
+            self._confirm_status = (
+                '<ha-alert alert-type="error">The connection was aborted — '
+                "the shaver may be out of range, or the connection went "
+                "through an unsupported standard Bluetooth proxy. Move the "
+                "shaver closer to a local Bluetooth adapter, then click "
+                "Read capabilities again.</ha-alert>\n\n"
+            )
+        else:
+            self._confirm_status = (
+                '<ha-alert alert-type="error">Could not read the shaver. '
+                "Make sure it is switched on and in range, then click "
+                "Read capabilities to try again. Details are in the logs "
+                "(Settings → System → Logs).</ha-alert>\n\n"
+            )
+        return await self.async_step_bluetooth_confirm()
+
+    @staticmethod
+    def _esp_entry_unreachable(entry: ConfigEntry, context: str) -> bool:
+        """True when an ESPHome entry cannot serve a bridge probe right now.
+
+        Disabled bridges cannot hold a connection, and bridges whose
+        ESPHome API link is down cannot answer — probing either only burns
+        the probe timeout (their stale services may still be registered,
+        so the service-based detection alone would wrongly pick them up).
+        runtime_data is ESPHome's RuntimeEntryData; fall back to probing
+        if the attribute layout ever changes.
+        """
+        if entry.disabled_by:
+            _LOGGER.debug(
+                "%s: bridge check — skipping disabled ESPHome entry '%s'",
+                context, entry.title,
+            )
+            return True
+        runtime = getattr(entry, "runtime_data", None)
+        if runtime is not None and getattr(runtime, "available", True) is False:
+            _LOGGER.debug(
+                "%s: bridge check — skipping offline ESPHome entry '%s'",
+                context, entry.title,
+            )
+            return True
+        return False
 
     async def _find_esp_bridge_for_mac(self, mac: str) -> dict | None:
-        """Check if any ESP bridge is connected to the given MAC."""
-        esphome_entries = self.hass.config_entries.async_entries("esphome")
-        for entry in esphome_entries:
-            # Disabled bridges cannot hold a connection — probing them only
-            # burns the 10 s bridge timeout (their stale services may still
-            # be registered, so the service-based detection alone would
-            # wrongly pick them up).
-            if entry.disabled_by:
-                _LOGGER.debug(
-                    "%s: bridge check — skipping disabled ESPHome entry '%s'",
-                    mac, entry.title,
-                )
-                continue
-            # Same for bridges whose ESPHome API link is down: the probe
-            # runs over that link, so it can only time out. runtime_data is
-            # ESPHome's RuntimeEntryData; fall back to probing if the
-            # attribute layout ever changes.
-            runtime = getattr(entry, "runtime_data", None)
-            if runtime is not None and getattr(runtime, "available", True) is False:
-                _LOGGER.debug(
-                    "%s: bridge check — skipping offline ESPHome entry '%s'",
-                    mac, entry.title,
-                )
+        """Locate an ESP bridge slot that already holds this shaver.
+
+        Probes candidate slots via the lightweight ``ble_get_info`` event
+        round-trip (3 s, parallel per ESP) instead of a full transport
+        connect (10 s per slot) — and only slots answering on the
+        *shaver* event channel count, so a Sonicare bridge sharing the
+        same service-name pattern is no longer probed as a candidate.
+        Matches ``identity_address`` in addition to the live ``mac`` so a
+        bonded-but-asleep shaver (mac reads 00:00:…) still redirects to
+        its bridge.
+        """
+        target = mac.upper()
+        for entry in self.hass.config_entries.async_entries("esphome"):
+            if self._esp_entry_unreachable(entry, mac):
                 continue
             device_name = entry.data.get("device_name")
             if not device_name:
                 continue
             esp_name = device_name.replace("-", "_")
             device_ids = self._detect_esp_bridge_ids(esp_name)
-            for did in device_ids:
-                transport = EspBridgeTransport(
-                    self.hass, mac, esp_name, did
-                )
-                try:
-                    await transport.connect()
-                    info = await transport.get_bridge_info()
-                    if info and info.get("mac", "").upper() == mac.upper():
-                        return {
-                            "device_name": esp_name,
-                            "bridge_id": did,
-                            "info": info,
-                        }
-                except Exception:
-                    pass
-                finally:
-                    await transport.disconnect()
+            if not device_ids:
+                continue
+            for did, info in await self._probe_shaver_bridges(
+                esp_name, device_ids
+            ):
+                if info is None:
+                    continue
+                identity = info.get("identity_address", "").upper()
+                live_mac = info.get("mac", "").upper()
+                known = {
+                    m for m in (identity, live_mac)
+                    if m and m != "00:00:00:00:00:00"
+                }
+                if target in known:
+                    return {
+                        "device_name": esp_name,
+                        "bridge_id": did,
+                        "info": info,
+                    }
         return None
-
-    async def _async_bluetooth_confirm(
-        self, user_input: dict[str, Any] | None, step_id: str
-    ) -> ConfigFlowResult:
-        """Shared handler for bluetooth confirmation steps."""
-        assert self.discovery_info is not None
-        errors: dict[str, str] = {}
-        status = ""
-
-        if user_input is not None:
-            # Quick D-Bus pre-check: if the device is known to BlueZ but
-            # not paired, skip the slow bleak connection attempts (~80s)
-            # and go straight to the pairing step.
-            from .dbus_pairing import is_dbus_available, async_is_device_paired
-
-            if is_dbus_available():
-                paired = await async_is_device_paired(
-                    self.discovery_info.address
-                )
-                if paired is False:
-                    _LOGGER.info(
-                        "D-Bus pre-check: %s is not paired — "
-                        "skipping to pairing step",
-                        self.discovery_info.address,
-                    )
-                    self._pair_address = self.discovery_info.address
-                    return await self.async_step_pair()
-
-            try:
-                capabilities = await self._async_fetch_capabilities(
-                    self.discovery_info.address
-                )
-
-                self.fetched_data = capabilities
-                self.fetched_address = self.discovery_info.address
-                self.fetched_name = (
-                    self.discovery_info.name or self.discovery_info.address
-                )
-
-                return await self.async_step_show_capabilities()
-
-            except NotPairedException:
-                _LOGGER.error("Device %s is not paired", self.discovery_info.address)
-                self._pair_address = self.discovery_info.address
-                return await self._route_to_pairing()
-            except DeviceNotFoundException:
-                _LOGGER.error("Device %s not found in range", self.discovery_info.address)
-                errors["base"] = "device_not_found"
-            except CannotConnectException:
-                _LOGGER.error("Cannot connect to %s", self.discovery_info.address)
-                errors["base"] = "cannot_connect"
-            except BleakOutOfConnectionSlotsError:
-                _LOGGER.error(
-                    "No connection slot available for %s",
-                    self.discovery_info.address,
-                )
-                errors["base"] = "out_of_slots"
-            except BleakAbortedError:
-                _LOGGER.error(
-                    "Connection aborted for %s — device may be out of range "
-                    "or using an unsupported Bluetooth proxy",
-                    self.discovery_info.address,
-                )
-                errors["base"] = "connection_aborted"
-            except BleakNotFoundError:
-                # If habluetooth sees the device (advertisements) but bleak
-                # can't connect, the most likely cause is a stale bond in
-                # BlueZ preventing new connections.
-                ble_dev = async_ble_device_from_address(
-                    self.hass, self.discovery_info.address
-                )
-                if ble_dev:
-                    _LOGGER.warning(
-                        "Device %s is visible but unreachable — "
-                        "likely stale bond",
-                        self.discovery_info.address,
-                    )
-                    self._pair_address = self.discovery_info.address
-                    return await self._route_to_pairing()
-                _LOGGER.error(
-                    "Device %s not found by any Bluetooth adapter",
-                    self.discovery_info.address,
-                )
-                errors["base"] = "device_not_found"
-            except DeviceAsleepException:
-                # Keep the discovery flow alive — an abort would dismiss the
-                # discovery card, and ADV deduplication stops HA from
-                # re-creating it when the shaver wakes. errors["base"] does not
-                # render on this schema-less confirmation step, so inject an
-                # <ha-alert> into the description; ha-markdown renders it as a
-                # real coloured alert box.
-                status = (
-                    '<ha-alert alert-type="error">The shaver is asleep — wake '
-                    "it (press the power button or place it on its charging "
-                    "stand), then click Read capabilities again.</ha-alert>\n\n"
-                )
-            except Exception:
-                _LOGGER.exception("Unexpected error during setup")
-                errors["base"] = "unknown"
-
-        self.context["title_placeholders"] = {
-            "name": f"Bluetooth ({self.discovery_info.address})"
-        }
-
-        return self.async_show_form(
-            step_id=step_id,
-            description_placeholders={
-                "name": self.discovery_info.name or self.discovery_info.address,
-                "status": status,
-            },
-            errors=errors,
-        )
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -755,52 +1159,114 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle manual MAC address entry for direct BLE."""
+        # Progress re-invocations of a running probe land here.
+        if (progress := self._ble_probe_progress("user_bleak")) is not None:
+            return progress
+
         errors: dict[str, str] = {}
+        # One-shot outcome from ble_probe_finish (this form has a schema,
+        # so errors[] renders normally here).
+        if self._manual_error:
+            errors["base"] = self._manual_error
+            self._manual_error = ""
 
         if user_input is not None:
-            address = user_input["address"].upper()
-            await self.async_set_unique_id(address)
-            self._abort_if_unique_id_configured()
+            raw = user_input["address"]
+            if raw == _MANUAL_ADDRESS:
+                # User picked the "enter manually" sentinel — re-render the
+                # step as a free-text field, keep prior errors empty.
+                self._manual_address_entry = True
+            else:
+                address = raw.upper()
+                await self.async_set_unique_id(address)
+                self._abort_if_already_configured()
 
-            # Quick D-Bus pre-check (same as bluetooth_confirm path)
-            from .dbus_pairing import is_dbus_available, async_is_device_paired
+                # Quick D-Bus pre-check (same as bluetooth_confirm path);
+                # skipped when a remote scanner is the likely carrier.
+                paths = describe_available_paths(self.hass, address)
+                likely_proxy = bool(paths) and not paths[0]["is_local"]
+                if not likely_proxy:
+                    from .dbus_pairing import is_dbus_available, async_is_device_paired
 
-            if is_dbus_available():
-                paired = await async_is_device_paired(address)
-                if paired is False:
-                    _LOGGER.info(
-                        "D-Bus pre-check: %s is not paired — "
-                        "skipping to pairing step",
-                        address,
-                    )
-                    self._pair_address = address
-                    return await self._route_to_pairing()
+                    if is_dbus_available():
+                        paired = await async_is_device_paired(address)
+                        if paired is False:
+                            _LOGGER.info(
+                                "D-Bus pre-check: %s is not paired — "
+                                "skipping to pairing step",
+                                address,
+                            )
+                            self._pair_address = address
+                            return await self._route_to_pairing()
 
-            try:
-                capabilities = await self._async_fetch_capabilities(address)
+                return self._start_ble_probe("user_bleak", address)
 
-                self.fetched_data = capabilities
-                self.fetched_address = address
-                self.fetched_name = address
+        free_text_schema = vol.Schema({vol.Required("address"): str})
 
-                return await self.async_step_show_capabilities()
+        # Free-text entry path: nothing discovered, or user asked for it.
+        if self._manual_address_entry:
+            return self.async_show_form(
+                step_id="user_bleak",
+                data_schema=free_text_schema,
+                errors=errors,
+            )
 
-            except NotPairedException:
-                _LOGGER.error("Device %s is not paired", address)
-                self._pair_address = address
-                return await self._route_to_pairing()
-            except DeviceAsleepException:
-                errors["base"] = "device_asleep"
-            except Exception:
-                _LOGGER.exception(
-                    "Setup failed: Unable to connect to the device or fetch capabilities"
+        # Build the discovered-device picker. Each option label carries the
+        # advertisement age, RSSI and the scanner that would likely carry
+        # the connect — the step is titled "Direct Bluetooth", but
+        # habluetooth routes by signal strength and may pick a
+        # bluetooth_proxy (which cannot pair a shaver).
+        now_mono = time.monotonic()
+        scored: list[tuple[int, SelectOptionDict]] = []
+        for info in async_discovered_service_info(self.hass):
+            uuids = {u.lower() for u in (info.service_uuids or [])}
+            if not uuids & _SHAVER_ADV_UUIDS:
+                continue
+            age_s = max(0, int(now_mono - info.time)) if info.time else None
+            rssi = info.rssi
+            label_parts = [f"{info.name or 'Philips Shaver'} ({info.address})"]
+            if age_s is not None:
+                label_parts.append(f"{age_s}s ago")
+            if rssi is not None:
+                label_parts.append(f"{rssi} dBm")
+            # Local scanner names carry the adapter MAC in parentheses;
+            # strip it to keep the label compact ("hci0" / "atom-lite (proxy)").
+            paths = describe_available_paths(self.hass, info.address)
+            if paths:
+                best = paths[0]
+                via = str(best["name"]).split(" (")[0]
+                label_parts.append(
+                    f"via {via}" + ("" if best["is_local"] else " (proxy)")
                 )
-                errors["base"] = "cannot_connect"
+            label = label_parts[0] + (
+                " — " + ", ".join(label_parts[1:]) if len(label_parts) > 1 else ""
+            )
+            scored.append((
+                age_s if age_s is not None else 9999,
+                SelectOptionDict(value=info.address, label=label),
+            ))
 
-        data_schema = vol.Schema({vol.Required("address"): str})
+        if scored:
+            scored.sort(key=lambda t: t[0])  # freshest first
+            options: list[SelectOptionDict] = [opt for _, opt in scored]
+            options.append(SelectOptionDict(
+                value=_MANUAL_ADDRESS,
+                label="Other — enter address manually",
+            ))
+            return self.async_show_form(
+                step_id="user_bleak",
+                data_schema=vol.Schema({
+                    vol.Required("address"): SelectSelector(
+                        SelectSelectorConfig(options=options)
+                    )
+                }),
+                errors=errors,
+            )
+
+        # No discoveries — fall back to free text.
         return self.async_show_form(
             step_id="user_bleak",
-            data_schema=data_schema,
+            data_schema=free_text_schema,
             errors=errors,
         )
 
@@ -823,19 +1289,27 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         """Read capabilities and probe services via ESP32 bridge."""
         transport = EspBridgeTransport(self.hass, address, esp_device_name, esp_bridge_id)
         try:
+            # Progress milestones — each read is its own bridge round-trip,
+            # so the bar advances per characteristic.
+            self._bump_progress(0.05)
             await transport.connect()
+            self._bump_progress(0.2)
 
             # Probe each service with one representative characteristic
             found_services: list[str] = []
             model_number: str | None = None
             probe_results: dict[str, bytes] = {}
-            for svc_uuid, probe_char in self.SERVICE_PROBE_CHARS.items():
+            probe_count = max(1, len(self.SERVICE_PROBE_CHARS))
+            for index, (svc_uuid, probe_char) in enumerate(
+                self.SERVICE_PROBE_CHARS.items(), start=1
+            ):
                 raw = await transport.read_char(probe_char)
                 if raw is not None:
                     found_services.append(svc_uuid)
                     probe_results[probe_char] = raw
                     if probe_char == CHAR_MODEL_NUMBER:
                         model_number = raw.decode("utf-8", errors="replace").strip()
+                self._bump_progress(0.2 + 0.5 * index / probe_count)
 
             if not found_services:
                 raise CannotConnectException(
@@ -849,6 +1323,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 if raw_cap is not None:
                     cap_int = int.from_bytes(raw_cap, "little")
 
+            self._bump_progress(0.75)
             # Battery — reuse probe result if available, otherwise read separately
             battery: int | None = None
             raw_bat = probe_results.get(CHAR_BATTERY_LEVEL)
@@ -857,6 +1332,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             if raw_bat:
                 battery = raw_bat[0]
 
+            self._bump_progress(0.82)
             # Read firmware revision (with Software Revision fallback)
             firmware: str | None = None
             raw_fw = await transport.read_char(CHAR_FIRMWARE_REVISION)
@@ -867,6 +1343,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 if raw_sw:
                     firmware = raw_sw.decode("utf-8", errors="replace").strip()
 
+            self._bump_progress(0.92)
             # Read Device Type (0x0119)
             device_type: str | None = None
             raw_dt = await transport.read_char(CHAR_DEVICE_TYPE)
@@ -926,6 +1403,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         # picker reuses these instead of re-probing the same bridges seconds
         # later; health check and capabilities fetch still probe fresh.
         self._probed_bridges: dict[str, list[tuple[str, dict | None]]] = {}
+        # Option values whose ESP didn't answer any probe — the sole-ESP
+        # auto-select must not skip the picker for one of these.
+        self._offline_esp_values = set()
         for entry in esphome_entries:
             # A disabled entry cannot serve as a bridge — offering it would
             # only fail later with a generic cannot_connect.
@@ -951,28 +1431,29 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                     "esp_select: ESPHome entry '%s' is offline — skipping probe",
                     entry.title,
                 )
-                probe_results = []
+                results = [(did, None) for did in bridge_ids]
             else:
-                probe_results = await self._probe_shaver_bridges(
+                results = await self._probe_shaver_bridges(
                     esp_service_id, bridge_ids
                 )
-            by_did = {
-                (info.get("bridge_id") or "").lower(): info
-                for info in probe_results
-            }
-            self._probed_bridges[esp_service_id] = [
-                (did, by_did.get(did.lower())) for did in bridge_ids
-            ]
+            self._probed_bridges[esp_service_id] = results
+            infos = [info for _, info in results if info is not None]
             slot_info = ""
             is_offline = False
-            if probe_results:
+            if infos:
+                # A slot counts as paired when it holds an identity (NVS
+                # bond) or a live remote MAC — mac alone reads 00:00:…
+                # while the bonded shaver is asleep.
                 paired = sum(
                     1
-                    for info in probe_results
-                    if info.get("mac")
-                    and info["mac"] != "00:00:00:00:00:00"
+                    for info in infos
+                    if (info.get("identity_address") or "").strip()
+                    or (
+                        info.get("mac")
+                        and info["mac"] != "00:00:00:00:00:00"
+                    )
                 )
-                free = len(probe_results) - paired
+                free = len(infos) - paired
                 if paired and free:
                     slot_info = f"{paired} 🔗 / {free} 🟢"
                 elif free:
@@ -988,6 +1469,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 # them visible so the user can see *why* their ESP is in
                 # the list but unselectable.)
                 is_offline = True
+                self._offline_esp_values.add(device_name)
                 if len(bridge_ids) > 1:
                     slot_info = f"{len(bridge_ids)} bridges"
             label = f"{entry.title} ({device_name})"
@@ -998,49 +1480,63 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             options.append(SelectOptionDict(value=device_name, label=label))
         return options
 
+    async def _probe_bridge_info(
+        self, esp_device_name: str, bridge_id: str, timeout: float = 3.0,
+    ) -> dict[str, str] | None:
+        """Probe a single bridge slot via ble_get_info.
+
+        Returns the info-event payload, or ``None`` if the call timed out
+        or no shaver-bridge response was received. Listening on
+        ``esphome.philips_shaver_ble_status`` is the disambiguator versus
+        a philips_sonicare bridge that happens to share service names.
+        """
+        svc_name = f"{esp_device_name}_ble_get_info"
+        if bridge_id:
+            svc_name += f"_{bridge_id}"
+        if not self.hass.services.has_service("esphome", svc_name):
+            return None
+
+        info_future: asyncio.Future[dict[str, str]] = self.hass.loop.create_future()
+
+        @callback
+        def _on_status(event: Event) -> None:
+            if (event.data.get("status") == "info"
+                    # HA's ServiceRegistry lowercases service names, so an
+                    # uppercase bridge_id yields a lowercase service suffix
+                    # while the event echoes the original case — compare
+                    # case-insensitively.
+                    and event.data.get("bridge_id", "").lower() == bridge_id.lower()
+                    and not info_future.done()):
+                info_future.set_result(dict(event.data))
+
+        unsub = self.hass.bus.async_listen(
+            "esphome.philips_shaver_ble_status", _on_status
+        )
+        try:
+            await self.hass.services.async_call(
+                "esphome", svc_name, {}, blocking=True
+            )
+            return await asyncio.wait_for(info_future, timeout=timeout)
+        except (asyncio.TimeoutError, Exception):  # noqa: BLE001 — best-effort probe
+            return None
+        finally:
+            unsub()
+
     async def _probe_shaver_bridges(
         self, device_name: str, bridge_ids: list[str]
-    ) -> list[dict[str, str]]:
-        """Probe each bridge_id via ble_get_info, return list of info dicts.
+    ) -> list[tuple[str, dict[str, str] | None]]:
+        """Probe all bridge_ids on an ESP in parallel via ble_get_info.
 
-        Service-name detection alone (`_detect_esp_bridge_ids`) can't tell a
-        philips_shaver bridge from another component that registers the same
-        service name pattern; only a bridge that actually answers on
-        ``esphome.philips_shaver_ble_status`` counts. Best-effort: returns an
-        empty list if the probe times out or the ESP is offline, the caller
-        should then fall back to the plain bridge count.
+        Returns ``(bridge_id, info | None)`` for every slot — ``None``
+        marks a slot that didn't answer on our event channel (offline,
+        or a different component such as a Sonicare bridge sharing the
+        service-name pattern). Callers that only care about responders
+        filter the Nones; the picker keeps them to show ⚪ slots.
         """
-        results: list[dict[str, str]] = []
-        for did in bridge_ids:
-            svc_name = f"{device_name}_ble_get_info"
-            if did:
-                svc_name += f"_{did}"
-            info_future: asyncio.Future[dict[str, str]] = (
-                self.hass.loop.create_future()
-            )
-
-            @callback
-            def _on_status(event: Event, _did: str = did) -> None:
-                if (event.data.get("status") == "info"
-                        # bridge_id compared case-insensitively (see above)
-                        and event.data.get("bridge_id", "").lower() == _did.lower()
-                        and not info_future.done()):
-                    info_future.set_result(dict(event.data))
-
-            unsub = self.hass.bus.async_listen(
-                "esphome.philips_shaver_ble_status", _on_status
-            )
-            try:
-                await self.hass.services.async_call(
-                    "esphome", svc_name, {}, blocking=True
-                )
-                info = await asyncio.wait_for(info_future, timeout=2.0)
-                results.append(info)
-            except (asyncio.TimeoutError, Exception):
-                pass
-            finally:
-                unsub()
-        return results
+        results = await asyncio.gather(
+            *(self._probe_bridge_info(device_name, did) for did in bridge_ids)
+        )
+        return list(zip(bridge_ids, results))
 
     def _detect_esp_bridge_ids(self, esp_device_name: str) -> list[str]:
         """Detect available device_id suffixes on an ESP bridge.
@@ -1089,6 +1585,22 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
         esp_options = await self._get_esphome_device_options()
 
+        # A single reachable ESP needs no dropdown — route straight into
+        # its health check (Sonicare pattern). Offline (⚪) ESPs still get
+        # the picker so the user sees *why* nothing is selectable.
+        if len(esp_options) == 1 and user_input is None:
+            sole = esp_options[0]["value"]
+            if sole not in self._offline_esp_values:
+                esp_device_name = sole.strip().replace("-", "_")
+                bridge_ids = self._detect_esp_bridge_ids(esp_device_name)
+                if bridge_ids:
+                    self.fetched_esp_device_name = esp_device_name
+                    self._esp_bridge_ids = bridge_ids
+                    if len(bridge_ids) > 1:
+                        return await self.async_step_esp_select_device()
+                    self.fetched_esp_bridge_id = bridge_ids[0]
+                    return await self._esp_bridge_health_check()
+
         if esp_options:
             data_schema = vol.Schema(
                 {
@@ -1135,46 +1647,18 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             self.fetched_bridge_info = info
             return await self._esp_bridge_health_check()
 
-        # Probe all bridge_ids in parallel — filter by bridge_id in response
-        async def _probe(did: str) -> tuple[str, dict[str, str] | None]:
-            svc_name = f"{self.fetched_esp_device_name}_ble_get_info"
-            if did:
-                svc_name += f"_{did}"
-            info_future: asyncio.Future[dict[str, str]] = self.hass.loop.create_future()
-
-            @callback
-            def _on_info(event: Event) -> None:
-                if (event.data.get("status") == "info"
-                        # bridge_id compared case-insensitively (see above)
-                        and event.data.get("bridge_id", "").lower() == did.lower()
-                        and not info_future.done()):
-                    info_future.set_result(dict(event.data))
-
-            unsub = self.hass.bus.async_listen(
-                "esphome.philips_shaver_ble_status", _on_info
-            )
-            try:
-                await self.hass.services.async_call(
-                    "esphome", svc_name, {}, blocking=True
-                )
-                return did, await asyncio.wait_for(info_future, timeout=3.0)
-            except (asyncio.TimeoutError, Exception):
-                return did, None
-            finally:
-                unsub()
-
         # Reuse the probes collected while building the ESP dropdown when they
         # cover this ESP's slots — they are seconds old, and probing again only
         # delays the picker (Sonicare pattern). Zeroconf and other entry paths
-        # have no cache and probe as before.
+        # have no cache and probe fresh.
         if not hasattr(self, "_probed_bridges"):
             self._probed_bridges = {}
         cached = self._probed_bridges.get(self.fetched_esp_device_name)
         if cached is not None and {d for d, _ in cached} == set(self._esp_bridge_ids):
             results = cached
         else:
-            results = await asyncio.gather(
-                *[_probe(did) for did in self._esp_bridge_ids]
+            results = await self._probe_shaver_bridges(
+                self.fetched_esp_device_name, self._esp_bridge_ids
             )
             self._probed_bridges[self.fetched_esp_device_name] = results
 
@@ -1289,11 +1773,102 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             body.append(mac.upper())
         return f"{' '.join(icons)} {' — '.join(body)}"
 
+    def _esp_target_label(
+        self,
+        esp_device_name: str | None = None,
+        esp_bridge_id: str | None = None,
+    ) -> str:
+        """Human label for an ESP bridge slot: ``<node> / <slot>``.
+
+        Leads with the ESP node name so a multi-bridge setup shows which
+        bridge carries the connection, then the slot's YAML
+        ``friendly_name`` (or the ``bridge_id`` when the slot is unnamed).
+        Single-bridge nodes with no slot id collapse to just the node.
+        Defaults to current flow state; explicit-argument callers skip the
+        friendly-name lookup (their bridge info may belong to another slot).
+        """
+        explicit = esp_device_name is not None or esp_bridge_id is not None
+        device = (
+            esp_device_name if esp_device_name is not None
+            else self.fetched_esp_device_name
+        ) or ""
+        bridge_id = (
+            esp_bridge_id if esp_bridge_id is not None
+            else (self.fetched_esp_bridge_id or "")
+        )
+        friendly = ""
+        if not explicit:
+            friendly = (
+                (self.fetched_bridge_info or {}).get("friendly_name") or ""
+            ).strip()
+        slot = friendly or bridge_id
+        return f"{device} / {slot}" if slot else device
+
+    def _pair_target_placeholders(self) -> dict[str, str]:
+        """Placeholders identifying the bridge slot being paired/reset."""
+        return {
+            "device_name": self.fetched_esp_device_name or "",
+            "bridge_id": self.fetched_esp_bridge_id or "",
+            "target": self._esp_target_label(),
+            # Optional one-shot notice slot (request_pair success alert).
+            # Empty by default; every step that renders it must supply it.
+            "notice": "",
+        }
+
+    async def _route_after_health_check(self) -> ConfigFlowResult:
+        """Decide where a probed bridge slot goes next.
+
+        A slot that is already bonded but has no config entry yet (a
+        leftover bond, e.g. after removing an entry while the bridge was
+        offline) gets a small menu: set it up as-is, or unpair it. Only
+        NVS-held identities qualify — a YAML-pinned slot (Mode A, or
+        Mode B with an explicit ``mac_address:``) re-bonds automatically,
+        so unpairing it would be a confusing no-op. Fresh pairings
+        (``_just_paired``) skip straight to the status step.
+        """
+        info = self.fetched_bridge_info or {}
+        if (
+            info.get("paired") == "true"
+            and info.get("identity_source") == "nvs"
+            and not self._just_paired
+            and not self._slot_action_chosen
+        ):
+            return await self.async_step_esp_slot_action()
+        return await self.async_step_esp_bridge_status()
+
+    async def async_step_esp_slot_action(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Menu for a slot that is bonded but not yet a config entry."""
+        return self.async_show_menu(
+            step_id="esp_slot_action",
+            menu_options=["slot_setup", "slot_unpair"],
+            description_placeholders=self._pair_target_placeholders(),
+        )
+
+    async def async_step_slot_setup(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Menu choice: set up the already-bonded shaver (read caps)."""
+        self._slot_action_chosen = True
+        return await self.async_step_esp_bridge_status()
+
+    async def async_step_slot_unpair(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Menu choice: drop the slot's leftover bond."""
+        self._slot_action_chosen = True
+        return await self.async_step_reset_bridge()
+
     async def _esp_bridge_health_check(self) -> ConfigFlowResult:
-        """Run bridge health check and proceed to status step."""
+        """Run bridge health check and proceed to status step.
+
+        ``fetched_bridge_info`` is already populated when the picker or a
+        redirect seeded it; otherwise we fetch it live from the bridge.
+        """
         # Skip if we already have bridge info from the device selection step
         if self.fetched_bridge_info:
-            return await self.async_step_esp_bridge_status()
+            return await self._route_after_health_check()
 
         esp_device_name = self.fetched_esp_device_name
         esp_bridge_id = self.fetched_esp_bridge_id
@@ -1323,17 +1898,27 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             await transport.disconnect()
 
         self.fetched_bridge_info = bridge_info
-        return await self.async_step_esp_bridge_status()
+        return await self._route_after_health_check()
 
     async def async_step_esp_bridge_status(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Show ESP bridge status before reading shaver capabilities."""
-        errors: dict[str, str] = {}
+        # A capabilities read is in flight (progress re-invocations land
+        # here) — handle it before anything that would probe the bridge.
+        if self._esp_caps_task is not None:
+            if not self._esp_caps_task.done():
+                return self.async_show_progress(
+                    step_id="esp_bridge_status",
+                    progress_action="esp_reading",
+                    progress_task=self._esp_caps_task,
+                    description_placeholders=self._pair_target_placeholders(),
+                )
+            self._esp_caps_result = self._esp_caps_task.result()
+            self._esp_caps_task = None
+            return self.async_show_progress_done(next_step_id="esp_read_finish")
 
         if user_input is not None:
-            esp_device_name = self.fetched_esp_device_name
-
             # Mode B detection — bridge supports ble_pair_mode and the user
             # hasn't paired a shaver to it yet. Route to the pair-mode flow
             # instead of attempting a capability fetch (which would fail —
@@ -1347,44 +1932,16 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             if pair_capable and identity_source == "none" and not already_paired:
                 return await self.async_step_request_pair()
 
-            try:
-                capabilities = await self._async_fetch_capabilities_esp(
-                    esp_device_name, esp_device_name,
-                    getattr(self, "fetched_esp_bridge_id", ""),
-                )
-
-                shaver_mac = capabilities.get("shaver_mac")
-                if shaver_mac:
-                    await self.async_set_unique_id(
-                        shaver_mac.upper(), raise_on_progress=False
-                    )
-                else:
-                    await self.async_set_unique_id(f"esp_{esp_device_name}")
-                self._abort_if_unique_id_configured()
-
-                self.fetched_data = capabilities
-                # Use bridge version from status step
-                if self.fetched_bridge_info:
-                    self.fetched_data["bridge_version"] = self.fetched_bridge_info.get(
-                        "version"
-                    )
-                self.fetched_address = shaver_mac
-                # Use model number as display name if available
-                model = capabilities.get("model_number")
-                self.fetched_name = model if model else esp_device_name
-                self.fetched_transport_type = TRANSPORT_ESP_BRIDGE
-
-                return await self.async_step_show_capabilities()
-
-            except CannotConnectException:
-                _LOGGER.error(
-                    "ESP bridge: unable to read shaver capabilities via %s",
-                    esp_device_name,
-                )
-                errors["base"] = "cannot_connect"
-            except Exception:
-                _LOGGER.exception("Unexpected error reading shaver capabilities")
-                errors["base"] = "unknown"
+            # "Read capabilities" clicked → run the read as a background task.
+            self._esp_caps_task = self.hass.async_create_task(
+                self._async_esp_read()
+            )
+            return self.async_show_progress(
+                step_id="esp_bridge_status",
+                progress_action="esp_reading",
+                progress_task=self._esp_caps_task,
+                description_placeholders=self._pair_target_placeholders(),
+            )
 
         # Refresh bridge info to get current BLE connection status
         esp_bridge_id = getattr(self, "fetched_esp_bridge_id", "")
@@ -1444,6 +2001,24 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 "Consider updating the ESP bridge component."
             )
 
+        # A failed capabilities read surfaces here (errors[] doesn't render
+        # on this schema-less step — same quirk as bluetooth_confirm).
+        if self._esp_read_error:
+            status_text = (
+                f'<ha-alert alert-type="error">{self._esp_read_error}</ha-alert>\n\n'
+                + status_text
+            )
+            self._esp_read_error = ""
+
+        # Acknowledge a pairing that wait_pair just completed (one-shot).
+        if self._just_paired:
+            self._just_paired = False
+            status_text = (
+                '<ha-alert alert-type="success">Pairing successful — the '
+                "bridge is now bonded to your shaver.</ha-alert>\n\n"
+                + status_text
+            )
+
         # Determine shaver name for display
         if self.discovery_info:
             shaver_name = self.discovery_info.name or self.discovery_info.address
@@ -1454,16 +2029,6 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         else:
             shaver_name = "Unknown device"
 
-        # Multi-bridge ESPs ("shaver" + "oneblade" on the same atom-s3r) need
-        # the bridge_id in the dialog so the user knows which bridge they're
-        # configuring. {target} == "<device_name> / <bridge_id>" if a bridge_id
-        # is set, otherwise just "<device_name>".
-        bridge_id = self.fetched_esp_bridge_id or ""
-        target = (
-            f"{self.fetched_esp_device_name} / {bridge_id}"
-            if bridge_id
-            else self.fetched_esp_device_name
-        )
         # Pick the matching translation variant: the "already connected" hint
         # when the bridge holds a live BLE link, the "turn it on" hint
         # otherwise. Both submit to async_step_esp_bridge_status.
@@ -1477,11 +2042,83 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             description_placeholders={
                 "device_name": self.fetched_esp_device_name,
                 "shaver_name": shaver_name,
-                "target": target,
+                "target": self._esp_target_label(),
                 "status": status_text,
             },
-            errors=errors,
         )
+
+    async def _async_esp_read(self) -> dict[str, Any]:
+        """Read capabilities via the ESP bridge (runs as a progress task)."""
+        esp_device_name = self.fetched_esp_device_name
+        try:
+            caps = await self._async_fetch_capabilities_esp(
+                esp_device_name, esp_device_name,
+                getattr(self, "fetched_esp_bridge_id", ""),
+            )
+            return {"ok": True, "caps": caps}
+        except CannotConnectException:
+            _LOGGER.error(
+                "ESP bridge: unable to read shaver capabilities via %s",
+                esp_device_name,
+            )
+            return {"ok": False, "error": "cannot_connect"}
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Unexpected error reading shaver capabilities")
+            return {"ok": False, "error": "unknown"}
+
+    async def async_step_esp_read_finish(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Process the capabilities read captured by esp_bridge_status."""
+        result = self._esp_caps_result or {}
+        self._esp_caps_result = None
+
+        if not result.get("ok"):
+            if result.get("error") == "cannot_connect":
+                self._esp_read_error = (
+                    "Couldn't read the shaver over the bridge. Make sure "
+                    "it's switched on and the bridge is online, then try "
+                    "again."
+                )
+            else:
+                self._esp_read_error = (
+                    "Something went wrong reading the shaver. Check the "
+                    "logs (Settings → System → Logs) and try again."
+                )
+            return await self.async_step_esp_bridge_status()
+
+        capabilities = result["caps"]
+        esp_device_name = self.fetched_esp_device_name
+
+        shaver_mac = capabilities.get("shaver_mac")
+        if shaver_mac:
+            await self.async_set_unique_id(
+                shaver_mac.upper(), raise_on_progress=False
+            )
+        else:
+            await self.async_set_unique_id(f"esp_{esp_device_name}")
+        self._abort_if_already_configured()
+
+        # Add pairing status from bridge info for the BLE-Security row.
+        paired_str = (self.fetched_bridge_info or {}).get("paired", "")
+        if paired_str == "true":
+            capabilities["pairing"] = "bonded"
+        elif paired_str == "false":
+            capabilities["pairing"] = "open_gatt"
+
+        self.fetched_data = capabilities
+        # Use bridge version from status step
+        if self.fetched_bridge_info:
+            self.fetched_data["bridge_version"] = self.fetched_bridge_info.get(
+                "version"
+            )
+        self.fetched_address = shaver_mac
+        # Use model number as display name if available
+        model = capabilities.get("model_number")
+        self.fetched_name = model if model else esp_device_name
+        self.fetched_transport_type = TRANSPORT_ESP_BRIDGE
+
+        return await self.async_step_show_capabilities()
 
     async def async_step_esp_bridge_status_connected(
         self, user_input: dict[str, Any] | None = None
@@ -1501,50 +2138,111 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             return await self.async_step_wait_pair()
 
-        bridge_id = self.fetched_esp_bridge_id or ""
-        target = (
-            f"{self.fetched_esp_device_name} / {bridge_id}"
-            if bridge_id
-            else self.fetched_esp_device_name
-        )
+        placeholders = self._pair_target_placeholders()
+        # Acknowledge a bond that reset_bridge just cleared (one-shot), so
+        # the jump from "Reset bridge bond" to pair-mode isn't silent.
+        if self._just_unpaired:
+            self._just_unpaired = False
+            placeholders["notice"] = (
+                '<ha-alert alert-type="success">Bond removed — the slot is '
+                "free. Switch on the shaver you want to bond, then start "
+                "pairing.</ha-alert>\n\n"
+            )
         return self.async_show_form(
             step_id="request_pair",
             data_schema=vol.Schema({}),
-            description_placeholders={"target": target},
+            description_placeholders=placeholders,
         )
 
     async def async_step_wait_pair(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Mode B: arm ble_pair_mode and wait for pair_complete or pair_timeout."""
-        esp_device_name = self.fetched_esp_device_name
+        """Arm ble_pair_mode and wait for the bond, showing live progress.
+
+        Two ``async_show_progress`` phases so the dialog tells the user
+        what is happening instead of freezing on a blank spinner for up
+        to a minute: first *arming* pair-mode on the bridge, then
+        *scanning/bonding*. Each phase runs as a background task; when it
+        finishes HA re-invokes this step. The outcome lands in
+        ``_pair_result`` and ``async_step_pair_finish`` renders it.
+        """
+        # Phase 1 — arm pair-mode on the bridge.
+        if (
+            self._pair_arm_task is None
+            and self._pair_scan_task is None
+            and self._pair_result is None
+        ):
+            self._pair_arm_task = self.hass.async_create_task(
+                self._async_arm_pair_mode()
+            )
+
+        if self._pair_arm_task is not None:
+            if not self._pair_arm_task.done():
+                return self.async_show_progress(
+                    step_id="wait_pair",
+                    progress_action="pair_arming",
+                    progress_task=self._pair_arm_task,
+                    description_placeholders=self._pair_target_placeholders(),
+                )
+            armed = self._pair_arm_task.result()
+            self._pair_arm_task = None
+            if not armed:
+                self._pair_result = {"error": "service_call_failed"}
+                return self.async_show_progress_done(next_step_id="pair_finish")
+            # Arming succeeded — kick off the scan/bond phase.
+            self._pair_scan_task = self.hass.async_create_task(
+                self._async_scan_and_bond()
+            )
+
+        # Phase 2 — wait for the bridge to bond (or time out / fail).
+        if self._pair_scan_task is not None:
+            if not self._pair_scan_task.done():
+                return self.async_show_progress(
+                    step_id="wait_pair",
+                    progress_action="pair_scanning",
+                    progress_task=self._pair_scan_task,
+                    description_placeholders=self._pair_target_placeholders(),
+                )
+            self._pair_result = self._pair_scan_task.result()
+            self._pair_scan_task = None
+
+        return self.async_show_progress_done(next_step_id="pair_finish")
+
+    async def _async_arm_pair_mode(self) -> bool:
+        """Register the status listener and arm pair-mode on the bridge.
+
+        Returns True when the arm service call succeeded. The listener is
+        registered *before* the service call so a fast pair_complete
+        can't slip through; ``async_step_pair_finish`` tears it down.
+        """
         bridge_id = self.fetched_esp_bridge_id or ""
-
-        # Service name with bridge_id suffix (matches ShaverBridge::svc_name_)
-        svc = f"{esp_device_name}_ble_pair_mode"
-        if bridge_id:
-            svc = f"{svc}_{bridge_id}"
-
-        # Filter events by bridge_id so multi-bridge ESPs don't cross-talk.
-        # ShaverBridge::fire_event auto-injects bridge_id, so the field is
-        # always present (empty string for single-bridge YAMLs).
-        pair_future: asyncio.Future = self.hass.loop.create_future()
+        self._pair_future = self.hass.loop.create_future()
 
         @callback
         def _on_status(event: Event) -> None:
-            # bridge_id compared case-insensitively (HA lowercases service names)
+            # Filter events by bridge_id so multi-bridge ESPs don't
+            # cross-talk. ShaverBridge::fire_event auto-injects bridge_id,
+            # so the field is always present (empty for single-bridge
+            # YAMLs); compared case-insensitively (HA lowercases service
+            # names).
             if event.data.get("bridge_id", "").lower() != bridge_id.lower():
                 return
-            status = event.data.get("status")
-            if status not in ("pair_complete", "pair_timeout", "pair_failed"):
+            if event.data.get("status") not in (
+                "pair_complete", "pair_timeout", "pair_failed"
+            ):
                 return
-            if not pair_future.done():
-                pair_future.set_result(dict(event.data))
+            if self._pair_future is not None and not self._pair_future.done():
+                self._pair_future.set_result(dict(event.data))
 
-        unsub = self.hass.bus.async_listen(
+        self._pair_unsub = self.hass.bus.async_listen(
             "esphome.philips_shaver_ble_status", _on_status
         )
 
+        # Service name with bridge_id suffix (matches ShaverBridge::svc_name_)
+        svc = f"{self.fetched_esp_device_name}_ble_pair_mode"
+        if bridge_id:
+            svc = f"{svc}_{bridge_id}"
+        self._pair_svc_name = svc
         try:
             await self.hass.services.async_call(
                 "esphome",
@@ -1553,33 +2251,78 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 blocking=True,
             )
         except Exception as err:  # pylint: disable=broad-except
-            unsub()
             _LOGGER.error("ble_pair_mode service call failed: %s", err)
+            return False
+        return True
+
+    async def _async_scan_and_bond(self) -> dict[str, str]:
+        """Wait for pair_complete / pair_timeout / pair_failed.
+
+        Ticks the determinate progress bar along the bridge's 60 s pair
+        window while waiting — the only feedback the user gets during a
+        wait this long. ``shield`` keeps the per-tick ``wait_for`` from
+        cancelling the shared future.
+        """
+        if self._pair_future is None:  # arming always sets it; defensive
+            return {"status": "pair_timeout"}
+        timeout_s = 60
+        loop = self.hass.loop
+        start = loop.time()
+        # 65 s margin = 60 s pair window + 5 s grace for the pair_timeout
+        # event to land. The bridge fires pair_timeout/pair_complete itself
+        # so the deadline is just a safety net for missed events.
+        deadline = start + timeout_s + 5
+        while True:
+            now = loop.time()
+            if now >= deadline:
+                _LOGGER.warning(
+                    "Pair-mode wait elapsed without pair_complete/"
+                    "pair_timeout event from bridge"
+                )
+                return {"status": "pair_timeout"}
+            self._bump_progress((now - start) / timeout_s)
+            try:
+                return await asyncio.wait_for(
+                    asyncio.shield(self._pair_future),
+                    timeout=min(2.0, deadline - now),
+                )
+            except asyncio.TimeoutError:
+                continue
+
+    async def async_step_pair_finish(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Render the outcome captured by the wait_pair progress phases."""
+        result = self._pair_result or {}
+        self._pair_result = None
+
+        # Tear down the status listener and, unless we cleanly bonded,
+        # tell the bridge to stand down so a stray shaver in range during
+        # its leftover window isn't auto-bonded (best-effort — the bridge
+        # has its own timer).
+        if self._pair_unsub is not None:
+            self._pair_unsub()
+            self._pair_unsub = None
+        clean_complete = result.get("status") == "pair_complete"
+        if not clean_complete and self._pair_svc_name:
+            try:
+                await self.hass.services.async_call(
+                    "esphome", self._pair_svc_name,
+                    {"enabled": False, "timeout_s": "0"},
+                    blocking=False,
+                )
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("Best-effort pair-mode cancel failed (ignoring)")
+        self._pair_future = None
+        self._pair_svc_name = ""
+
+        if result.get("error"):
             return self.async_show_form(
                 step_id="request_pair",
                 data_schema=vol.Schema({}),
-                errors={"base": "service_call_failed"},
-                description_placeholders={
-                    "target": (
-                        f"{esp_device_name} / {bridge_id}"
-                        if bridge_id else esp_device_name
-                    ),
-                },
+                errors={"base": result["error"]},
+                description_placeholders=self._pair_target_placeholders(),
             )
-
-        # 65 s margin = 60 s pair window + 5 s grace for the pair_timeout
-        # event to land. The bridge fires pair_timeout/pair_complete itself
-        # so the wait_for is just a safety net for missed events.
-        try:
-            result = await asyncio.wait_for(pair_future, timeout=65)
-        except asyncio.TimeoutError:
-            _LOGGER.warning(
-                "Pair-mode wait elapsed without pair_complete/pair_timeout "
-                "event from bridge"
-            )
-            result = {"status": "pair_timeout"}
-        finally:
-            unsub()
 
         result_status = result.get("status")
         if result_status in ("pair_timeout", "pair_failed"):
@@ -1599,66 +2342,129 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 step_id="request_pair",
                 data_schema=vol.Schema({}),
                 errors={"base": error_key},
-                description_placeholders={
-                    "target": (
-                        f"{esp_device_name} / {bridge_id}"
-                        if bridge_id else esp_device_name
-                    ),
-                },
+                description_placeholders=self._pair_target_placeholders(),
             )
 
         # pair_complete — bond established. identity_address comes from
         # the bridge's pair_complete event payload (Coord fills it from
-        # parent_->get_remote_bda after AUTH_CMPL.success).
+        # parent_->get_remote_bda after AUTH_CMPL.success). Clear the
+        # cached bridge info so the status step refetches the
+        # freshly-bound state; the success banner acknowledges the bond
+        # and the user finishes with "Read capabilities" (now a progress
+        # task) from there.
         identity_address = (
             result.get("identity_address") or result.get("mac") or ""
         )
+        self.fetched_bridge_info = None
+        self._just_paired = True
         if identity_address:
             self.fetched_address = identity_address
-
-        # Continue with capabilities probe on the now-bonded shaver.
-        try:
-            capabilities = await self._async_fetch_capabilities_esp(
-                esp_device_name, esp_device_name, bridge_id,
-            )
-        except Exception:  # pylint: disable=broad-except
-            _LOGGER.exception(
-                "Capability fetch failed after pair_complete (%s) — bond "
-                "exists but the shaver may have disconnected before probe",
-                identity_address,
-            )
-            return self.async_show_form(
-                step_id="request_pair",
-                data_schema=vol.Schema({}),
-                errors={"base": "cannot_connect"},
-                description_placeholders={
-                    "target": (
-                        f"{esp_device_name} / {bridge_id}"
-                        if bridge_id else esp_device_name
-                    ),
-                },
-            )
-
-        shaver_mac = capabilities.get("shaver_mac") or identity_address
-        if shaver_mac:
             await self.async_set_unique_id(
-                shaver_mac.upper(), raise_on_progress=False
+                identity_address.upper(), raise_on_progress=False
             )
-        else:
-            await self.async_set_unique_id(f"esp_{esp_device_name}")
-        self._abort_if_unique_id_configured()
+            self._abort_if_already_configured()
+        return await self._esp_bridge_health_check()
 
-        self.fetched_data = capabilities
-        if self.fetched_bridge_info:
-            self.fetched_data["bridge_version"] = self.fetched_bridge_info.get(
-                "version"
+    async def async_step_reset_bridge(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Confirm + execute unpair on a bonded Mode B slot.
+
+        The unpair (service call + waiting for the bridge's ``unpaired``
+        confirmation, ~4 s) runs as a background task behind an
+        ``async_show_progress`` spinner; ``reset_finish`` renders the
+        outcome.
+        """
+        # An unpair is in flight (progress re-invocations land here).
+        if self._unpair_task is not None:
+            if not self._unpair_task.done():
+                return self.async_show_progress(
+                    step_id="reset_bridge",
+                    progress_action="unpairing",
+                    progress_task=self._unpair_task,
+                    description_placeholders=self._reset_bridge_placeholders(),
+                )
+            self._unpair_outcome = self._unpair_task.result()
+            self._unpair_task = None
+            return self.async_show_progress_done(next_step_id="reset_finish")
+
+        if user_input is not None:
+            self._unpair_task = self.hass.async_create_task(
+                async_unpair_bridge_slot(
+                    self.hass,
+                    self.fetched_esp_device_name or "",
+                    self.fetched_esp_bridge_id or "",
+                )
             )
-        self.fetched_address = shaver_mac
-        model = capabilities.get("model_number")
-        self.fetched_name = model if model else esp_device_name
-        self.fetched_transport_type = TRANSPORT_ESP_BRIDGE
+            return self.async_show_progress(
+                step_id="reset_bridge",
+                progress_action="unpairing",
+                progress_task=self._unpair_task,
+                description_placeholders=self._reset_bridge_placeholders(),
+            )
 
-        return await self.async_step_show_capabilities()
+        return self.async_show_form(
+            step_id="reset_bridge",
+            data_schema=vol.Schema({}),
+            description_placeholders=self._reset_bridge_placeholders(),
+        )
+
+    async def async_step_reset_finish(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Render the unpair outcome captured by reset_bridge."""
+        outcome = self._unpair_outcome
+        self._unpair_outcome = ""
+
+        # Only proceed when the bridge confirmed the bond is gone. A silent
+        # failure (call returned but no `unpaired` event) would otherwise
+        # drop the user back onto the still-bonded status screen unexplained.
+        if outcome == UNPAIR_OK:
+            # pair_capable again — refetch info, then re-pair. Clearing
+            # fetched_bridge_info forces a fresh ble_get_info so
+            # paired/identity reflect the just-cleared slot;
+            # _just_unpaired drives the request_pair success notice.
+            self.fetched_bridge_info = None
+            self._just_unpaired = True
+            return await self._esp_bridge_health_check()
+
+        _LOGGER.error(
+            "Unpair on %s did not succeed (%s)",
+            self.fetched_esp_device_name, outcome,
+        )
+        if outcome in (UNPAIR_FAILED, UNPAIR_UNAVAILABLE):
+            msg = (
+                "Couldn't reach the ESP bridge to clear the bond. Make "
+                "sure it's online and powered, then try again."
+            )
+        else:  # UNPAIR_UNCONFIRMED
+            msg = (
+                "Couldn't confirm the bridge cleared the bond — it may "
+                "need a reboot. Make sure it's online, then try again."
+            )
+        return self.async_show_form(
+            step_id="reset_bridge",
+            data_schema=vol.Schema({}),
+            description_placeholders=self._reset_bridge_placeholders(msg),
+        )
+
+    def _reset_bridge_placeholders(self, error: str = "") -> dict[str, str]:
+        """Placeholders for the reset_bridge step.
+
+        ``errors["base"]`` does not render on this schema-less confirmation
+        step (same as bluetooth_confirm), so a failure is surfaced by
+        injecting an ``<ha-alert>`` into the ``{error}`` placeholder.
+        """
+        info = self.fetched_bridge_info or {}
+        placeholders = self._pair_target_placeholders()
+        placeholders["identity_address"] = (
+            info.get("identity_address") or info.get("mac", "")
+        ).upper()
+        placeholders["error"] = (
+            f'<ha-alert alert-type="error">{error}</ha-alert>\n\n'
+            if error else ""
+        )
+        return placeholders
 
     async def _route_to_pairing(self) -> ConfigFlowResult:
         """Route to D-Bus pairing if available, otherwise show script instructions."""
@@ -1671,59 +2477,35 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_pair(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Pair the device via D-Bus and retry capabilities fetch."""
+        """Pair the device via D-Bus and retry capabilities fetch.
+
+        The pairing + follow-up probe run as one background task behind an
+        ``async_show_progress`` spinner; ``ble_probe_finish`` routes the
+        boxed outcome back here (via ``_pair_error``) or onwards.
+        """
+        # Progress re-invocations of a running pair+probe land here.
+        if (progress := self._ble_probe_progress("pair", action="pairing")) is not None:
+            return progress
+
         errors: dict[str, str] = {}
+        # One-shot outcome from ble_probe_finish.
+        if self._pair_error:
+            errors["base"] = self._pair_error
+            self._pair_error = ""
 
         if user_input is not None:
-            from .dbus_pairing import async_pair_and_trust, PairingError
-
-            address = self._pair_address
-            try:
-                await async_pair_and_trust(address)
-                _LOGGER.info("D-Bus pairing successful for %s", address)
-
-                # Brief settle time for BlueZ key distribution
-                await asyncio.sleep(2)
-
-                # Retry capabilities fetch
-                capabilities = await self._async_fetch_capabilities(address)
-                self.fetched_data = capabilities
-                self.fetched_address = address
-                self.fetched_name = (
-                    self.discovery_info.name
-                    if self.discovery_info
-                    else address
-                )
-                return await self.async_step_show_capabilities()
-
-            except PairingError as err:
-                _LOGGER.error(
-                    "D-Bus pairing failed for %s: %s", address, err
-                )
-                errors["base"] = "pairing_failed"
-            except NotPairedException:
-                _LOGGER.error(
-                    "Pairing succeeded but device still not accessible "
-                    "for %s — falling back to manual instructions",
-                    address,
-                )
-                return await self.async_step_not_paired()
-            except DeviceAsleepException:
-                errors["base"] = "device_asleep"
-            except (
-                DeviceNotFoundException,
-                CannotConnectException,
-                BleakOutOfConnectionSlotsError,
-                BleakAbortedError,
-                BleakNotFoundError,
-            ) as err:
-                _LOGGER.error(
-                    "Post-pairing connection failed for %s: %s", address, err
-                )
-                errors["base"] = "cannot_connect"
-            except Exception:
-                _LOGGER.exception("Unexpected error during pairing")
-                errors["base"] = "pairing_failed"
+            address = self._pair_address or ""
+            self._ble_probe_origin = "pair"
+            self._ble_probe_address = address
+            self._ble_probe_task = self.hass.async_create_task(
+                self._async_pair_and_probe(address)
+            )
+            return self.async_show_progress(
+                step_id="pair",
+                progress_action="pairing",
+                progress_task=self._ble_probe_task,
+                description_placeholders=self._ble_probe_placeholders(),
+            )
 
         name = ""
         if self.discovery_info:
@@ -1738,14 +2520,38 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def _async_pair_and_probe(self, address: str) -> dict[str, Any]:
+        """D-Bus pair + trust, then the capabilities probe (progress task)."""
+        from .dbus_pairing import async_pair_and_trust, PairingError
+
+        try:
+            self._bump_progress(0.02)
+            await async_pair_and_trust(address)
+            _LOGGER.info("D-Bus pairing successful for %s", address)
+            # Brief settle time for BlueZ key distribution
+            await asyncio.sleep(2)
+        except PairingError as err:
+            _LOGGER.error("D-Bus pairing failed for %s: %s", address, err)
+            return {"ok": False, "error": "pairing_failed"}
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Unexpected error during pairing")
+            return {"ok": False, "error": "pairing_failed"}
+
+        return await self._async_ble_probe(address)
+
     async def async_step_not_paired(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Show pairing instructions when the device is not paired."""
         if user_input is not None:
-            # Retry — go back to the appropriate confirm/manual step
+            # Retry: the discovery path re-enters the confirm submit
+            # (D-Bus pre-check + probe); the manual path re-probes the
+            # known address directly — just re-rendering the empty
+            # address form would silently drop the retry.
             if self.discovery_info:
                 return await self.async_step_bluetooth_confirm(user_input)
+            if self._pair_address:
+                return self._start_ble_probe("user_bleak", self._pair_address)
             return await self.async_step_user_bleak()
 
         # Build description placeholders based on environment
@@ -1775,6 +2581,48 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 "name": name,
                 "pairing_help": pairing_help,
                 "pair_cmd": pair_cmd,
+            },
+        )
+
+    async def async_step_not_paired_proxy(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Proxy-carried probe hit a missing bond — a dead end by hardware.
+
+        Philips shavers pair via LE Secure Connections, which a standard
+        Bluetooth proxy cannot complete; host-side pairing tools don't
+        touch a proxy-carried link either. The dialog explains the two
+        working paths (local adapter, ESP32 bridge). Retry re-probes:
+        habluetooth routes each connect by signal strength, so if a local
+        adapter now carries it the normal pairing machinery applies again.
+        """
+        if user_input is not None:
+            if self.discovery_info:
+                return await self.async_step_bluetooth_confirm(user_input)
+            return self._start_ble_probe(
+                "user_bleak", self._pair_address or ""
+            )
+
+        # The dead-end itself renders as a red <ha-alert> so it can't be
+        # skimmed past; injected as a placeholder because hassfest rejects
+        # HTML in static translation strings. Markdown isn't parsed inside
+        # the HTML block, so emphasis uses <b>.
+        proxy_name = self._probe_proxy_name or "unknown"
+        alert = (
+            '<ha-alert alert-type="error">This connection runs through the '
+            f"standard Bluetooth proxy <b>{proxy_name}</b>. Philips shavers "
+            "pair via LE Secure Connections, which a standard Bluetooth "
+            "proxy cannot complete — pairing over this path will not "
+            "succeed, and pairing tools on the Home Assistant host have no "
+            "effect on it.</ha-alert>\n\n"
+        )
+        return self.async_show_form(
+            step_id="not_paired_proxy",
+            data_schema=vol.Schema({}),
+            description_placeholders={
+                "address": self._pair_address or "",
+                "proxy_name": proxy_name,
+                "alert": alert,
             },
         )
 
@@ -1869,9 +2717,14 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
         # Connection info suffix — show adapter / bridge actually used
-        path = self.fetched_data.get("connection_path") or self.fetched_esp_device_name
+        if self.fetched_transport_type == TRANSPORT_ESP_BRIDGE:
+            path = self._esp_target_label()
+        else:
+            path = self.fetched_data.get("connection_path")
         connection_status = self._get_connection_status_text(
-            self.fetched_transport_type, path
+            self.fetched_transport_type,
+            path,
+            via_proxy=bool(self._probe_via_proxy),
         )
 
         return self.async_show_form(
@@ -1912,21 +2765,36 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     ]
 
     @staticmethod
-    def _get_connection_status_text(transport_type: str | None, path: str | None) -> str:
+    def _get_connection_status_text(
+        transport_type: str | None, path: str | None, *, via_proxy: bool = False
+    ) -> str:
         """Connection status line shown above the device info.
 
-        Leads with the transport *class* (ESP32 Bridge / Direct Bluetooth) so
-        it reads the same as the other "via" dialogs, with the adapter/bridge
-        label appended in parentheses as a disambiguator.
+        Leads with the transport *class* (``ESP32 Bridge`` / ``Bluetooth
+        proxy`` / ``Direct Bluetooth``) so it reads the same as the other
+        "via" dialogs, with the adapter/bridge label appended in
+        parentheses as a disambiguator. ``via_proxy`` marks a
+        TRANSPORT_BLEAK probe that rode a remote scanner — labelling that
+        "Direct Bluetooth" would hide the very path distinction the
+        pairing dialogs are keyed on.
+
+        Rendered as a success <ha-alert> (same style as the pairing
+        confirmation); ha-markdown does not parse markdown inside the
+        HTML block, so emphasis uses <b>. The step is only reachable
+        after a successful capability read, so there is no disconnected
+        variant.
         """
-        transport_label = (
-            "ESP32 Bridge"
-            if transport_type == TRANSPORT_ESP_BRIDGE
-            else "Direct Bluetooth"
+        if transport_type == TRANSPORT_ESP_BRIDGE:
+            transport_label = "ESP32 Bridge"
+        elif via_proxy:
+            transport_label = "Bluetooth proxy"
+        else:
+            transport_label = "Direct Bluetooth"
+        suffix = f" ({path})" if path else ""
+        return (
+            '<ha-alert alert-type="success">Connected via '
+            f"<b>{transport_label}</b>{suffix}.</ha-alert>"
         )
-        if path:
-            return f"✅ Connected via **{transport_label}** ({path})."
-        return f"✅ Connected via **{transport_label}**."
 
     @staticmethod
     def _get_device_info_text(
@@ -1957,6 +2825,15 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         if mac:
             rows.append(
                 f"<tr><td><b>MAC</b></td><td><code>{mac.upper()}</code></td></tr>"
+            )
+        pairing = data.get("pairing")
+        if pairing == "bonded":
+            rows.append(
+                "<tr><td><b>BLE Security</b></td><td>Bonded (encrypted)</td></tr>"
+            )
+        elif pairing == "open_gatt":
+            rows.append(
+                "<tr><td><b>BLE Security</b></td><td>Unpaired (no encryption)</td></tr>"
             )
         if not rows:
             return ""

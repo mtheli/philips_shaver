@@ -17,6 +17,7 @@ from bleak import BleakClient
 from bleak_retry_connector import establish_connection as bleak_establish
 
 from homeassistant.components.bluetooth import (
+    HaScanner,
     async_last_service_info,
     async_scanner_by_source,
     async_scanner_devices_by_address,
@@ -143,6 +144,138 @@ def describe_connection_path(
         return type(backend).__name__
     except Exception as err:  # noqa: BLE001
         return f"unknown ({err})"
+
+
+def describe_available_paths(
+    hass: HomeAssistant, address: str
+) -> list[dict[str, object]]:
+    """Connectable scanners currently seeing *address*, strongest first.
+
+    Predicts habluetooth's backend choice before a connect exists:
+    connects are ranked by an RSSI-based score, so the strongest entry
+    here is the likely carrier. Each entry:
+    ``{"name": str, "rssi": int | None, "is_local": bool}`` where
+    ``is_local`` means the local BlueZ stack (``HaScanner``) as opposed
+    to a remote scanner such as an ESPHome bluetooth_proxy.
+    """
+    paths: list[dict[str, object]] = []
+    try:
+        for sd in async_scanner_devices_by_address(hass, address, connectable=True):
+            rssi = getattr(sd.advertisement, "rssi", None)
+            # A BlueZ RSSI-invalidation event leaves a stale -127 entry in
+            # the history without a packet on the air — that scanner does
+            # NOT currently see the device, so listing it would present a
+            # dead path as the likely carrier (same sentinel the sleep
+            # gate keys on).
+            if rssi is not None and rssi <= -127:
+                continue
+            scanner = sd.scanner
+            name = (
+                getattr(scanner, "name", None)
+                or getattr(scanner, "source", None)
+                or "?"
+            )
+            paths.append({
+                "name": name,
+                "rssi": rssi,
+                "is_local": isinstance(scanner, HaScanner),
+            })
+    except Exception:  # noqa: BLE001 — preview only, never break the flow
+        return []
+    paths.sort(
+        key=lambda p: p["rssi"] if isinstance(p["rssi"], int) else -999,
+        reverse=True,
+    )
+    return paths
+
+
+def is_local_bluez_connection(client: BleakClient) -> bool:
+    """Whether a BleakClient connection is carried by the local BlueZ stack.
+
+    Bond state is per-controller: a bond in BlueZ says nothing about an
+    ESPHome proxy's NVS and vice versa. habluetooth routes connects by
+    RSSI, so even a "Direct BLE" probe may ride a remote scanner — any
+    conclusion drawn from an auth error about the *BlueZ* bond is only
+    valid when the connection actually went through BlueZ.
+    """
+    try:
+        backend = getattr(client, "_backend", None)
+        if backend is None:
+            return False
+        return "bluezdbus" in (type(backend).__module__ or "")
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# Return values of async_unpair_bridge_slot.
+UNPAIR_OK = "unpaired"
+UNPAIR_UNCONFIRMED = "unconfirmed"
+UNPAIR_UNAVAILABLE = "unavailable"
+UNPAIR_FAILED = "failed"
+
+
+async def async_unpair_bridge_slot(
+    hass: HomeAssistant,
+    esp_device_name: str,
+    bridge_id: str,
+    timeout: float = 4.0,
+) -> str:
+    """Clear a bridge slot's bond and wait for the bridge to confirm.
+
+    Fires the slot's ``ble_unpair`` ESPHome service, then waits for the
+    bridge's ``unpaired`` status event (deferred by the bridge's drain
+    window so the BLE stack can settle). Shared by the config-flow reset
+    step and entry removal so both treat a silent failure the same way.
+
+    Returns one of ``UNPAIR_OK`` (bridge confirmed), ``UNPAIR_UNCONFIRMED``
+    (call succeeded but no event within ``timeout`` — the bridge may have
+    wedged, or runs a firmware without the ``unpaired`` event),
+    ``UNPAIR_UNAVAILABLE`` (service missing — bridge offline or firmware
+    < 1.8.0), or ``UNPAIR_FAILED`` (the service call raised).
+    """
+    svc_name = f"{esp_device_name}_ble_unpair"
+    if bridge_id:
+        svc_name += f"_{bridge_id}"
+
+    if not hass.services.has_service("esphome", svc_name):
+        return UNPAIR_UNAVAILABLE
+
+    unpair_done = asyncio.Event()
+
+    @callback
+    def _on_status(event: Event) -> None:
+        data = event.data
+        if data.get("status") != "unpaired":
+            return
+        # bridge_id compared case-insensitively (HA lowercases service names)
+        if data.get("bridge_id", "").lower() != bridge_id.lower():
+            return
+        unpair_done.set()
+
+    unsub = hass.bus.async_listen(ESP_STATUS_EVENT_NAME, _on_status)
+    try:
+        try:
+            await hass.services.async_call(
+                "esphome", svc_name, {}, blocking=True
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning("ble_unpair on %s failed: %s", esp_device_name, err)
+            return UNPAIR_FAILED
+
+        try:
+            await asyncio.wait_for(unpair_done.wait(), timeout=timeout)
+            return UNPAIR_OK
+        except asyncio.TimeoutError:
+            # Debug, not warning: a Mode A bridge ignores ble_unpair by
+            # design (never emits `unpaired`), so callers decide how loud
+            # an unconfirmed outcome should be for their context.
+            _LOGGER.debug(
+                "ble_unpair on %s did not confirm within %.0fs",
+                esp_device_name, timeout,
+            )
+            return UNPAIR_UNCONFIRMED
+    finally:
+        unsub()
 
 
 class ShaverTransport(abc.ABC):

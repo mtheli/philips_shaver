@@ -37,7 +37,7 @@
       },
       "user_bleak": {
         "title": "Direktes Bluetooth",
-        "description": "Geben Sie die Bluetooth-MAC-Adresse des Rasierers ein.",
+        "description": "Wähle deinen Rasierer aus der Liste der gefundenen Geräte, oder wähle „Other“, um die Bluetooth-MAC-Adresse manuell einzugeben.\n\n**Wichtig:** Schalte den Rasierer vor dem Klick auf Senden ein (Power-Knopf drücken oder auf die Ladestation stellen) — er muss eingeschaltet bleiben, damit die Dienste gelesen werden können.",
         "data": {
           "address": "MAC-Adresse"
         }
@@ -54,7 +54,7 @@
       },
       "bluetooth_confirm": {
         "title": "Erkanntes Gerät bestätigen",
-        "description": "{status}Möchten Sie den erkannten Philips Shaver **{name}** zu Home Assistant hinzufügen?\n\nℹ️ **Bitte vor dem Fortfahren prüfen:**\n1. ⬜ Rasierer ist **eingeschaltet** oder auf der **Ladestation**\n2. ⬜ Rasierer ist **entkoppelt** vom Handy\n   — Aus Bluetooth-Einstellungen **und** GroomTribe / OneBlade App entfernen\n\nDas Pairing wird automatisch während der Einrichtung durchgeführt. Anschließend verbindet sich die Integration mit dem Gerät, um die Hardware-Fähigkeiten zu lesen. Dies kann einige Sekunden dauern.",
+        "description": "{status}**{name}** erkannt unter `{address}`{via}.\n\n{transport}ℹ️ **Bitte vor dem Fortfahren prüfen:**\n1. ⬜ Rasierer ist **eingeschaltet** oder auf der **Ladestation**\n2. ⬜ Rasierer ist **entkoppelt** vom Handy\n   — Aus Bluetooth-Einstellungen **und** GroomTribe / OneBlade App entfernen\n\nDas Pairing wird automatisch während der Einrichtung durchgeführt. Anschließend verbindet sich die Integration mit dem Gerät, um die Hardware-Fähigkeiten zu lesen. Dies kann einige Sekunden dauern.",
         "submit": "Fähigkeiten auslesen"
       },
       "esp_select_device": {
@@ -65,6 +65,14 @@
         },
         "data_description": {
           "esp_bridge_id": "Einträge ohne Status-Icons sind leere Bridges im Pair-Modus. Schalte den Rasierer ein, den du koppeln möchtest, bevor du bestätigst."
+        }
+      },
+      "esp_slot_action": {
+        "title": "Gekoppelter Rasierer gefunden",
+        "description": "Der Slot **{target}** ist auf der Bridge bereits mit einem Rasierer gekoppelt, aber noch nicht in Home Assistant eingerichtet.\n\nWie möchtest du fortfahren?",
+        "menu_options": {
+          "slot_setup": "Diesen Rasierer einrichten",
+          "slot_unpair": "Von der Bridge entkoppeln"
         }
       },
       "esp_bridge_status": {
@@ -79,8 +87,13 @@
       },
       "request_pair": {
         "title": "Rasierer mit ESP Bridge koppeln",
-        "description": "Bridge **{target}** hat noch keinen Rasierer gekoppelt.\n\n1. Stelle sicher, dass der Rasierer **eingeschaltet** und **nicht mit dem Handy verbunden** ist (aus Bluetooth-Einstellungen und der GroomTribe / OneBlade App entfernen).\n2. Lege den Rasierer in die Nähe der Bridge.\n3. Klicke unten **Pairing starten** — die Bridge scannt **60 Sekunden** lang. Triggere den BLE-Advertise-Modus des Rasierers (modellabhängig: Power-Knopf gedrückt halten oder auf die Ladestation stellen).\n\nNach erfolgreichem Pairing werden die Fähigkeiten automatisch ausgelesen.",
+        "description": "{notice}Bridge **{target}** hat noch keinen Rasierer gekoppelt.\n\n1. Stelle sicher, dass der Rasierer **eingeschaltet** und **nicht mit dem Handy verbunden** ist (aus Bluetooth-Einstellungen und der GroomTribe / OneBlade App entfernen).\n2. Lege den Rasierer in die Nähe der Bridge.\n3. Klicke unten **Pairing starten** — die Bridge scannt **60 Sekunden** lang. Triggere den BLE-Advertise-Modus des Rasierers (modellabhängig: Power-Knopf gedrückt halten oder auf die Ladestation stellen).\n\nNach erfolgreichem Pairing kehrst du zum Bridge-Status zurück — schließe die Einrichtung dort mit **Fähigkeiten auslesen** ab.",
         "submit": "Pairing starten"
+      },
+      "reset_bridge": {
+        "title": "Bridge-Bond zurücksetzen",
+        "description": "{error}Slot **{target}** ist aktuell mit **{identity_address}** gekoppelt.\n\nMit **Entkoppeln und zurücksetzen** wird der BLE-Bond auf der Bridge entfernt und die gespeicherte Identität gelöscht. Danach kann ein anderer Rasierer gekoppelt werden.\n\nDer Rasierer behält seine Hälfte des Bonds. Falls ein späteres erneutes Pairing dieses Rasierers mit wiederholten Auth-Fehlern scheitert, zuerst Bluetooth am Rasierer zurücksetzen (modellabhängig: Power-Knopf lange gedrückt halten, bis die Bluetooth-LED erlischt, oder in der GroomTribe / OneBlade App entkoppeln).",
+        "submit": "Entkoppeln und zurücksetzen"
       },
       "pair": {
         "title": "Gerät koppeln",
@@ -90,6 +103,11 @@
       "not_paired": {
         "title": "Pairing erforderlich",
         "description": "**{name}** ist nicht mit diesem System gepairt.\n\n{pairing_help}\n\n`{pair_cmd}`\n\nDas Script sucht nach Philips-Geräten in der Nähe und führt durch den Pairing-Prozess.",
+        "submit": "Erneut versuchen"
+      },
+      "not_paired_proxy": {
+        "title": "Pairing erforderlich",
+        "description": "{alert}**{address}** benötigt **BLE-Bonding**, bevor Daten gelesen werden können — und über diese Verbindung kann das Pairing nicht gelingen.\n\nFunktionierende Alternativen:\n\n1. Rasierer über einen **lokalen Bluetooth-Adapter** am Home-Assistant-Host einrichten.\n2. Die dedizierte **ESP32-Bridge** verwenden (siehe Dokumentation der Integration).\n\nFalls zusätzlich ein lokaler Adapter in Reichweite ist: Rasierer näher an den Adapter legen und **Erneut versuchen** klicken — Home Assistant verbindet über das stärkste Signal.",
         "submit": "Erneut versuchen"
       },
       "show_capabilities": {
@@ -113,14 +131,23 @@
       "not_paired": "Der Rasierer ist nicht mit diesem System gepairt.",
       "out_of_slots": "Kein Bluetooth-Adapter konnte das Gerät erreichen. Entweder sind alle Verbindungsslots belegt oder das Gerät ist außer Reichweite. Stelle sicher, dass der Rasierer eingeschaltet und in der Nähe des Bluetooth-Adapters ist, und entferne ggf. ungenutzte Bluetooth-Geräte.",
       "connection_aborted": "Verbindung wurde abgebrochen. Das Gerät ist möglicherweise außer Reichweite oder über einen nicht unterstützten Bluetooth-Proxy verbunden. Diese Integration benötigt direktes Bluetooth oder die dedizierte ESP32 BLE-Bridge — Standard-ESPHome-Bluetooth-Proxys werden nicht unterstützt.",
-      "pairing_failed": "Bluetooth-Kopplung fehlgeschlagen. Stelle sicher, dass der Rasierer eingeschaltet und nicht mit einem anderen Gerät verbunden ist. Falls das Problem weiterhin besteht, schalte den Rasierer aus und wieder ein, oder kopple manuell per Terminal.",
+      "pairing_failed": "Bluetooth-Pairing fehlgeschlagen. Stelle sicher, dass der Rasierer eingeschaltet und nicht mit einem anderen Gerät verbunden ist (Handy / GroomTribe / OneBlade App). Schlägt es wiederholt fehl, hält der Rasierer eventuell noch einen alten Bond auf seiner Seite — Bluetooth am Rasierer zurücksetzen (modellabhängig: Power-Knopf lange gedrückt halten, bis die Bluetooth-LED erlischt, oder in der App entkoppeln), dann erneut versuchen.",
       "service_call_failed": "Pair-Modus konnte nicht auf der ESP-Bridge aktiviert werden. Die Bridge ist möglicherweise offline oder läuft auf einer zu alten Firmware. Aktualisiere die Bridge auf v1.8.0 oder neuer und versuche es erneut.",
       "pair_timeout": "Im 60-Sekunden-Pair-Fenster wurde kein Rasierer erkannt. Stelle sicher, dass der Rasierer eingeschaltet ist und advertised, und versuche es erneut.",
       "pair_failed_stale_bond": "Pairing schlug mit wiederholten Auth-Fehlern fehl. Der Rasierer hält das vorherige Pairing auf seiner Seite und lehnt neues Pairing ab. Lösche Bluetooth am Rasierer (modellabhängig: Power-Knopf lange gedrückt halten bis Bluetooth-LED erlischt, oder über die GroomTribe / OneBlade App entkoppeln), dann erneut versuchen.",
-      "unknown": "Unerwarteter Fehler. Bitte prüfe die Systemprotokolle."
+      "unknown": "Unerwarteter Fehler. Details stehen im Log (Einstellungen → System → Protokolle)."
+    },
+    "progress": {
+      "ble_probing": "Verbinde mit {name} und lese die Daten — meist wenige Sekunden; sind mehrere Verbindungsversuche nötig (schwaches Signal, Erstkontakt nach einem Pairing-Problem), kann es bis zu zwei Minuten dauern…",
+      "pairing": "Kopple {name} und lese die Daten — das kann bis zu einer Minute dauern…",
+      "pair_arming": "Aktiviere Pair-Modus auf {target}…",
+      "pair_scanning": "Suche deinen Rasierer und kopple — eingeschaltet lassen und nah an der Bridge halten. Das kann bis zu einer Minute dauern.",
+      "unpairing": "Entferne den Bond auf {target}…",
+      "esp_reading": "Lese den Rasierer über {target}…"
     },
     "abort": {
       "already_configured": "Das Gerät ist bereits konfiguriert.",
+      "already_configured_detail": "Dieser Rasierer ist bereits über **{transport}** eingerichtet (Status: {status}). Entferne oder reaktiviere zuerst den bestehenden Eintrag.",
       "already_in_progress": "Konfigurations-Ablauf bereits im Gange.",
       "no_devices_found": "Es wurden keine unterstützten Philips Shaver Geräte in Reichweite gefunden.",
       "esp_not_reachable": "Die ESP-Bridge ist nicht erreichbar. Stelle sicher, dass der ESP eingeschaltet und mit dem Netzwerk verbunden ist, und versuche es erneut."
