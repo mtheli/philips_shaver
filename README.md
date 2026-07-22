@@ -214,7 +214,7 @@ The integration supports two connection methods:
 4.  Click **Submit**. The integration connects and pairs automatically.
 
 > [!TIP]
-> **Automatic pairing** works out of the box on Home Assistant OS and any Linux system with BlueZ. Pairing, trusting, and stale bond removal are handled automatically via D-Bus — no terminal commands needed.
+> **Automatic pairing** works out of the box on Home Assistant OS and any Linux system with BlueZ. Pairing, trusting, and stale bond removal are handled automatically via D-Bus — no terminal commands needed. If pairing times out repeatedly on a cheap USB dongle, see [Known Issues](docs/KNOWN_ISSUES.md#some-usb-dongles-cannot-complete-smp-bonding).
 
 <details>
 <summary>Manual Pairing (Fallback for Docker, macOS, etc.)</summary>
@@ -298,8 +298,9 @@ See **[AUTOMATIONS.md](docs/AUTOMATIONS.md)** for ready-to-use automation exampl
 ## Troubleshooting & Caveats
 
 * *Pairing fails*: The shaver must be unpaired from **both** your phone's Bluetooth settings **and** from the device itself. Unpairing in the app alone is not enough — see the [unpairing instructions](#configuration) for your model. This is the most common cause of pairing failures.
+* *Pairing times out on one adapter but works on another*: Some cheap USB Bluetooth dongles cannot complete the SMP bonding handshake at all — see [Known Issues](docs/KNOWN_ISSUES.md#some-usb-dongles-cannot-complete-smp-bonding).
 * *Connection Conflict*: If the integration fails to set up, ensure no smartphone is currently connected to the shaver.
-* *ESPHome Bluetooth Proxy*: The standard ESPHome Bluetooth Proxy does **not** work with this shaver because it requires LE Secure Connections pairing. Use the dedicated [ESP32 BLE Bridge](esphome/SETUP.md) instead.
+* *ESPHome Bluetooth Proxy*: The standard ESPHome Bluetooth Proxy does **not** work with this shaver because it requires LE Secure Connections pairing ([details](docs/KNOWN_ISSUES.md#standard-esphome-bluetooth-proxies-cannot-pair-a-shaver)). Use the dedicated [ESP32 BLE Bridge](esphome/SETUP.md) instead.
 * *Stability:* Bluetooth signals are weak. Ensure your HA host or ESP32 bridge is placed as close to the shaver's location as possible.
 
 ---
