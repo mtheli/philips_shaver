@@ -513,14 +513,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Best-effort cleanup on entry removal: drop the ESP bridge's BLE bond.
+    """Best-effort cleanup on entry removal: drop the transport's BLE bond.
 
-    Fires only when the user explicitly removes the integration entry. For
-    Mode B (auto-discovery, NVS-persisted identity) this clears the bond so
-    the next setup starts fresh; for Mode A (YAML-pinned MAC) the bridge
-    re-bonds automatically on the next connect, so this is a no-op there.
-    Coord-side `unpair()` early-returns when mode != standalone, so calling
-    `ble_unpair` against a Mode A bridge is a harmless silent no-op.
+    Fires only when the user explicitly removes the integration entry.
+    ESP transport: clears the bridge's NVS bond (Mode B; Mode A re-bonds
+    automatically, coord-side `unpair()` is a designed no-op there).
+    Direct BLE: releases the host-side BlueZ bond so a later re-add
+    starts clean — the D-Bus pre-check then routes straight to the
+    pairing step instead of burning ~85 s of connect attempts against a
+    bond the shaver may no longer honour (Sonicare parity).
     """
     await async_remove_stored_data(hass, entry.entry_id)
 
@@ -535,6 +536,24 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
         await async_remove_card_resource(hass)
 
     if entry.data.get(CONF_TRANSPORT_TYPE) != TRANSPORT_ESP_BRIDGE:
+        # Direct BLE — release the host-side BlueZ bond.
+        address = entry.data.get(CONF_ADDRESS)
+        if not address:
+            return
+        from .dbus_pairing import async_remove_device, is_dbus_available
+
+        if not is_dbus_available():
+            _LOGGER.debug(
+                "D-Bus unavailable — skipping host-side unpair for %s", address
+            )
+            return
+        try:
+            await async_remove_device(address)
+        except Exception as err:  # noqa: BLE001 — removal must not fail
+            _LOGGER.warning(
+                "Host-side unpair failed during entry removal for %s: %s",
+                address, err,
+            )
         return
 
     esp_device_name = entry.data.get(CONF_ESP_DEVICE_NAME)
