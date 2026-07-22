@@ -72,7 +72,7 @@ void ShaverBridge::loop() {
   if ((now - this->last_heartbeat_ms_) >= HEARTBEAT_INTERVAL_MS) {
     this->last_heartbeat_ms_ = now;
     char uptime_str[16];
-    snprintf(uptime_str, sizeof(uptime_str), "%u", now / 1000);
+    snprintf(uptime_str, sizeof(uptime_str), "%u", (unsigned) (now / 1000));
 
     std::map<std::string, std::string> data = {
         {"status", "heartbeat"},
@@ -200,11 +200,11 @@ void ShaverBridge::on_get_info() {
     return;
 
   char uptime_str[16];
-  snprintf(uptime_str, sizeof(uptime_str), "%u", millis() / 1000);
+  snprintf(uptime_str, sizeof(uptime_str), "%u", (unsigned) (millis() / 1000));
 
   char heap_str[16];
   snprintf(heap_str, sizeof(heap_str), "%u",
-           (uint32_t) esp_get_free_heap_size());
+           (unsigned) esp_get_free_heap_size());
 
   auto info = this->coord_->collect_info_data();
   info["status"] = "info";

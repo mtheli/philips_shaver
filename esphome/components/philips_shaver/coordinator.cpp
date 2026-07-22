@@ -152,7 +152,7 @@ void ShaverCoordinator::on_loop(uint32_t now) {
              "ATT op got no response in %us (read=0x%04X probe=0x%04X "
              "write=0x%04X reg=%u cccd=%u) — clearing, draining %u queued "
              "call(s)",
-             ATT_WATCHDOG_MS / 1000, this->pending_handle_,
+             (unsigned) (ATT_WATCHDOG_MS / 1000), this->pending_handle_,
              this->probe_handle_, this->write_handle_,
              (unsigned) this->reg_notify_pending_,
              (unsigned) this->pending_cccd_writes_,
@@ -250,10 +250,11 @@ void ShaverCoordinator::on_loop(uint32_t now) {
 std::map<std::string, std::string> ShaverCoordinator::collect_info_data() {
   char subs_str[8];
   snprintf(subs_str, sizeof(subs_str), "%u",
-           (uint32_t) this->notify_map_.size());
+           (unsigned) this->notify_map_.size());
 
   char throttle_str[16];
-  snprintf(throttle_str, sizeof(throttle_str), "%u", this->notify_throttle_ms_);
+  snprintf(throttle_str, sizeof(throttle_str), "%u",
+           (unsigned) this->notify_throttle_ms_);
 
   // Check if shaver MAC is in the bonded device list
   std::string paired = "false";
@@ -359,7 +360,7 @@ void ShaverCoordinator::on_gattc_event(esp_gattc_cb_event_t event,
         this->rapid_disconnect_count_++;
         ESP_LOGD(this->log_tag_.c_str(),
                  "Rapid disconnect without auth after %ums (%d/%d), reason=0x%02X",
-                 connect_duration_ms, this->rapid_disconnect_count_,
+                 (unsigned) connect_duration_ms, this->rapid_disconnect_count_,
                  MAX_RAPID_DISCONNECTS, param->disconnect.reason);
         if (this->rapid_disconnect_count_ >= MAX_RAPID_DISCONNECTS) {
           ESP_LOGW(this->log_tag_.c_str(),
@@ -854,14 +855,14 @@ void ShaverCoordinator::on_gap_event(esp_gap_ble_cb_event_t event,
           ESP_LOGE(this->log_tag_.c_str(),
                    "%d consecutive auth failures — disabling BLE for %us. "
                    "Clear Bluetooth pairing on the shaver.",
-                   this->auth_fail_count_, backoff_s);
+                   this->auth_fail_count_, (unsigned) backoff_s);
           this->backoff_until_ms_ = millis() + AUTH_BACKOFF_MS;
           if (this->set_enabled_cb_)
             this->set_enabled_cb_(false);
 
           char fail_str[4], backoff_str[8];
           snprintf(fail_str, sizeof(fail_str), "%d", this->auth_fail_count_);
-          snprintf(backoff_str, sizeof(backoff_str), "%u", backoff_s);
+          snprintf(backoff_str, sizeof(backoff_str), "%u", (unsigned) backoff_s);
           this->emit_(EVENT_STATUS,
                       {
                           {"status", "auth_failed"},
@@ -1225,7 +1226,7 @@ void ShaverCoordinator::write_char(const std::string &service_uuid,
 
 void ShaverCoordinator::set_throttle(uint32_t ms) {
   this->notify_throttle_ms_ = ms;
-  ESP_LOGI(this->log_tag_.c_str(), "Notification throttle set to %u ms", ms);
+  ESP_LOGI(this->log_tag_.c_str(), "Notification throttle set to %u ms", (unsigned) ms);
 }
 
 uint16_t ShaverCoordinator::find_cccd_handle_(uint16_t char_handle) {
@@ -1402,14 +1403,14 @@ void ShaverCoordinator::set_pair_mode(bool enable, uint32_t timeout_s) {
     timeout_s = 60;
   this->pair_mode_active_ = true;
   this->pair_mode_until_ms_ = millis() + timeout_s * 1000;
-  ESP_LOGI(this->log_tag_.c_str(), "Pair-mode armed for %us%s", timeout_s,
+  ESP_LOGI(this->log_tag_.c_str(), "Pair-mode armed for %us%s", (unsigned) timeout_s,
            this->target_mac_.empty()
                ? ""
                : (" (target " + this->target_mac_ + ")").c_str());
   if (this->set_enabled_cb_)
     this->set_enabled_cb_(true);
   char timeout_str[8];
-  snprintf(timeout_str, sizeof(timeout_str), "%u", timeout_s);
+  snprintf(timeout_str, sizeof(timeout_str), "%u", (unsigned) timeout_s);
   std::map<std::string, std::string> data = {
       {"status", "pair_mode_armed"},
       {"version", PHILIPS_SHAVER_VERSION},
@@ -1485,7 +1486,7 @@ void ShaverCoordinator::unpair() {
   }
   ESP_LOGI(this->log_tag_.c_str(),
            "Unpair initiated — drain window %ums, awaiting `unpaired` emit",
-           UNPAIR_DRAIN_MS);
+           (unsigned) UNPAIR_DRAIN_MS);
 }
 
 void ShaverCoordinator::set_scan_mode(uint32_t timeout_s) {
@@ -1500,11 +1501,11 @@ void ShaverCoordinator::set_scan_mode(uint32_t timeout_s) {
   this->scan_mode_active_ = true;
   this->scan_mode_until_ms_ = millis() + timeout_s * 1000;
   this->scan_results_seen_.clear();
-  ESP_LOGI(this->log_tag_.c_str(), "Scan-mode armed for %us", timeout_s);
+  ESP_LOGI(this->log_tag_.c_str(), "Scan-mode armed for %us", (unsigned) timeout_s);
   if (this->set_enabled_cb_)
     this->set_enabled_cb_(true);
   char timeout_str[8];
-  snprintf(timeout_str, sizeof(timeout_str), "%u", timeout_s);
+  snprintf(timeout_str, sizeof(timeout_str), "%u", (unsigned) timeout_s);
   this->emit_(EVENT_STATUS,
               {
                   {"status", "scan_started"},
