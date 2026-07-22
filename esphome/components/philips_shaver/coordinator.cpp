@@ -3,6 +3,7 @@
 
 #include "esphome/core/log.h"
 #include "esphome/core/helpers.h"
+#include "esphome/core/version.h"
 
 #include <esp_system.h>
 
@@ -295,6 +296,13 @@ std::map<std::string, std::string> ShaverCoordinator::collect_info_data() {
   if (!this->remote_name_.empty()) {
     data["ble_name"] = this->remote_name_;
   }
+
+  // Build environment of the running firmware. The same bridge version
+  // behaves differently depending on the underlying stack (Bluedroid fixes
+  // ship via ESP-IDF), so surface both for support/diagnostics.
+  data["esphome_version"] = ESPHOME_VERSION;
+  data["idf_version"] = esp_get_idf_version();
+
   return data;
 }
 

@@ -1,5 +1,17 @@
 # ESP Bridge Changelog
 
+## v1.12.0 — 2026-07-22
+
+- **Build environment in `ble_get_info`.** Info events now carry
+  `esphome_version` and `idf_version`, taken from the running binary —
+  the same bridge version behaves differently depending on the
+  underlying stack (Bluedroid fixes ship via ESP-IDF), so this answers
+  the first support question of any bug report automatically. Surfaced
+  in Home Assistant as the new "ESP Build" diagnostic sensor.
+- Fixed `-Wformat` warnings under the ESPHome 2026.7 native toolchain
+  (GCC 14.2 defines `uint32_t` as `long unsigned int`). No behaviour
+  change.
+
 ## v1.11.0 — 2026-07-04
 
 - **Connection-parameter boost for batched reads.** After ~1–2 minutes of
