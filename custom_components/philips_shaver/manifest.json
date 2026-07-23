@@ -1,21 +1,42 @@
 {
   "domain": "philips_shaver",
   "name": "Philips Shaver",
-  "after_dependencies": ["esphome"],
-  "bluetooth": [
-    { "service_uuid": "8d560100-3cb9-4387-a7e8-b79d826a7025" },
-    { "service_uuid": "8d560200-3cb9-4387-a7e8-b79d826a7025" },
-    { "service_uuid": "8d560300-3cb9-4387-a7e8-b79d826a7025" },
-    { "service_uuid": "8d560600-3cb9-4387-a7e8-b79d826a7025" }
+  "after_dependencies": [
+    "esphome"
   ],
-  "codeowners": ["@mtheli"],
+  "bluetooth": [
+    {
+      "service_uuid": "8d560100-3cb9-4387-a7e8-b79d826a7025"
+    },
+    {
+      "service_uuid": "8d560200-3cb9-4387-a7e8-b79d826a7025"
+    },
+    {
+      "service_uuid": "8d560300-3cb9-4387-a7e8-b79d826a7025"
+    },
+    {
+      "service_uuid": "8d560600-3cb9-4387-a7e8-b79d826a7025"
+    }
+  ],
+  "codeowners": [
+    "@mtheli"
+  ],
   "config_flow": true,
-  "dependencies": ["bluetooth", "frontend", "http", "lovelace"],
+  "dependencies": [
+    "bluetooth",
+    "frontend",
+    "http",
+    "lovelace"
+  ],
   "documentation": "https://github.com/mtheli/philips_shaver",
   "integration_type": "device",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/mtheli/philips_shaver/issues",
   "requirements": [],
-  "version": "0.23.1",
-  "zeroconf": [{"type": "_esphomelib._tcp.local."}]
+  "version": "0.24.0",
+  "zeroconf": [
+    {
+      "type": "_esphomelib._tcp.local."
+    }
+  ]
 }
