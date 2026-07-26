@@ -128,3 +128,36 @@ def test_nothing_read_is_a_no_op(hass) -> None:
     assert device.model is None
     assert device.sw_version is None
     assert device.serial_number is None
+
+
+def test_nul_padded_serial_is_not_written(hass) -> None:
+    """A QP4530 answers the serial characteristic with twenty NUL bytes.
+
+    They decode to "\\x00\\x00…", which is neither empty nor made of
+    ASCII zeros — the earlier check let it through and the device page
+    ended up showing a "Serial number:" row with nothing after it.
+    """
+    coordinator, entry = make_coordinator(hass)
+    device = register_device(hass, entry)
+
+    coordinator._update_device_registry({"serial_number": "\x00" * 20})
+
+    device = dr.async_get(hass).async_get(device.id)
+    assert device.serial_number is None
+
+
+def test_previously_written_padding_is_cleared(hass) -> None:
+    """A value an older version wrote through must not linger.
+
+    It would never be overwritten — the new read is correctly ignored, so
+    without an explicit clear the blank row would stay forever.
+    """
+    coordinator, entry = make_coordinator(hass)
+    device = register_device(hass, entry)
+    dr.async_get(hass).async_update_device(device.id, serial_number="\x00" * 20)
+
+    # A later read returns the same padding — the clear must still happen.
+    coordinator._update_device_registry({"serial_number": "\x00" * 20})
+
+    device = dr.async_get(hass).async_get(device.id)
+    assert device.serial_number is None
