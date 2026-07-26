@@ -128,6 +128,16 @@ UNPERSISTED_KEYS = {
 _COLOR_KEYS = ("color_low", "color_ok", "color_high", "color_motion")
 
 
+def _has_reported_value(value: str | None) -> bool:
+    """True when a Device Information string carries actual content.
+
+    Shavers answer characteristics they don't populate with an empty
+    string or with zeros — "" and "0000000000…" both mean "not reported"
+    rather than a value worth putting on the device page.
+    """
+    return bool(value) and any(c not in "0:" for c in value)
+
+
 def _storage_key(entry_id: str) -> str:
     return f"{DOMAIN}.{entry_id}"
 
@@ -690,21 +700,31 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return new_data
 
     def _update_device_registry(self, data: dict[str, Any]) -> None:
-        """Update device registry when model or firmware changed."""
+        """Update device registry when model, firmware or serial changed."""
         model = data.get("model_number")
-        if not model:
-            return
         firmware = data.get("firmware")
+        serial = data.get("serial_number")
+        if not model and not firmware and not serial:
+            return
         dev_reg = dr.async_get(self.hass)
         device = dev_reg.async_get_device(
             identifiers={(DOMAIN, self.address)}
         )
-        if device and (device.model != model or device.sw_version != firmware):
-            dev_reg.async_update_device(
-                device.id,
-                model=model,
-                sw_version=firmware,
-            )
+        if device is None:
+            return
+
+        updates: dict[str, str] = {}
+        # Only ever fill a field we actually read — a partial read must not
+        # wipe what an earlier one established.
+        if model and device.model != model:
+            updates["model"] = model
+        if firmware and device.sw_version != firmware:
+            updates["sw_version"] = firmware
+        if _has_reported_value(serial) and device.serial_number != serial:
+            updates["serial_number"] = serial
+
+        if updates:
+            dev_reg.async_update_device(device.id, **updates)
 
     async def _start_live_monitoring(self) -> None:
         """Persistent live connection with notifications.
