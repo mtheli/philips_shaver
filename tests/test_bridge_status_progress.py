@@ -113,7 +113,8 @@ async def test_finish_error_surfaces_alert_on_status_step() -> None:
     result = await flow.async_step_esp_read_finish()
 
     assert result == {"type": "form"}
-    assert "bridge" in flow._esp_read_error
+    # A key, not a sentence — the wording comes from the translations.
+    assert flow._esp_read_error == "read_failed"
 
 
 async def test_finish_unknown_error_points_at_logs() -> None:
@@ -123,7 +124,7 @@ async def test_finish_unknown_error_points_at_logs() -> None:
 
     await flow.async_step_esp_read_finish()
 
-    assert "Settings → System → Logs" in flow._esp_read_error
+    assert flow._esp_read_error == "read_error"
 
 
 # --- status render banners ------------------------------------------------
@@ -157,7 +158,7 @@ async def test_just_paired_banner_renders_once(monkeypatch) -> None:
 async def test_read_error_alert_renders_once(monkeypatch) -> None:
     flow = _flow()
     _patch_transport_refresh(monkeypatch, flow)
-    flow._esp_read_error = "Couldn't read the shaver over the bridge."
+    flow._esp_read_error = "read_failed"
 
     result = await flow.async_step_esp_bridge_status()
 

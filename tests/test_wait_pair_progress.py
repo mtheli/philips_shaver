@@ -117,7 +117,13 @@ async def test_finish_arm_error_renders_request_pair() -> None:
 
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "request_pair"
-    assert result["errors"] == {"base": "service_call_failed"}
+    # errors[] is invisible on a field-less form — the reason
+    # is shown as an alert built from the same string.
+    assert result["errors"] is None
+    assert 'bridge' in (
+        result["description_placeholders"].get("notice")
+        or result["description_placeholders"].get("alert", "")
+    )
 
 
 async def test_finish_timeout_renders_request_pair_and_stands_down() -> None:
@@ -129,7 +135,13 @@ async def test_finish_timeout_renders_request_pair_and_stands_down() -> None:
 
     result = await flow.async_step_pair_finish()
 
-    assert result["errors"] == {"base": "pair_timeout"}
+    # errors[] is invisible on a field-less form — the reason
+    # is shown as an alert built from the same string.
+    assert result["errors"] is None
+    assert '60-second' in (
+        result["description_placeholders"].get("notice")
+        or result["description_placeholders"].get("alert", "")
+    )
     unsub.assert_called_once()
     assert flow._pair_unsub is None
     # Best-effort stand-down so a stray shaver isn't auto-bonded later.
@@ -147,7 +159,13 @@ async def test_finish_stale_bond_maps_to_dedicated_error() -> None:
 
     result = await flow.async_step_pair_finish()
 
-    assert result["errors"] == {"base": "pair_failed_stale_bond"}
+    # errors[] is invisible on a field-less form — the reason
+    # is shown as an alert built from the same string.
+    assert result["errors"] is None
+    assert 'repeated' in (
+        result["description_placeholders"].get("notice")
+        or result["description_placeholders"].get("alert", "")
+    )
 
 
 async def test_finish_generic_pair_failed_maps_to_timeout_text() -> None:
@@ -156,7 +174,13 @@ async def test_finish_generic_pair_failed_maps_to_timeout_text() -> None:
 
     result = await flow.async_step_pair_finish()
 
-    assert result["errors"] == {"base": "pair_timeout"}
+    # errors[] is invisible on a field-less form — the reason
+    # is shown as an alert built from the same string.
+    assert result["errors"] is None
+    assert '60-second' in (
+        result["description_placeholders"].get("notice")
+        or result["description_placeholders"].get("alert", "")
+    )
 
 
 async def test_finish_complete_routes_to_status_with_banner() -> None:

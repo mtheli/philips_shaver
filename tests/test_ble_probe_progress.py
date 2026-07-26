@@ -170,8 +170,8 @@ async def test_finish_asleep_discovery_sets_alert_and_rerenders() -> None:
     result = await flow.async_step_ble_probe_finish()
 
     assert result == {"type": "form"}
-    assert 'ha-alert alert-type="error"' in flow._confirm_status
-    assert "asleep" in flow._confirm_status
+    # A key, not a sentence — the wording comes from the translations.
+    assert flow._confirm_status == "asleep"
 
 
 async def test_finish_generic_discovery_points_at_logs() -> None:
@@ -183,7 +183,7 @@ async def test_finish_generic_discovery_points_at_logs() -> None:
 
     await flow.async_step_ble_probe_finish()
 
-    assert "Settings → System → Logs" in flow._confirm_status
+    assert flow._confirm_status == "failed"
 
 
 def _patch_no_discoveries(monkeypatch) -> None:
@@ -234,7 +234,13 @@ async def test_finish_pair_origin_maps_errors_onto_pair_form() -> None:
 
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "pair"
-    assert result["errors"] == {"base": "pairing_failed"}
+    # errors[] is invisible on a field-less form — the reason
+    # is shown as an alert built from the same string.
+    assert result["errors"] is None
+    assert 'pairing' in (
+        result["description_placeholders"].get("notice")
+        or result["description_placeholders"].get("alert", "")
+    )
 
 
 async def test_finish_pair_origin_not_paired_falls_back_to_manual() -> None:

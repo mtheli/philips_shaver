@@ -97,7 +97,7 @@
       },
       "pair": {
         "title": "Gerät koppeln",
-        "description": "**{name}** muss mit diesem System gekoppelt werden.\n\nℹ️ **Bitte vor der Kopplung prüfen:**\n1. ⬜ Rasierer ist **eingeschaltet** oder auf der **Ladestation**\n2. ⬜ Rasierer ist **nicht** mit dem Handy verbunden\n   — Aus Bluetooth-Einstellungen **und** GroomTribe / OneBlade App entfernen",
+        "description": "{alert}**{name}** muss mit diesem System gekoppelt werden.\n\nℹ️ **Bitte vor der Kopplung prüfen:**\n1. ⬜ Rasierer ist **eingeschaltet** oder auf der **Ladestation**\n2. ⬜ Rasierer ist **nicht** mit dem Handy verbunden\n   — Aus Bluetooth-Einstellungen **und** GroomTribe / OneBlade App entfernen",
         "submit": "Pairing starten"
       },
       "not_paired": {
@@ -124,17 +124,33 @@
     },
     "error": {
       "abort_if_unique_id_configured": "Das Gerät ist bereits konfiguriert.",
-      "no_esphome_devices": "Keine ESPHome-Geräte gefunden. Bitte richten Sie zuerst ein ESPHome-Gerät mit der BLE-Bridge-Komponente ein. Siehe die ESP Bridge Setup-Anleitung in der Integrations-Dokumentation.",
-      "device_asleep": "Der Rasierer ist im Ruhezustand. Wecke ihn (Einschaltknopf drücken oder auf die Ladestation stellen) und versuche es erneut.",
       "cannot_connect": "Verbindung zum Rasierer fehlgeschlagen. Bitte stelle sicher, dass er eingeschaltet, in Reichweite und nicht mit einem anderen Gerät (z.B. deinem Smartphone) verbunden ist.",
-      "device_not_found": "Das Gerät wurde nicht gefunden. Bitte stelle sicher, dass es eingeschaltet und in Reichweite ist.",
-      "not_paired": "Der Rasierer ist nicht mit diesem System gepairt.",
-      "out_of_slots": "Kein Bluetooth-Adapter konnte das Gerät erreichen. Entweder sind alle Verbindungsslots belegt oder das Gerät ist außer Reichweite. Stelle sicher, dass der Rasierer eingeschaltet und in der Nähe des Bluetooth-Adapters ist, und entferne ggf. ungenutzte Bluetooth-Geräte.",
+      "caps_connected_via": "Verbunden über {transport}{detail}.",
+      "caps_note_groomer_oneblade_only": "❌ Der Smart-Groomer-Dienst ist nur auf OneBlade-/QP-Modellen verfügbar.",
+      "caps_note_not_on_oneblade": "❌ Control- und Serial-/Diagnose-Dienste sind auf OneBlade-Modellen nicht vorhanden — das ist zu erwarten.",
+      "confirm_alert_aborted": "Die Verbindung wurde abgebrochen — der Rasierer ist möglicherweise außer Reichweite, oder die Verbindung lief über einen nicht unterstützten gewöhnlichen Bluetooth-Proxy. Bringe den Rasierer näher an einen lokalen Bluetooth-Adapter und klicke dann erneut auf Fähigkeiten auslesen.",
+      "confirm_alert_asleep": "Der Rasierer schläft — wecke ihn (Power-Knopf drücken oder auf die Ladestation stellen), dann klicke erneut auf Fähigkeiten auslesen.",
+      "confirm_alert_failed": "Der Rasierer konnte nicht gelesen werden. Stelle sicher, dass er eingeschaltet und in Reichweite ist, und klicke dann erneut auf Fähigkeiten auslesen. Details stehen im Protokoll (Einstellungen → System → Protokolle).",
+      "confirm_warn_proxy": "Diese Verbindung würde über den Bluetooth-Proxy {proxy_name}{proxy_rssi} laufen.{nl}Philips-Rasierer können sich nicht über einen gewöhnlichen Bluetooth-Proxy koppeln — Einrichtung und Live-Updates über diesen Weg schlagen fehl.{nl}Richte den Rasierer stattdessen über einen lokalen Bluetooth-Adapter oder die dedizierte ESP32-Bridge ein.",
+      "confirm_warn_proxy_local": "Diese Verbindung würde über den Bluetooth-Proxy {proxy_name}{proxy_rssi} laufen.{nl}Philips-Rasierer können sich nicht über einen gewöhnlichen Bluetooth-Proxy koppeln — Einrichtung und Live-Updates über diesen Weg schlagen fehl.{nl}Dein lokaler Adapter {local_name} sieht den Rasierer ebenfalls{local_rssi} — Home Assistant verbindet über das stärkste Signal, lege den Rasierer also näher an ihn heran, damit dieser Weg bevorzugt wird.",
       "connection_aborted": "Verbindung wurde abgebrochen. Das Gerät ist möglicherweise außer Reichweite oder über einen nicht unterstützten Bluetooth-Proxy verbunden. Diese Integration benötigt direktes Bluetooth oder die dedizierte ESP32 BLE-Bridge — Standard-ESPHome-Bluetooth-Proxys werden nicht unterstützt.",
-      "pairing_failed": "Bluetooth-Pairing fehlgeschlagen. Stelle sicher, dass der Rasierer eingeschaltet und nicht mit einem anderen Gerät verbunden ist (Handy / GroomTribe / OneBlade App). Schlägt es wiederholt fehl, hält der Rasierer eventuell noch einen alten Bond auf seiner Seite — Bluetooth am Rasierer zurücksetzen (modellabhängig: Power-Knopf lange gedrückt halten, bis die Bluetooth-LED erlischt, oder in der App entkoppeln), dann erneut versuchen.",
-      "service_call_failed": "Pair-Modus konnte nicht auf der ESP-Bridge aktiviert werden. Die Bridge ist möglicherweise offline oder läuft auf einer zu alten Firmware. Aktualisiere die Bridge auf v1.8.0 oder neuer und versuche es erneut.",
-      "pair_timeout": "Im 60-Sekunden-Pair-Fenster wurde kein Rasierer erkannt. Stelle sicher, dass der Rasierer eingeschaltet ist und advertised, und versuche es erneut.",
+      "device_asleep": "Der Rasierer ist im Ruhezustand. Wecke ihn (Einschaltknopf drücken oder auf die Ladestation stellen) und versuche es erneut.",
+      "device_not_found": "Das Gerät wurde nicht gefunden. Bitte stelle sicher, dass es eingeschaltet und in Reichweite ist.",
+      "esp_status_no_diagnostics": "⚠️ Diagnose-Details nicht verfügbar. Erwäge ein Update der ESP-Bridge-Komponente.",
+      "esp_status_paired": "Pairing erfolgreich — die Bridge ist jetzt mit deinem Rasierer gebondet.",
+      "esp_status_read_error": "Beim Lesen des Rasierers ist etwas schiefgelaufen. Sieh im Protokoll nach (Einstellungen → System → Protokolle) und versuche es erneut.",
+      "esp_status_read_failed": "Der Rasierer konnte über die Bridge nicht gelesen werden. Stelle sicher, dass er eingeschaltet und die Bridge online ist, und versuche es erneut.",
+      "no_esphome_devices": "Keine ESPHome-Geräte gefunden. Bitte richten Sie zuerst ein ESPHome-Gerät mit der BLE-Bridge-Komponente ein. Siehe die ESP Bridge Setup-Anleitung in der Integrations-Dokumentation.",
+      "not_paired": "Der Rasierer ist nicht mit diesem System gepairt.",
+      "not_paired_proxy_dead_end": "Diese Verbindung läuft über den gewöhnlichen Bluetooth-Proxy {proxy_name}. Philips-Rasierer koppeln über LE Secure Connections, die ein gewöhnlicher Bluetooth-Proxy nicht abschließen kann — ein Pairing über diesen Weg gelingt nicht, und Pairing-Werkzeuge auf dem Home-Assistant-Host haben darauf keinen Einfluss.",
+      "out_of_slots": "Kein Bluetooth-Adapter konnte das Gerät erreichen. Entweder sind alle Verbindungsslots belegt oder das Gerät ist außer Reichweite. Stelle sicher, dass der Rasierer eingeschaltet und in der Nähe des Bluetooth-Adapters ist, und entferne ggf. ungenutzte Bluetooth-Geräte.",
       "pair_failed_stale_bond": "Pairing schlug mit wiederholten Auth-Fehlern fehl. Der Rasierer hält das vorherige Pairing auf seiner Seite und lehnt neues Pairing ab. Lösche Bluetooth am Rasierer (modellabhängig: Power-Knopf lange gedrückt halten bis Bluetooth-LED erlischt, oder über die GroomTribe / OneBlade App entkoppeln), dann erneut versuchen.",
+      "pair_status_unpaired": "Bond entfernt — der Slot ist frei. Schalte den Rasierer ein, den du koppeln möchtest, und starte dann das Pairing.",
+      "pair_timeout": "Im 60-Sekunden-Pair-Fenster wurde kein Rasierer erkannt. Stelle sicher, dass der Rasierer eingeschaltet ist und advertised, und versuche es erneut.",
+      "pairing_failed": "Bluetooth-Pairing fehlgeschlagen. Stelle sicher, dass der Rasierer eingeschaltet und nicht mit einem anderen Gerät verbunden ist (Handy / GroomTribe / OneBlade App). Schlägt es wiederholt fehl, hält der Rasierer eventuell noch einen alten Bond auf seiner Seite — Bluetooth am Rasierer zurücksetzen (modellabhängig: Power-Knopf lange gedrückt halten, bis die Bluetooth-LED erlischt, oder in der App entkoppeln), dann erneut versuchen.",
+      "reset_alert_offline": "Die ESP-Bridge konnte zum Lösen des Bonds nicht erreicht werden. Stelle sicher, dass sie online und mit Strom versorgt ist, und versuche es erneut.",
+      "reset_alert_unconfirmed": "Es konnte nicht bestätigt werden, dass die Bridge den Bond gelöst hat — sie braucht möglicherweise einen Neustart. Stelle sicher, dass sie online ist, und versuche es erneut.",
+      "service_call_failed": "Pair-Modus konnte nicht auf der ESP-Bridge aktiviert werden. Die Bridge ist möglicherweise offline oder läuft auf einer zu alten Firmware. Aktualisiere die Bridge auf v1.8.0 oder neuer und versuche es erneut.",
       "unknown": "Unerwarteter Fehler. Details stehen im Log (Einstellungen → System → Protokolle)."
     },
     "progress": {
@@ -365,7 +381,11 @@
     },
     "binary_sensor": {
       "charging": {
-        "name": "Ladevorgang"
+        "name": "Ladevorgang",
+        "state": {
+          "off": "Lädt nicht",
+          "on": "Lädt"
+        }
       },
       "travel_lock": {
         "name": "Reisesicherung",
@@ -389,19 +409,39 @@
         }
       },
       "notification_motor_blocked": {
-        "name": "Motor blockiert"
+        "name": "Motor blockiert",
+        "state": {
+          "off": "OK",
+          "on": "Blockiert"
+        }
       },
       "notification_clean_reminder": {
-        "name": "Reinigung fällig"
+        "name": "Reinigung fällig",
+        "state": {
+          "off": "OK",
+          "on": "Reinigung fällig"
+        }
       },
       "notification_head_replacement": {
-        "name": "Scherkopf wechseln"
+        "name": "Scherkopf wechseln",
+        "state": {
+          "off": "OK",
+          "on": "Wechsel fällig"
+        }
       },
       "notification_battery_overheated": {
-        "name": "Akku überhitzt"
+        "name": "Akku überhitzt",
+        "state": {
+          "off": "OK",
+          "on": "Überhitzt"
+        }
       },
       "notification_unplug_required": {
-        "name": "Ausstecken erforderlich"
+        "name": "Ausstecken erforderlich",
+        "state": {
+          "off": "OK",
+          "on": "Netzstecker ziehen"
+        }
       }
     },
     "button": {

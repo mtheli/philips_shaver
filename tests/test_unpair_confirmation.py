@@ -65,7 +65,7 @@ class _FakeServices:
 def _hass(services: _FakeServices):
     bus = _FakeBus()
     services.bus = bus
-    return SimpleNamespace(bus=bus, services=services)
+    return SimpleNamespace(bus=bus, services=services, data={})
 
 
 # --- helper outcomes ------------------------------------------------------

@@ -97,7 +97,7 @@
       },
       "pair": {
         "title": "Pair Device",
-        "description": "**{name}** needs to be paired with this system.\n\nℹ️ **Before pairing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **not connected** to your phone\n   — Remove from Bluetooth settings **and** GroomTribe / OneBlade app",
+        "description": "{alert}**{name}** needs to be paired with this system.\n\nℹ️ **Before pairing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **not connected** to your phone\n   — Remove from Bluetooth settings **and** GroomTribe / OneBlade app",
         "submit": "Start pairing"
       },
       "not_paired": {
@@ -124,17 +124,33 @@
     },
     "error": {
       "abort_if_unique_id_configured": "This device is already configured.",
-      "no_esphome_devices": "No ESPHome devices found. Please set up an ESPHome device with the BLE bridge component first. See the ESP Bridge Setup Guide in the integration documentation for instructions.",
-      "device_asleep": "The shaver is asleep. Wake it (press the power button or place it on its charging stand), then try again.",
       "cannot_connect": "Failed to connect to the shaver. Please ensure it is powered on, in range, and not connected to another device (e.g. your phone).",
-      "device_not_found": "Device not found. Please ensure it is powered on and in range.",
-      "not_paired": "The shaver is not paired with this system.",
-      "out_of_slots": "No Bluetooth adapter could reach the device. Either all connection slots are in use, or the device is out of range. Ensure the shaver is powered on and close to the Bluetooth adapter, and try removing unused Bluetooth devices if needed.",
+      "caps_connected_via": "Connected via {transport}{detail}.",
+      "caps_note_groomer_oneblade_only": "❌ The Smart Groomer service is only available on OneBlade / QP models.",
+      "caps_note_not_on_oneblade": "❌ Control and Serial/Diagnostic services are not present on OneBlade models — this is expected.",
+      "confirm_alert_aborted": "The connection was aborted — the shaver may be out of range, or the connection went through an unsupported standard Bluetooth proxy. Move the shaver closer to a local Bluetooth adapter, then click Read capabilities again.",
+      "confirm_alert_asleep": "The shaver is asleep — wake it (press the power button or place it on its charging stand), then click Read capabilities again.",
+      "confirm_alert_failed": "Could not read the shaver. Make sure it is switched on and in range, then click Read capabilities to try again. Details are in the logs (Settings → System → Logs).",
+      "confirm_warn_proxy": "This connection would go through the Bluetooth proxy {proxy_name}{proxy_rssi}.{nl}Philips shavers cannot pair over a standard Bluetooth proxy — setup and live updates over this path will fail.{nl}Set the shaver up via a local Bluetooth adapter or the dedicated ESP32 bridge instead.",
+      "confirm_warn_proxy_local": "This connection would go through the Bluetooth proxy {proxy_name}{proxy_rssi}.{nl}Philips shavers cannot pair over a standard Bluetooth proxy — setup and live updates over this path will fail.{nl}Your local adapter {local_name} also sees the shaver{local_rssi} — Home Assistant connects through the strongest signal, so move the shaver closer to it to prefer that path.",
       "connection_aborted": "Connection was aborted. The device may be out of range or connected through an unsupported Bluetooth proxy. This integration requires direct Bluetooth or the dedicated ESP32 BLE bridge — standard ESPHome Bluetooth Proxies are not supported.",
-      "pairing_failed": "Bluetooth pairing failed. Make sure the shaver is switched on and not connected to another device (phone / GroomTribe / OneBlade app). If it keeps failing, the shaver may still hold an old bond on its side — clear Bluetooth on the shaver (model-specific: long-press the power button until the Bluetooth LED clears, or unpair it in the app), then retry.",
-      "service_call_failed": "Could not arm pair-mode on the ESP bridge. The bridge may be offline or a too-old firmware version. Update the bridge to v1.8.0 or newer and retry.",
-      "pair_timeout": "No shaver appeared during the 60-second pair-mode window. Make sure the shaver is on and advertising, and try again.",
+      "device_asleep": "The shaver is asleep. Wake it (press the power button or place it on its charging stand), then try again.",
+      "device_not_found": "Device not found. Please ensure it is powered on and in range.",
+      "esp_status_no_diagnostics": "⚠️ Diagnostic details not available. Consider updating the ESP bridge component.",
+      "esp_status_paired": "Pairing successful — the bridge is now bonded to your shaver.",
+      "esp_status_read_error": "Something went wrong reading the shaver. Check the logs (Settings → System → Logs) and try again.",
+      "esp_status_read_failed": "Couldn't read the shaver over the bridge. Make sure it's switched on and the bridge is online, then try again.",
+      "no_esphome_devices": "No ESPHome devices found. Please set up an ESPHome device with the BLE bridge component first. See the ESP Bridge Setup Guide in the integration documentation for instructions.",
+      "not_paired": "The shaver is not paired with this system.",
+      "not_paired_proxy_dead_end": "This connection runs through the standard Bluetooth proxy {proxy_name}. Philips shavers pair via LE Secure Connections, which a standard Bluetooth proxy cannot complete — pairing over this path will not succeed, and pairing tools on the Home Assistant host have no effect on it.",
+      "out_of_slots": "No Bluetooth adapter could reach the device. Either all connection slots are in use, or the device is out of range. Ensure the shaver is powered on and close to the Bluetooth adapter, and try removing unused Bluetooth devices if needed.",
       "pair_failed_stale_bond": "Pairing failed with repeated auth errors. The shaver still holds the previous bond on its side and is rejecting fresh pairing. Clear Bluetooth on the shaver (model-specific: long-press the power button until the BT LED clears, or unpair via the GroomTribe / OneBlade app), then retry.",
+      "pair_status_unpaired": "Bond removed — the slot is free. Switch on the shaver you want to bond, then start pairing.",
+      "pair_timeout": "No shaver appeared during the 60-second pair-mode window. Make sure the shaver is on and advertising, and try again.",
+      "pairing_failed": "Bluetooth pairing failed. Make sure the shaver is switched on and not connected to another device (phone / GroomTribe / OneBlade app). If it keeps failing, the shaver may still hold an old bond on its side — clear Bluetooth on the shaver (model-specific: long-press the power button until the Bluetooth LED clears, or unpair it in the app), then retry.",
+      "reset_alert_offline": "Couldn't reach the ESP bridge to clear the bond. Make sure it's online and powered, then try again.",
+      "reset_alert_unconfirmed": "Couldn't confirm the bridge cleared the bond — it may need a reboot. Make sure it's online, then try again.",
+      "service_call_failed": "Could not arm pair-mode on the ESP bridge. The bridge may be offline or a too-old firmware version. Update the bridge to v1.8.0 or newer and retry.",
       "unknown": "Unexpected error. Check the logs (Settings → System → Logs) for details."
     },
     "progress": {
@@ -365,7 +381,11 @@
     },
     "binary_sensor": {
       "charging": {
-        "name": "Charging"
+        "name": "Charging",
+        "state": {
+          "off": "Not charging",
+          "on": "Charging"
+        }
       },
       "travel_lock": {
         "name": "Travel Lock",
@@ -389,19 +409,39 @@
         }
       },
       "notification_motor_blocked": {
-        "name": "Motor Blocked"
+        "name": "Motor Blocked",
+        "state": {
+          "off": "OK",
+          "on": "Blocked"
+        }
       },
       "notification_clean_reminder": {
-        "name": "Clean Reminder"
+        "name": "Clean Reminder",
+        "state": {
+          "off": "OK",
+          "on": "Cleaning due"
+        }
       },
       "notification_head_replacement": {
-        "name": "Head Replacement"
+        "name": "Head Replacement",
+        "state": {
+          "off": "OK",
+          "on": "Replacement due"
+        }
       },
       "notification_battery_overheated": {
-        "name": "Battery Overheated"
+        "name": "Battery Overheated",
+        "state": {
+          "off": "OK",
+          "on": "Overheated"
+        }
       },
       "notification_unplug_required": {
-        "name": "Unplug Required"
+        "name": "Unplug Required",
+        "state": {
+          "off": "OK",
+          "on": "Unplug required"
+        }
       }
     },
     "button": {

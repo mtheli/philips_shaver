@@ -18,6 +18,19 @@ from custom_components.philips_shaver.config_flow import PhilipsShaverConfigFlow
 ADDRESS = "F4:B3:B1:AA:BB:CC"
 
 
+def _warning(variant: str, values: dict) -> str:
+    """Render the caveat the way the flow does: block + values."""
+    if not variant:
+        return ""
+    import json
+    from pathlib import Path
+    blocks = json.loads(
+        (Path(__file__).parent.parent / "custom_components"
+         / "philips_shaver" / "strings.json").read_text(encoding="utf-8")
+    )["config"]["error"]
+    return blocks[f"confirm_warn_{variant}"].format(**values)
+
+
 def _flow() -> PhilipsShaverConfigFlow:
     flow = PhilipsShaverConfigFlow()
     flow.flow_id = "test-flow"
@@ -36,14 +49,15 @@ def _patch_paths(monkeypatch, paths) -> None:
 
 def test_no_paths_yields_empty_lines(monkeypatch) -> None:
     _patch_paths(monkeypatch, [])
-    assert _flow()._transport_lines() == ("", "")
+    assert _flow()._transport_lines()[:2] == ("", "")
 
 
 def test_local_adapter_via_direct_bluetooth(monkeypatch) -> None:
     _patch_paths(monkeypatch, [
         {"name": "hci0 (00:0A:CD:46:B2:2D)", "rssi": -76, "is_local": True},
     ])
-    via, warning = _flow()._transport_lines()
+    via, variant, values = _flow()._transport_lines()
+    warning = _warning(variant, values)
     # Same "via <class> (<detail>)" framing as the capabilities dialog.
     assert via == " via **Direct Bluetooth** (hci0, -76 dBm)"
     assert warning == ""
@@ -55,10 +69,10 @@ def test_proxy_via_and_hard_warning(monkeypatch) -> None:
         # show the bare name, no doubled parens.
         {"name": "atom-s3r (98:88:E0:0E:DA:D2)", "rssi": -61, "is_local": False},
     ])
-    via, warning = _flow()._transport_lines()
+    via, variant, values = _flow()._transport_lines()
+    warning = _warning(variant, values)
     assert via == " via **Bluetooth proxy** (atom-s3r, -61 dBm)"
     assert "98:88" not in via
-    assert 'ha-alert alert-type="warning"' in warning
     assert "<b>atom-s3r</b> (-61 dBm)" in warning
     # The shaver warning is unconditional and hard — no "model-dependent"
     # softening: LESC pairing over a standard proxy fails outright.
@@ -73,9 +87,9 @@ def test_proxy_preferred_with_local_fallback_hint(monkeypatch) -> None:
         {"name": "atom-lite", "rssi": -64, "is_local": False},
         {"name": "hci0 (00:0A:CD:46:B2:2D)", "rssi": -82, "is_local": True},
     ])
-    via, warning = _flow()._transport_lines()
+    via, variant, values = _flow()._transport_lines()
+    warning = _warning(variant, values)
     assert via == " via **Bluetooth proxy** (atom-lite, -64 dBm)"
-    assert 'ha-alert alert-type="warning"' in warning
     assert "<b>hci0</b>" in warning
     assert "strongest signal" in warning
 
@@ -87,14 +101,26 @@ def test_local_strongest_wins_over_weaker_proxy(monkeypatch) -> None:
         {"name": "hci0 (00:0A:CD:46:B2:2D)", "rssi": -60, "is_local": True},
         {"name": "atom-lite", "rssi": -85, "is_local": False},
     ])
-    via, warning = _flow()._transport_lines()
+    via, variant, values = _flow()._transport_lines()
+    warning = _warning(variant, values)
     assert via == " via **Direct Bluetooth** (hci0, -60 dBm)"
     assert warning == ""
 
 
+def _blocks() -> dict:
+    """The translated blocks, keyed the way the flow receives them."""
+    import json
+    from pathlib import Path
+    errors = json.loads(
+        (Path(__file__).parent.parent / "custom_components"
+         / "philips_shaver" / "strings.json").read_text(encoding="utf-8")
+    )["config"]["error"]
+    return {f"error.{k}": v for k, v in errors.items()}
+
+
 def test_connection_status_text_success_alert() -> None:
     text = PhilipsShaverConfigFlow._get_connection_status_text(
-        "esp_bridge", "atom-s3r / shaver"
+        _blocks(), "esp_bridge", "atom-s3r / shaver"
     )
     assert 'ha-alert alert-type="success"' in text
     assert "<b>ESP32 Bridge</b> (atom-s3r / shaver)" in text
@@ -102,13 +128,15 @@ def test_connection_status_text_success_alert() -> None:
 
 def test_connection_status_text_marks_proxy_probe() -> None:
     text = PhilipsShaverConfigFlow._get_connection_status_text(
-        None, "atom-lite", via_proxy=True
+        _blocks(), None, "atom-lite", via_proxy=True
     )
     assert "<b>Bluetooth proxy</b> (atom-lite)" in text
 
 
 def test_connection_status_text_direct() -> None:
-    text = PhilipsShaverConfigFlow._get_connection_status_text(None, "hci0")
+    text = PhilipsShaverConfigFlow._get_connection_status_text(
+        _blocks(), None, "hci0"
+    )
     assert "<b>Direct Bluetooth</b> (hci0)" in text
 
 
