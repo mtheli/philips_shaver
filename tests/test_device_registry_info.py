@@ -9,6 +9,10 @@ established — and a shaver without a serial answers with all zeros, which is
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from unittest.mock import patch
+
 from homeassistant.helpers import device_registry as dr
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -210,6 +214,62 @@ def test_connection_sub_device_links_to_the_main_device(hass) -> None:
     entity = PhilipsConnectionEntity(coordinator, entry)
 
     assert entity._attr_device_info["via_device"] == (DOMAIN, ADDRESS)
+
+
+def test_connection_sub_device_name_is_translatable(hass) -> None:
+    """The sub-device is named via a translation key so the trailing word
+    ("Connection") follows the interface language; the parent name rides
+    along as a placeholder rather than being baked into a fixed string."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ADDRESS: ADDRESS,
+            CONF_TRANSPORT_TYPE: TRANSPORT_BLEAK,
+            "device_name": "Bathroom Shaver",
+        },
+    )
+    entry.add_to_hass(hass)
+    coordinator = PhilipsShaverCoordinator(hass, entry, StubTransport())
+
+    info = PhilipsConnectionEntity(coordinator, entry)._attr_device_info
+
+    assert info["translation_key"] == "connection"
+    assert info["translation_placeholders"] == {"device_name": "Bathroom Shaver"}
+    assert "name" not in info
+
+
+def test_connection_translation_key_resolves_to_the_localized_name(hass) -> None:
+    """End-to-end through the registry: the key we set must actually resolve
+    to "<parent> Connection". A wrong key path or placeholder name would make
+    async_get_or_create fall back to the bare key ("connection", parent lost) —
+    the dict-level test above cannot catch that. The template comes from the
+    real strings.json so a renamed key or missing device section fails here.
+    """
+    strings = json.loads(
+        (
+            Path(__file__).parent.parent
+            / "custom_components/philips_shaver/strings.json"
+        ).read_text(encoding="utf-8")
+    )
+    name_template = strings["device"]["connection"]["name"]
+
+    entry = MockConfigEntry(domain=DOMAIN, data={CONF_ADDRESS: ADDRESS})
+    entry.add_to_hass(hass)
+
+    cached = {f"component.{DOMAIN}.device.connection.name": name_template}
+    with patch(
+        "homeassistant.helpers.device_registry.translation."
+        "async_get_cached_translations",
+        return_value=cached,
+    ):
+        device = dr.async_get(hass).async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, f"{ADDRESS}_bridge")},
+            translation_key="connection",
+            translation_placeholders={"device_name": "Bathroom Shaver"},
+        )
+
+    assert device.name == "Bathroom Shaver Connection"
 
 
 def test_previously_written_padding_is_cleared(hass) -> None:

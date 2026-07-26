@@ -116,14 +116,16 @@ class PhilipsConnectionEntity(PhilipsShaverEntity):
         entry: ConfigEntry,
     ) -> None:
         super().__init__(coordinator, entry)
-        # Inherit the parent device's name so the Connection sub-device reads
-        # "<Name> Connection" (e.g. "Bathroom Shaver Connection"), matching
-        # the Sonicare sub-device naming convention.
+        # Name the Connection sub-device "<Name> Connection" via a translation
+        # key, so the trailing word follows the interface language (e.g.
+        # "Bathroom Shaver Verbindung" on a German setup) instead of staying
+        # English. The parent name comes in as a placeholder.
         manufacturer = "Espressif" if self._is_esp_bridge else "Home Assistant"
         self._attr_device_info = dr.DeviceInfo(
             identifiers={(DOMAIN, f"{self._device_id}_bridge")},
             manufacturer=manufacturer,
-            name=f"{self._device_name} Connection",
+            translation_key="connection",
+            translation_placeholders={"device_name": self._device_name},
             via_device=(DOMAIN, self._device_id),
         )
 

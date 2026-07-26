@@ -468,5 +468,10 @@
         "name": "Bridge Firmware"
       }
     }
+  },
+  "device": {
+    "connection": {
+      "name": "{device_name} Connection"
+    }
   }
 }
