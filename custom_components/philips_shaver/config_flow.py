@@ -1930,11 +1930,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         default_value = unconfigured_dids[0]
 
         # The legend + pair hint live as static, translated text in this
-        # step's description / data_description (see translations). They must
-        # NOT be built here as dynamic placeholders: config-flow descriptions
-        # render in the user's FRONTEND language, which a flow handler cannot
-        # read (hass.config.language is the *server* language and can differ),
-        # producing a mixed-language dialog. Static json keeps them in sync.
+        # step's description / data_description (see translations). Keeping
+        # them there rather than assembling them here is the simpler option:
+        # they never vary, so there is nothing to resolve at runtime.
         return self.async_show_form(
             step_id="esp_select_device",
             data_schema=vol.Schema(
@@ -2824,10 +2822,11 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 "user_bleak", self._pair_address or ""
             )
 
-        # The dead-end itself renders as a red <ha-alert> so it can't be
-        # skimmed past; injected as a placeholder because hassfest rejects
-        # HTML in static translation strings. Markdown isn't parsed inside
-        # the HTML block, so emphasis uses <b>.
+        # The dead-end renders as a red <ha-alert> so it can't be skimmed
+        # past. Only the wrapper and the proxy name are built here — the
+        # wording is translated. hassfest rejects HTML inside translation
+        # strings, and ha-markdown does not parse markdown inside an HTML
+        # block, so the emphasis travels as <b> in the value.
         proxy_name = self._probe_proxy_name or "unknown"
         text = await _async_text_blocks(self.hass)
         alert = _alert(
@@ -2929,7 +2928,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
         cap_val = self.fetched_data.get("capabilities", 0)
         groomer_cap = self.fetched_data.get("groomer_capabilities")
+        blocks = await _async_text_blocks(self.hass)
         caps_services_text = self._get_capabilities_services_text(
+            blocks,
             cap_val,
             groomer_cap,
             self.fetched_data.get("services", []),
@@ -2941,7 +2942,6 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             path = self._esp_target_label()
         else:
             path = self.fetched_data.get("connection_path")
-        blocks = await _async_text_blocks(self.hass)
         connection_status = self._get_connection_status_text(
             blocks,
             self.fetched_transport_type,
@@ -3084,6 +3084,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def _get_capabilities_services_text(
         self,
+        blocks: dict[str, str],
         cap_val: int,
         groomer_cap: int | None,
         fetched_uuids: list[str],

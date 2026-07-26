@@ -27,6 +27,7 @@ See [Configuration](#configuration) for setup instructions.
 - [Tested Models](#tested-models)
 - [Lovelace Card](#lovelace-card)
 - [Community](#community)
+- [Supported Languages](#supported-languages)
 - [Features](#features)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
@@ -89,6 +90,17 @@ The card automatically switches between standby, shaving, charging, and cleaning
 [<img src="https://img.youtube.com/vi/ROI91x2Swv8/maxresdefault.jpg" alt="Smartes Badezimmer? So hilft dir ein Shelly Wall Display beim Zähneputzen & Rasieren!" width="480">](https://www.youtube.com/watch?v=ROI91x2Swv8)
 
 [Smartes Badezimmer? So hilft dir ein Shelly Wall Display beim Zähneputzen & Rasieren!](https://www.youtube.com/watch?v=ROI91x2Swv8) — Video by [@smartmatic](https://github.com/smartmatic) showing the integration and card on a Shelly Wall Display with XP9405 and ESP32 Bridge (German)
+
+---
+
+## Supported Languages
+
+| Language | Code | Comment |
+|----------|------|---------|
+| English  | en | |
+| Deutsch  | de | |
+
+Setup dialogs, entity names and entity states all follow the language configured in your Home Assistant instance (per-user profile setting). This includes binary sensor states, which otherwise fall back to English. If your language is not yet supported, it falls back to English. Contributions for additional languages are welcome — copy `custom_components/philips_shaver/translations/en.json`, translate the values and open a pull request.
 
 ---
 

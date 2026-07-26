@@ -176,3 +176,152 @@ def test_no_errors_on_a_form_without_fields() -> None:
         "errors set on a field-less form (invisible to the user): "
         + ", ".join(f"config_flow.py:{line} ({why})" for line, why in offenders)
     )
+
+
+async def test_capabilities_dialog_renders() -> None:
+    """Render show_capabilities for real and format its text.
+
+    Every existing test mocks this step away, so a name that only exists
+    inside it — or a placeholder the handler stops supplying — went
+    unnoticed until the dialog was opened by hand. Formatting the
+    description here is what Home Assistant does to build it: a missing
+    placeholder raises rather than rendering a broken dialog.
+    """
+    from types import SimpleNamespace
+
+    from custom_components.philips_shaver.config_flow import (
+        PhilipsShaverConfigFlow,
+    )
+
+    flow = PhilipsShaverConfigFlow()
+    flow.flow_id = "t"
+    flow.handler = "philips_shaver"
+    flow.hass = SimpleNamespace(
+        config=SimpleNamespace(components=set()), data={}
+    )
+    flow.fetched_address = "EC:EC:66:27:F0:ED"
+    flow.fetched_transport_type = "esp_bridge"
+    flow.fetched_esp_device_name = "atom_s3r"
+    flow.fetched_esp_bridge_id = "shaver_1"
+    flow.fetched_data = {
+        "model_number": "XP9201",
+        "firmware": "300012593881",
+        "battery": 51,
+        "device_type": "shaver",
+        "capabilities": 0,
+        "groomer_capabilities": None,
+        "services": [],
+        "connection_path": "atom_s3r / shaver_1",
+    }
+    flow._build_default_name = lambda: "Bathroom Shaver"
+
+    result = await flow.async_step_show_capabilities()
+
+    assert result["step_id"] == "show_capabilities"
+    step = STRINGS["config"]["step"]["show_capabilities"]
+    # Raises if the handler stopped supplying a placeholder the text uses.
+    rendered = step["description"].format(**result["description_placeholders"])
+    assert rendered
+
+
+def _render_flow():
+    """A flow instance wired up enough to render dialogs."""
+    from types import SimpleNamespace
+
+    from custom_components.philips_shaver.config_flow import (
+        PhilipsShaverConfigFlow,
+    )
+
+    flow = PhilipsShaverConfigFlow()
+    flow.flow_id = "t"
+    flow.handler = "philips_shaver"
+    flow.hass = SimpleNamespace(
+        config=SimpleNamespace(components=set()), data={}
+    )
+    flow.fetched_esp_device_name = "atom_s3r"
+    flow.fetched_esp_bridge_id = "shaver_1"
+    flow._pair_address = "EC:EC:66:27:F0:ED"
+    # context is a read-only mappingproxy on a bare handler
+    flow.context = {}
+    return flow
+
+
+def _renders(result) -> str:
+    """Format a step's text with the placeholders it supplied.
+
+    This is what Home Assistant does to build the dialog: a placeholder
+    the text uses but the handler does not supply raises here, and would
+    surface as a broken dialog in the UI.
+    """
+    step = STRINGS["config"]["step"][result["step_id"]]
+    return step["description"].format(**(result.get("description_placeholders") or {}))
+
+
+async def test_discovery_confirm_renders_every_outcome(monkeypatch) -> None:
+    """bluetooth_confirm against each probe outcome and carrier topology.
+
+    The step is mocked away in every other test, so nothing exercised the
+    alert and proxy-caveat slots it fills.
+    """
+    from types import SimpleNamespace
+
+    import custom_components.philips_shaver.config_flow as cf
+
+    topologies = {
+        "none": [],
+        "local": [{"name": "hci0 (00:0A:CD:46:B2:2D)", "rssi": -60, "is_local": True}],
+        "proxy": [{"name": "atom-lite", "rssi": -64, "is_local": False}],
+        "proxy_local": [
+            {"name": "atom-lite", "rssi": -64, "is_local": False},
+            {"name": "hci0 (00:0A:CD:46:B2:2D)", "rssi": -82, "is_local": True},
+        ],
+    }
+    original = cf.describe_available_paths
+    try:
+        for paths in topologies.values():
+            cf.describe_available_paths = lambda hass, addr, _p=paths: list(_p)
+            for outcome in ("", "asleep", "aborted", "failed"):
+                flow = _render_flow()
+                flow.discovery_info = SimpleNamespace(
+                    address="EC:EC:66:27:F0:ED", name="Philips Shaver"
+                )
+                flow._esp_redirect_checked = True
+                flow._confirm_status = outcome
+                result = await flow.async_step_bluetooth_confirm()
+                _renders(result)
+    finally:
+        cf.describe_available_paths = original
+
+
+async def test_proxy_dead_end_renders() -> None:
+    """not_paired_proxy explains why this path cannot work."""
+    flow = _render_flow()
+    flow._probe_proxy_name = "atom-lite"
+
+    result = await flow.async_step_not_paired_proxy()
+
+    assert result["step_id"] == "not_paired_proxy"
+    text = _renders(result)
+    assert "atom-lite" in text
+
+
+async def test_pair_step_renders_with_and_without_a_reason() -> None:
+    """The manual pairing prompt, plain and after a failure."""
+    from types import SimpleNamespace
+
+    flow = _render_flow()
+    flow.discovery_info = SimpleNamespace(
+        address="EC:EC:66:27:F0:ED", name="Philips Shaver"
+    )
+    plain = await flow.async_step_pair()
+    assert plain["description_placeholders"]["alert"] == ""
+    _renders(plain)
+
+    flow = _render_flow()
+    flow.discovery_info = SimpleNamespace(
+        address="EC:EC:66:27:F0:ED", name="Philips Shaver"
+    )
+    flow._pair_error = "pairing_failed"
+    failed = await flow.async_step_pair()
+    assert 'alert-type="error"' in failed["description_placeholders"]["alert"]
+    _renders(failed)
