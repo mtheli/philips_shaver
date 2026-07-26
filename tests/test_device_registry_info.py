@@ -17,9 +17,11 @@ from custom_components.philips_shaver.const import (
     CONF_ESP_DEVICE_NAME,
     CONF_TRANSPORT_TYPE,
     DOMAIN,
+    TRANSPORT_BLEAK,
     TRANSPORT_ESP_BRIDGE,
 )
 from custom_components.philips_shaver.coordinator import PhilipsShaverCoordinator
+from custom_components.philips_shaver.entity import PhilipsConnectionEntity
 
 ADDRESS = "AA:BB:CC:DD:EE:FF"
 
@@ -186,6 +188,28 @@ def test_nul_padded_serial_is_not_written(hass) -> None:
 
     device = dr.async_get(hass).async_get(device.id)
     assert device.serial_number is None
+
+
+def test_connection_sub_device_links_to_the_main_device(hass) -> None:
+    """With direct BLE nothing rewires the Connection sub-device later.
+
+    The ESP path re-parents it to the ESP host after setup, but on a local
+    adapter the declared via_device is the only parent link — without it the
+    sub-device floats around unattached in the device list.
+    """
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_ADDRESS: ADDRESS,
+            CONF_TRANSPORT_TYPE: TRANSPORT_BLEAK,
+        },
+    )
+    entry.add_to_hass(hass)
+    coordinator = PhilipsShaverCoordinator(hass, entry, StubTransport())
+
+    entity = PhilipsConnectionEntity(coordinator, entry)
+
+    assert entity._attr_device_info["via_device"] == (DOMAIN, ADDRESS)
 
 
 def test_previously_written_padding_is_cleared(hass) -> None:

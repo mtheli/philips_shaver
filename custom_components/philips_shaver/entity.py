@@ -124,6 +124,7 @@ class PhilipsConnectionEntity(PhilipsShaverEntity):
             identifiers={(DOMAIN, f"{self._device_id}_bridge")},
             manufacturer=manufacturer,
             name=f"{self._device_name} Connection",
+            via_device=(DOMAIN, self._device_id),
         )
 
     @property
