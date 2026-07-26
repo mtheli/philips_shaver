@@ -34,6 +34,7 @@ def test_xp9201_snapshot_decodes(xp9201) -> None:
 
     assert data["battery"] == 90
     assert data["model_number"] == "XP9201"
+    assert data["hardware_revision"] == "300011042261"
     assert data["device_state"] == "shaving"
     assert data["travel_lock"] is False
     # 0x0112 = 0x00ef little-endian → 239 minutes of cumulative motor runtime
@@ -51,6 +52,7 @@ def test_qp4530_snapshot_decodes(qp4530) -> None:
 
     assert data["battery"] == 94
     assert data["model_number"] == "Philips QP4530"
+    assert data["hardware_revision"] == "300006520671"
     assert data["device_state"] == "shaving"
     assert data["travel_lock"] is False
     assert data["shaving_time"] == 67

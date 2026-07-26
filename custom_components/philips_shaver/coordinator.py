@@ -43,6 +43,7 @@ from .const import (
     CHAR_DAYS_SINCE_LAST_USED,
     CHAR_DEVICE_STATE,
     CHAR_FIRMWARE_REVISION,
+    CHAR_HARDWARE_REVISION,
     CHAR_SOFTWARE_REVISION,
     CHAR_HEAD_REMAINING,
     CHAR_HEAD_REMAINING_MINUTES,
@@ -548,6 +549,9 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if raw := results.get(CHAR_SERIAL_NUMBER):
             new_data["serial_number"] = raw.decode("utf-8", "ignore").strip()
 
+        if raw := results.get(CHAR_HARDWARE_REVISION):
+            new_data["hardware_revision"] = raw.decode("utf-8", "ignore").strip()
+
         # === Philips-specific Characteristics ===
         if raw := results.get(CHAR_HEAD_REMAINING):
             new_data["head_remaining"] = raw[0]
@@ -708,11 +712,12 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return new_data
 
     def _update_device_registry(self, data: dict[str, Any]) -> None:
-        """Update device registry when model, firmware or serial changed."""
+        """Update device registry when model, firmware, serial or hardware changed."""
         model = data.get("model_number")
         firmware = data.get("firmware")
         serial = data.get("serial_number")
-        if not model and not firmware and not serial:
+        hardware = data.get("hardware_revision")
+        if not model and not firmware and not serial and not hardware:
             return
         dev_reg = dr.async_get(self.hass)
         device = dev_reg.async_get_device(
@@ -735,6 +740,8 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # An earlier version wrote a padding-only answer through; clear
             # it so the page stops showing a row with a blank value.
             updates["serial_number"] = None
+        if _has_reported_value(hardware) and device.hw_version != hardware:
+            updates["hw_version"] = hardware
 
         if updates:
             dev_reg.async_update_device(device.id, **updates)

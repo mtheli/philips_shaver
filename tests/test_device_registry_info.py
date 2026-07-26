@@ -130,6 +130,48 @@ def test_nothing_read_is_a_no_op(hass) -> None:
     assert device.serial_number is None
 
 
+def test_hardware_revision_lands_on_the_device(hass) -> None:
+    coordinator, entry = make_coordinator(hass)
+    device = register_device(hass, entry)
+
+    coordinator._update_device_registry(
+        {
+            "model_number": "XP9201",
+            "hardware_revision": "300011042261",
+        }
+    )
+
+    device = dr.async_get(hass).async_get(device.id)
+    assert device.hw_version == "300011042261"
+
+
+def test_not_reported_hardware_revision_is_not_written(hass) -> None:
+    """Devices that don't populate 2A27 answer with "" or zeros."""
+    coordinator, entry = make_coordinator(hass)
+    device = register_device(hass, entry)
+
+    coordinator._update_device_registry(
+        {
+            "model_number": "XP9201",
+            "hardware_revision": "00",
+        }
+    )
+
+    device = dr.async_get(hass).async_get(device.id)
+    assert device.hw_version is None
+
+
+def test_hardware_only_read_still_updates_the_device(hass) -> None:
+    coordinator, entry = make_coordinator(hass)
+    device = register_device(hass, entry)
+
+    coordinator._update_device_registry({"hardware_revision": "300006520671"})
+
+    device = dr.async_get(hass).async_get(device.id)
+    assert device.hw_version == "300006520671"
+    assert device.model is None
+
+
 def test_nul_padded_serial_is_not_written(hass) -> None:
     """A QP4530 answers the serial characteristic with twenty NUL bytes.
 
