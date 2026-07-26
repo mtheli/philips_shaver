@@ -59,7 +59,7 @@
       },
       "esp_select_device": {
         "title": "BLE-Gerät auswählen",
-        "description": "Diese ESP-Bridge hat mehrere Philips-Geräte verbunden. Wähle das Gerät, das du hinzufügen möchtest.\n\n✅ bereits konfiguriert · 🔒 gebondet · 🔓 ungekoppelt · 🟢 online · ⚪ offline",
+        "description": "Diese ESP-Bridge hat mehrere Philips-Geräte verbunden. Wähle das Gerät, das du hinzufügen möchtest.\n\n✅ bereits konfiguriert · 🔐 gebondet · 🔓 ungekoppelt · 🟢 online · ⚪ offline",
         "data": {
           "esp_bridge_id": "BLE-Gerät"
         },

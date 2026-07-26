@@ -1897,7 +1897,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 # Already imported into HA — prepend the ✅ marker.
                 options.append(SelectOptionDict(value=did, label=f"✅ {label}"))
             else:
-                # Either a bonded-but-unimported slot (🔒, ready to import)
+                # Either a bonded-but-unimported slot (🔐, ready to import)
                 # or an empty Mode-B slot in pair-mode (no icons). Both are
                 # selectable.
                 unconfigured_dids.append(did)
@@ -1970,7 +1970,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
         icons: list[str] = []
         if paired == "true":
-            icons.append("🔒")
+            icons.append("🔐")
         elif paired == "false":
             icons.append("🔓")
         icons.append("🟢" if connected else "⚪")

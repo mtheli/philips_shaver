@@ -479,9 +479,9 @@ const SCREENS = {
   esp_select_device: {
     render: () => dlg("Select BLE Device",
       `<p>This ESP bridge has multiple Philips devices connected. Select the device you want to add.</p>
-       <p>✅ already configured · 🔒 bonded · 🔓 unpaired · 🟢 online · ⚪ offline</p>
-       <div class="radio sel"><span class="dot"></span><span>🔒 ⚪ Bathroom Shaver — ${MAC}</span></div>
-       <div class="radio"><span class="dot"></span><span>🔒 ⚪ Beard Trimmer — ${MAC2}</span></div>
+       <p>✅ already configured · 🔐 bonded · 🔓 unpaired · 🟢 online · ⚪ offline</p>
+       <div class="radio sel"><span class="dot"></span><span>🔐 ⚪ Bathroom Shaver — ${MAC}</span></div>
+       <div class="radio"><span class="dot"></span><span>🔐 ⚪ Beard Trimmer — ${MAC2}</span></div>
        <div class="field" style="margin-top:6px"><div class="fhelp">Entries without status icons are empty bridges in pair-mode. Switch on the shaver you want to bond before submitting.</div></div>`,
       ["Submit"], meta("esp_select_device","config_flow.py:1627"),
       "Label priority: YAML <code>friendly_name</code> → advertised BLE name → slot id. Reuses the dropdown's probe results when they cover this ESP's slots; pairing and unpairing always re-fetch."),
