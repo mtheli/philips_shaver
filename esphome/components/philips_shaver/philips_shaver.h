@@ -11,6 +11,8 @@
 
 #include "coordinator.h"
 
+#include <vector>
+
 namespace esphome {
 namespace philips_shaver {
 
@@ -94,6 +96,16 @@ class PhilipsShaverStandalone : public esp32_ble_client::BLEClientBase {
   bool has_yaml_mac_{false};
   uint32_t pref_ns_{0};
   ESPPreferenceObject pref_;
+
+  // Node-wide registry of all standalone slots — the only way one slot can
+  // see whether an advertised address is already owned by another. The
+  // controller stores one bond per peer MAC, so two slots bonding the same
+  // device share a single bond: unpairing one silently drops the other's.
+  static std::vector<PhilipsShaverStandalone *> instances_;
+  // True if any OTHER slot already targets `addr`: bonded (address_ stays
+  // set even while the device sleeps) or mid-connect (DISCOVERED sets it).
+  // An idle, unbonded slot has address_ == 0 and never blocks.
+  bool address_in_use_by_other_(uint64_t addr) const;
 };
 
 }  // namespace philips_shaver

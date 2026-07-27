@@ -1,5 +1,20 @@
 # ESP Bridge Changelog
 
+## v1.14.0 — 2026-07-27
+
+- **A slot no longer bonds a device that another slot already owns.** In
+  pair-mode a slot grabbed the first shaver it matched by service UUID —
+  with no regard for the other slots on the node. If a second, already
+  bonded device happened to advertise inside that window (e.g. after its
+  hourly link drop), the armed slot could hijack it and save its identity,
+  leaving two slots pointing at one device. Since the controller keeps one
+  bond per peer MAC, that bond is shared: unpairing one slot then drops the
+  other's, cascading into repeated auth failures. Pair-mode now skips any
+  address a sibling slot already targets — bonded (even while the device
+  sleeps) or mid-connect — at both the discovery and the post-auth stage.
+  Only affects nodes running more than one slot; `MIN_BRIDGE_VERSION` stays
+  1.8.0.
+
 ## v1.13.0 — 2026-07-26
 
 - **Report a discovery window that ran on a passive scanner.** A pair or
