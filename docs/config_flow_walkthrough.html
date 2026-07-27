@@ -235,7 +235,7 @@
   <p class="eyebrow">philips_shaver · interactive walkthrough</p>
   <h1>Play through the config flow</h1>
   <p class="sub">One screen at a time, with every possible continuation below it — the normal path, conditional branches, errors (which stay in the dialog) and aborts. The breadcrumbs at the top lead back. Example data: XP9201 (i9000 Prestige) &amp; OneBlade QP4530 · ESP node <code>atom-s3r</code> with the slots <code>shaver</code> (“Bathroom Shaver”) and <code>oneblade</code> (“Beard Trimmer”).</p>
-  <p class="stamp">Last updated: 2026-07-22 · philips_shaver v0.24.0 — source references point at <code>config_flow.py</code> of that version.</p>
+  <p class="stamp">Last updated: 2026-07-27 · philips_shaver v0.26.0 — source references point at <code>config_flow.py</code> of that version.</p>
 
   <details class="index"><summary>Step index (S0–S20, A1–A4)</summary>
     <div class="indexgrid" id="index"></div>
@@ -276,6 +276,7 @@ const ERRORS = {
   pairing_failed: "Bluetooth pairing failed. Make sure the shaver is switched on and not connected to another device (phone / GroomTribe / OneBlade app). If it keeps failing, the shaver may still hold an old bond on its side — clear Bluetooth on the shaver (model-specific: long-press the power button until the Bluetooth LED clears, or unpair it in the app), then retry.",
   service_call_failed: "Could not arm pair-mode on the ESP bridge. The bridge may be offline or a too-old firmware version. Update the bridge to v1.8.0 or newer and retry.",
   pair_timeout: "No shaver appeared during the 60-second pair-mode window. Make sure the shaver is on and advertising, and try again.",
+  pair_timeout_passive_scanner: "<strong>No shaver appeared during the 60-second pair-mode window.</strong> The bridge <strong>scanned passively</strong> the whole time, so it could not see the shaver at all — a passive scan never asks for the scan response that carries the shaver's service UUID.<br><br><strong>What to do:</strong> set this ESPHome device's Bluetooth scanning mode to <strong>Active</strong> under <code>Settings &gt; Devices &amp; Services &gt; ESPHome &gt; Configure</code>, then try again.",
   pair_failed_stale_bond: "Pairing failed with repeated auth errors. The shaver still holds the previous bond on its side and is rejecting fresh pairing. Clear Bluetooth on the shaver (model-specific: long-press the power button until the BT LED clears, or unpair via the GroomTribe / OneBlade app), then retry.",
   no_esphome_devices: "No ESPHome devices found. Please set up an ESPHome device with the BLE bridge component first.",
   unknown: "Unexpected error. Check the logs (Settings → System → Logs) for details.",
@@ -584,6 +585,7 @@ const SCREENS = {
       ["main","Phase 1 done (armed) → scanning phase with a timed bar","wait_pair",{phase:"scanning"}],
       ["main","Event pair_complete → status screen + success banner","esp_bridge_status_connected",{variant:"paired"}],
       ["err","Event pair_timeout → back with an error","request_pair",{error:"pair_timeout"}],
+      ["err","pair_timeout with a passive scanner (Auto scanning, HA 2026.6+) → names the cause","request_pair",{error:"pair_timeout_passive_scanner"}],
       ["err","pair_failed (auth_max_failures — the shaver still holds its old bond)","request_pair",{error:"pair_failed_stale_bond"}],
       ["err","Arming fails (bridge offline / firmware &lt; 1.8.0)","request_pair",{error:"service_call_failed"}],
     ],
