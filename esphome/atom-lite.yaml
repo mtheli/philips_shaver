@@ -49,6 +49,13 @@ esp32_ble:
   max_notifications: 50                        # single device: 30
   max_connections: 5                           # single device: 4
 
+# Active scanning matters for pairing: the shaver advertises its service UUID
+# only in the scan response, which passive scanning never requests.
+# NOTE: with bluetooth_proxy enabled (below), Home Assistant controls the
+# scanning mode at runtime (device options → Bluetooth scanner mode, default
+# "Auto" since HA 2026.6) — these values only apply at boot and while HA is
+# disconnected. During pairing the integration requests an active scan window
+# on its own.
 esp32_ble_tracker:
   scan_parameters:
     active: true
