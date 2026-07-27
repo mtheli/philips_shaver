@@ -35,6 +35,7 @@ ERROR_KEYS = {
     "out_of_slots",
     "pair_failed_stale_bond",
     "pair_timeout",
+    "pair_timeout_passive_scanner",
     "pairing_failed",
     "service_call_failed",
     "unknown",
