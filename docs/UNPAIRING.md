@@ -30,6 +30,23 @@ also reset the pairing on the device:
   flashing blue.
   ([Philips Support](https://www.usa.philips.com/c-t/XC000020493/my-oneblade-360-connected-is-not-pairing-with-my-phone))
 
+## Last resort: Factory reset (30 seconds)
+
+If the shaver still refuses **every** pairing attempt after both steps above — it does
+not react to pairing requests from Home Assistant, the ESP32 bridge, *or* the official
+Philips app — the device may be stuck on a stale internal pairing state. A factory
+reset clears it ([Philips Support](https://www.philips.sa/en/c-f/XC000019877/i-cannot-connect-my-philips-shaver-to-the-groomtribe-app)):
+
+- Press and hold the on/off button for about **30 seconds**. This is different from the
+  10-second hold in Step 2, which only resets the Bluetooth pairing — keep holding well
+  past that point.
+- **OneBlade**: release the button **as soon as the light turns red** — do not keep
+  holding until the red light goes out again. The indicator then cycles
+  red → blue → red → white; once the cycle finishes, the reset is complete.
+
+After the factory reset the shaver accepts pairing requests again. Note that it may
+take a couple of minutes for the first connection to establish.
+
 ## Optional: Unpair from the HA host
 
 If you are switching from Direct Bluetooth to the ESP32 Bridge, also remove the pairing
