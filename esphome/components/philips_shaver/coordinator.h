@@ -166,6 +166,11 @@ class ShaverCoordinator {
   bool is_already_bonded_();
   void fire_ready_event_();
   void start_post_auth_setup_();
+  // Report a discovery window that ran to its end on a passive scanner.
+  // Shaver handles carry their service UUID only in the scan response,
+  // which a passive scan never asks for, so parse_device could not have
+  // matched at any point. Callers check scanner_ever_active_ first.
+  void warn_scanner_stayed_passive_(const char *window);
   // True while any ATT operation this coordinator issued is outstanding:
   // a HA-driven read, the encryption probe, a HA-driven characteristic
   // write, or the subscribe burst (notify registrations awaiting their
@@ -213,6 +218,14 @@ class ShaverCoordinator {
   bool scan_mode_active_{false};
   uint32_t scan_mode_until_ms_{0};
   std::set<std::string> scan_results_seen_;  // dedup by MAC
+  // Did the scanner run actively at any point during the current discovery
+  // window? Home Assistant may open its active window seconds after pair-mode
+  // is armed — measured ~8 s on the Sonicare, after its first attempts found
+  // every scanner busy — so a single check right after arming proves nothing.
+  // Only "never active for the whole window" is a real finding; it is what
+  // gets logged and what rides along in pair_timeout so HA can tell "no shaver
+  // answered" from "we could never have seen one".
+  bool scanner_ever_active_{false};
 
   // Unpair drain — short window after ble_unpair before the bridge is
   // re-armed. Lets the BLE stack finish close+disconnect+bond_remove

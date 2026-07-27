@@ -219,18 +219,34 @@ void ShaverCoordinator::on_loop(uint32_t now) {
       this->set_enabled_cb_(true);
   }
 
+  // Sample the scan mode for as long as a discovery window is open. Cheap
+  // (a member read), and it is the only way to tell a window that opened
+  // late from one that never opened at all — see scanner_ever_active_.
+  if (!this->scanner_ever_active_ &&
+      (this->pair_mode_active_ || this->scan_mode_active_)) {
+    auto *tracker = espbt::global_esp32_ble_tracker;
+    if (tracker != nullptr && tracker->get_scan_active())
+      this->scanner_ever_active_ = true;
+  }
+
   // Pair-mode timeout — disarm and emit pair_timeout. Mode B only; in
   // Mode A pair_mode_active_ is never set so this branch is dead.
   if (this->pair_mode_active_ && this->pair_mode_until_ms_ != 0 &&
       now >= this->pair_mode_until_ms_) {
     ESP_LOGW(this->log_tag_.c_str(),
-             "Pair-mode timeout — no brush found in window");
+             "Pair-mode timeout — no shaver found in window");
     this->pair_mode_active_ = false;
     this->pair_mode_until_ms_ = 0;
     this->target_mac_.clear();
+    if (!this->scanner_ever_active_)
+      this->warn_scanner_stayed_passive_("Pair-mode");
+    // Carry the scanner state so Home Assistant can tell "no shaver answered"
+    // apart from "we were scanning passively and could never have seen one".
     this->emit_(EVENT_STATUS,
                 {
                     {"status", "pair_timeout"},
+                    {"scanner_passive",
+                     this->scanner_ever_active_ ? "false" : "true"},
                     {"version", PHILIPS_SHAVER_VERSION},
                 });
     if (this->set_enabled_cb_)
@@ -243,10 +259,15 @@ void ShaverCoordinator::on_loop(uint32_t now) {
     char count_str[8];
     snprintf(count_str, sizeof(count_str), "%d",
              (int) this->scan_results_seen_.size());
+    bool found_nothing = this->scan_results_seen_.empty();
     ESP_LOGI(this->log_tag_.c_str(),
              "Scan complete — %s unique result(s)", count_str);
     this->scan_mode_active_ = false;
     this->scan_mode_until_ms_ = 0;
+    // An empty result on a passive scanner says nothing about what is in
+    // range — explain that rather than let it read as "no shaver nearby".
+    if (found_nothing && !this->scanner_ever_active_)
+      this->warn_scanner_stayed_passive_("Scan-mode");
     this->emit_(EVENT_STATUS,
                 {
                     {"status", "scan_complete"},
@@ -1412,6 +1433,21 @@ void ShaverCoordinator::start_post_auth_setup_() {
 
 // ── Mode B: pair-mode / scan / unpair / pair-mac ─────────────────────────────
 
+void ShaverCoordinator::warn_scanner_stayed_passive_(const char *window) {
+  // Home Assistant owns this setting whenever bluetooth_proxy is compiled in:
+  // it pins the scanner per device and overrides the YAML scan_parameters at
+  // runtime, so pointing the user at the YAML alone would be misleading.
+  ESP_LOGW(this->log_tag_.c_str(),
+           "%s ran its whole window with the BLE scanner PASSIVE — the "
+           "shaver could not be discovered. Philips shaver handles send "
+           "their service UUID only in the scan response, which a passive "
+           "scan never requests. Set this device's Bluetooth scanning mode "
+           "to Active in Home Assistant (Settings > Devices & Services > "
+           "ESPHome > Configure); it overrides the esp32_ble_tracker "
+           "scan_parameters at runtime.",
+           window);
+}
+
 void ShaverCoordinator::set_pair_mode(bool enable, uint32_t timeout_s) {
   if (this->mode_ != MODE_STANDALONE) {
     ESP_LOGW(this->log_tag_.c_str(),
@@ -1434,6 +1470,7 @@ void ShaverCoordinator::set_pair_mode(bool enable, uint32_t timeout_s) {
     timeout_s = 60;
   this->pair_mode_active_ = true;
   this->pair_mode_until_ms_ = millis() + timeout_s * 1000;
+  this->scanner_ever_active_ = false;
   ESP_LOGI(this->log_tag_.c_str(), "Pair-mode armed for %us%s", (unsigned) timeout_s,
            this->target_mac_.empty()
                ? ""
@@ -1592,6 +1629,7 @@ void ShaverCoordinator::set_scan_mode(uint32_t timeout_s) {
   this->scan_mode_active_ = true;
   this->scan_mode_until_ms_ = millis() + timeout_s * 1000;
   this->scan_results_seen_.clear();
+  this->scanner_ever_active_ = false;
   ESP_LOGI(this->log_tag_.c_str(), "Scan-mode armed for %us", (unsigned) timeout_s);
   if (this->set_enabled_cb_)
     this->set_enabled_cb_(true);

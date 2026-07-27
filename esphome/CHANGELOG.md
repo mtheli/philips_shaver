@@ -1,5 +1,20 @@
 # ESP Bridge Changelog
 
+## v1.13.0 — 2026-07-26
+
+- **Report a discovery window that ran on a passive scanner.** A pair or
+  scan window can only match a shaver through its service UUID, and the
+  handle sends that UUID only in the scan response — which a passive scan
+  never requests. Home Assistant changed its default Bluetooth scanning
+  mode to "Auto" in 2026.6 and migrates an active proxy into it, so a
+  bridge that had been pairing fine can silently stop finding anything.
+  The bridge now samples the scan mode while a window is open and, if it
+  stayed passive the whole time, logs how to switch the device to Active
+  and rides the state along in the `pair_timeout` event
+  (`scanner_passive`) so Home Assistant can explain the failure. Purely
+  additive — `MIN_BRIDGE_VERSION` stays `1.8.0`, and older bridges that
+  omit the field degrade to the previous generic message.
+
 ## v1.12.0 — 2026-07-22
 
 - **Build environment in `ble_get_info`.** Info events now carry
