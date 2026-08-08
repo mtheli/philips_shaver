@@ -3,6 +3,7 @@ from pathlib import Path
 
 import esphome.codegen as cg
 import esphome.config_validation as cv
+import esphome.final_validate as fv
 from esphome.components import binary_sensor, ble_client, esp32_ble_tracker
 from esphome.const import CONF_ID, CONF_MAC_ADDRESS
 
@@ -116,7 +117,29 @@ CONFIG_SCHEMA = _validate_config
 
 
 def _final_validate(config):
-    """Validate that bridge_id is set when multiple instances are configured."""
+    """Check the required api flags, and bridge_id when multiple instances exist."""
+    # ShaverBridge registers its HA services via CustomAPIDevice
+    # (register_service) and pushes events via fire_homeassistant_event. Since
+    # ESPHome 2025.7.0 both code paths are compiled in only when the matching
+    # api flags are set — otherwise the build fails inside the api headers with
+    # no reference to this component, leaving the user to guess. The bridge is
+    # instantiated in every mode, so the flags are unconditionally required.
+    api = fv.full_config.get().get("api") or {}
+    missing = [
+        flag
+        for flag in ("custom_services", "homeassistant_services")
+        if not api.get(flag, False)
+    ]
+    if missing:
+        raise cv.Invalid(
+            f"philips_shaver requires "
+            f"{' and '.join(f'`{f}: true`' for f in missing)} under `api:` "
+            f"(required since ESPHome 2025.7.0). Without "
+            f"{'them' if len(missing) > 1 else 'it'} the bridge cannot register "
+            f"its services and the build fails in the api headers. Add:\n\n"
+            f"api:\n  custom_services: true\n  homeassistant_services: true"
+        )
+
     if isinstance(config, list) and len(config) > 1:
         for i, entry in enumerate(config):
             bid = entry.get(CONF_BRIDGE_ID) or entry.get(CONF_DEVICE_ID_LEGACY, "")

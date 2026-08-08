@@ -11,8 +11,14 @@ esp32:
   framework:
     type: esp-idf
     sdkconfig_options:
-      CONFIG_BT_GATTC_MAX_CACHE_CHAR: "100"   # default 40; shaver has ~66 attributes
-      CONFIG_BT_GATTC_NOTIF_REG_MAX: "30"     # default 5; we subscribe to 17+ chars
+      # ESPHome has no option for MAX_CACHE_CHAR — leave this line out and the
+      # ESP-IDF default of 40 stands, well under the shaver's ~66 attributes.
+      CONFIG_BT_GATTC_MAX_CACHE_CHAR: "100"
+      # NOTIF_REG_MAX is not left at the ESP-IDF default of 5: esp32_ble writes
+      # it from its max_notifications option, which defaults to 12. That is
+      # still short of the 17+ characteristics we subscribe to, so raising it
+      # is required either way. Kept matched to max_notifications below.
+      CONFIG_BT_GATTC_NOTIF_REG_MAX: "30"
 
 logger:
   level: DEBUG
