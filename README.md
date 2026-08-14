@@ -56,7 +56,7 @@ See [Configuration](#configuration) for setup instructions.
 | [XP9201](https://www.usa.philips.com/c-p/XP9201_88/i9000-prestige-wet-dry-electric-shaver-with-senseiq) | :white_check_mark: | :white_check_mark: | Maintainer |
 | [XP9202](https://www.philips.com.au/c-p/XP9202_33/i9000-prestige-wet-dry-electric-shaver-with-skiniq) | :white_check_mark: | | Community ([#11](https://github.com/mtheli/philips_shaver/issues/11)) |
 | [XP9400](https://www.usa.philips.com/c-p/XP9400_89/i9000-prestige-ultra-wet-dry-electric-shaver-with-senseiq-pr) | :white_check_mark: | :white_check_mark: | Community ([#1](https://github.com/mtheli/philips_shaver/issues/1), [#3](https://github.com/mtheli/philips_shaver/issues/3)) |
-| [XP9402](https://www.philips.com.au/c-p/XP9402_27/i9000-prestige-ultra-wet-dry-electric-shaver-with-skiniq-pro) | :white_check_mark: | | Community ([#11](https://github.com/mtheli/philips_shaver/issues/11)) |
+| [XP9402](https://www.philips.com.au/c-p/XP9402_27/i9000-prestige-ultra-wet-dry-electric-shaver-with-skiniq-pro) | :white_check_mark: | :white_check_mark: | Community ([#11](https://github.com/mtheli/philips_shaver/issues/11), [#16](https://github.com/mtheli/philips_shaver/issues/16)) |
 | [XP9405](https://www.usa.philips.com/c-p/XP9405_84/i9000-prestige-ultra-wet-dry-electric-shaver-with-senseiq-pr) | :white_check_mark: | | Community ([forum](https://community.home-assistant.io/t/has-anyone-integrated-philips-s9000-with-home-assistant/592101/6)) |
 | **OneBlade 360** | | | |
 | [QP4530](https://www.usa.philips.com/c-p/QP4530_90/oneblade-360-with-connectivity-face) | :white_check_mark: | :white_check_mark: | Maintainer |
