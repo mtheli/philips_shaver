@@ -165,7 +165,7 @@ You can use the **short form** (e.g. `0x0319` or `0319`) — the integration aut
 | `0x0104` | Motor RPM | uint16 LE | Raw value (÷ 3.036 = actual RPM) |
 | `0x010A` | Device State | uint8 | 1=off, 2=shaving, 3=charging |
 | `0x010C` | Travel Lock | uint8 | 0=unlocked, 1=locked |
-| `0x010F` | Shaving Time | uint16 LE | Last session duration (seconds) |
+| `0x010F` | Shaving Time | uint16 LE | Run time of the current usage period (seconds); the device notifies 0 thirty minutes after the last run |
 | `0x0110` | System Notifications | uint32 LE | Bitfield: bit 0=motor blocked, 1=clean reminder, 2=head replacement, 3=battery overheated, 4=unplug required |
 | `0x0302` | Capabilities | uint32 LE | Capability bitfield |
 | `0x0305` | Motion Type | uint8 | 0=none, 1=small circle, 4=large stroke |

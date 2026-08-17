@@ -71,7 +71,7 @@ The two modes are mutually exclusive — polling is skipped while a live connect
 | Motor RPM Min | `0x011B` | READ | uint16 LE | Minimum motor RPM (raw, ÷ 3.036) |
 | Travel Lock | `0x010C` | NOTIFY, READ | uint8 | 0=unlocked, 1=locked |
 | Blade Replacement | `0x010E` | READ | uint8 | Blade replacement trigger |
-| Shaving Time | `0x010F` | NOTIFY, READ | uint16 LE | Last session duration (seconds) |
+| Shaving Time | `0x010F` | NOTIFY, READ | uint16 LE | [Last session duration (seconds)](#shaving-time-0x8d56010f) |
 | System Notifications | `0x0110` | NOTIFY, READ, WRITE | 4 bytes | System notification flags |
 | Head Remaining | `0x0117` | NOTIFY, READ | uint8 | Shaver head remaining life (0–100%) |
 | Head Remaining Minutes | `0x0118` | NOTIFY, READ | uint16 LE | Shaver head remaining life (minutes) |
@@ -131,6 +131,26 @@ Present only on OneBlade devices (e.g. QP4530). Not available on regular shavers
 | 1 | Off |
 | 2 | Shaving |
 | 3 | Charging |
+
+### Shaving Time (0x8d56010f)
+
+Seconds of motor run time, accumulated over the current usage period. Several
+runs with pauses in between add up instead of starting over (55 → 70 → 81 →
+90 → 102 → 108 → 124 across twelve minutes on an XP9201).
+
+The device closes the period itself: **30 minutes after the last run it
+notifies `0`**, unprompted — measured at 30:02 on an XP9201 and 30:03 on a
+QP4530. The value held right before that reset is the final total of that
+session.
+
+How the field is published during a run differs per model: an XP9201 notifies
+every second while the motor turns, a QP4530 only on the transition to
+motor-off, so its value stands still mid-run.
+
+Because of the reset, a plain read outside a session usually answers `0`. The
+sensor therefore passes the value through while the device state is `shaving`
+(the `0` at the start of a session is real data) and holds the last reported
+duration once the handle is idle.
 
 ### App Handle Settings (0x0319)
 
