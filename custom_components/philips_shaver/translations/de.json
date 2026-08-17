@@ -249,7 +249,7 @@
         "name": "Tage seit letzter Nutzung"
       },
       "shaving_time": {
-        "name": "Dauer der letzten Rasur"
+        "name": "Rasurdauer"
       },
       "device_state": {
         "name": "Status",

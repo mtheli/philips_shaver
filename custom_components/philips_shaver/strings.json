@@ -249,7 +249,7 @@
         "name": "Days Since Last Use"
       },
       "shaving_time": {
-        "name": "Last Session Duration"
+        "name": "Shave Duration"
       },
       "device_state": {
         "name": "State",
