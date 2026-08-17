@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -391,7 +391,21 @@ class PhilipsDaysSinceLastUsedSensor(PhilipsShaverEntity, SensorEntity):
 
 
 
-class PhilipsShavingTimeSensor(PhilipsShaverEntity, SensorEntity):
+class PhilipsShavingTimeSensor(PhilipsShaverEntity, RestoreEntity, SensorEntity):
+    """Motor run time of the current shave, in seconds.
+
+    The device accumulates the field over a usage period — several runs with
+    pauses in between add up — and closes that period itself by notifying 0
+    thirty minutes after the last run. The value held right before that reset
+    is the final duration of that shave. Following the reset would leave the
+    sensor at 0 whenever anyone actually looks at it, so once the handle is
+    idle the last reported duration is held instead.
+
+    While the handle runs the raw value is passed through unchanged,
+    including the 0 at the start of a session — consumers that seed a live
+    timer from this sensor must not start counting at the previous result.
+    """
+
     _attr_translation_key = "shaving_time"
     _attr_native_unit_of_measurement = UnitOfTime.SECONDS
     _attr_device_class = SensorDeviceClass.DURATION
@@ -404,10 +418,55 @@ class PhilipsShavingTimeSensor(PhilipsShaverEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._device_id}_shaving_time"
+        self._last_duration: int | None = None
+
+    async def async_added_to_hass(self) -> None:
+        """Seed the held duration from the persisted or the previous state."""
+        await super().async_added_to_hass()
+
+        # Coordinator data is restored from the store before entities are
+        # added, so a duration that survived the restart is already there.
+        if stored := self._reported_duration():
+            self._last_duration = stored
+            return
+
+        # The store can hold the device's own 0 if the reset happened right
+        # before shutdown — the last entity state still has the duration.
+        last_state = await self.async_get_last_state()
+        if last_state and last_state.state not in (None, "unknown", "unavailable"):
+            try:
+                restored = int(float(last_state.state))
+            except (ValueError, TypeError):
+                return
+            if restored:
+                self._last_duration = restored
+
+    def _reported_duration(self) -> int | None:
+        """Return the value the device last reported, if it is usable."""
+        value = self.coordinator.data.get("shaving_time")
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        # Keeps the held duration current even while the device still
+        # reports it, so it survives the device's later reset — and, through
+        # the restored state, an HA restart in between.
+        if duration := self._reported_duration():
+            self._last_duration = duration
+        super()._handle_coordinator_update()
 
     @property
     def native_value(self) -> int | None:
-        return self.coordinator.data.get("shaving_time")
+        duration = self._reported_duration()
+        if self.coordinator.data.get("device_state") == "shaving":
+            # Live count-up — the 0 at the start of a session is real data.
+            return duration
+        return duration or self._last_duration
 
 
 
