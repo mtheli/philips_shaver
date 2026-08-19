@@ -62,6 +62,12 @@ quietly do not qualify — an update prompt without a real need is noise.
 symbol names (`MIN_BRIDGE_VERSION` is the exception — it is the one value a
 reader may want to verify), and documentation-only changes.
 
+**Credit belongs in the notes.** Name whoever reported the problem, tested
+the fix or supplied the logs, with `@handle` and the issue number, in the
+bullet their work belongs to. The `@` is not decoration: it notifies them
+and links their profile, and it is how the release and the issue thread
+explain each other.
+
 When an external change caused the release, link it. A reader who upgraded
 Home Assistant and then saw something break deserves to know the two are
 connected — a release that fixes pairing under Home Assistant's Auto
@@ -118,6 +124,17 @@ For the same reason, never add an entry to a section that is already released:
 the changelog is read live from `master`, so it would surface immediately in
 everyone's release-notes dialog.
 
+## The card ships inside the release
+
+The Lovelace card lives in its own repository (`mtheli/philips_shaver_card`)
+but is served from `custom_components/philips_shaver/www/`, and it carries
+the integration's version rather than one of its own. A release therefore
+ships whatever bundle is committed there — a card fix that was never synced
+is simply not in the release, however green the card repo looks.
+
+Card changes belong in the notes like any other change. To the reader there
+is one product: they update the integration and the card changes with it.
+
 ## Cutting the release
 
 1. Content commits first, pushed and green.
@@ -130,4 +147,8 @@ everyone's release-notes dialog.
    opening a second section.
 4. `custom_components/philips_shaver/manifest.json` — new integration
    version, as its own commit: `release: vX.Y.Z`.
-5. Tag `vX.Y.Z`, push, then `gh release create` with the notes above.
+5. `scripts/sync_card.sh` — rebuild the card against the bumped manifest
+   version and commit the refreshed `custom_components/philips_shaver/www/`
+   bundle. It has to run *after* the bump: the script reads the version out
+   of the manifest and stamps it into the bundle.
+6. Tag `vX.Y.Z`, push, then `gh release create` with the notes above.
