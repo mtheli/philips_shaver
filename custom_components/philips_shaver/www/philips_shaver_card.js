@@ -646,7 +646,7 @@ function $d8078e452c66bdbe$export$625550452a3fa3ec(hass, key) {
 
 
 // Written by the release sync script (philips_shaver scripts/sync_card.sh).
-const $8ee5ce714273e53b$export$d5e7ce6d07daf10f = "0.20.0";
+const $8ee5ce714273e53b$export$d5e7ce6d07daf10f = "0.28.1";
 const $8ee5ce714273e53b$export$9b657414b7dffe40 = "bundled";
 
 
