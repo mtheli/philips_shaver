@@ -26,6 +26,7 @@ from .const import (
     CHAR_SYSTEM_NOTIFICATIONS,
 )
 from .coordinator import PhilipsShaverCoordinator, async_remove_stored_data
+from .utils import async_get_own_device, device_id_for_entry
 from .frontend import (
     async_ensure_card_resource,
     async_register_card,
@@ -140,19 +141,15 @@ def _async_link_via_esp_device(hass: HomeAssistant, entry: ConfigEntry) -> None:
         return
 
     # Find our shaver device and set via_device
-    # Device identifier is shaver MAC (preferred) or esp_device_name (fallback)
-    shaver_mac = entry.data.get(CONF_ADDRESS)
-    device_id = shaver_mac if shaver_mac else esp_device_name
-    shaver_device = dev_reg.async_get_device(
-        identifiers={(DOMAIN, device_id)}
-    )
+    device_id = device_id_for_entry(entry)
+    shaver_device = async_get_own_device(dev_reg, device_id, entry.entry_id)
     if shaver_device:
         dev_reg.async_update_device(shaver_device.id, via_device_id=esp_device.id)
         _LOGGER.info("Linked shaver device to ESP bridge '%s'", esp_device_name)
 
     # Also link the bridge sub-device to the ESPHome device
-    bridge_device = dev_reg.async_get_device(
-        identifiers={(DOMAIN, f"{device_id}_bridge")}
+    bridge_device = async_get_own_device(
+        dev_reg, f"{device_id}_bridge", entry.entry_id
     )
     if bridge_device:
         dev_reg.async_update_device(bridge_device.id, via_device_id=esp_device.id)
@@ -177,6 +174,32 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+def _async_link_sub_devices(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Hang the Connection sub-device under the shaver.
+
+    DeviceInfo(via_device=…) is deprecated since HA 2026.8 and its replacement,
+    via_device_id, needs the parent's registry id — which the entities cannot
+    know when they are built. The devices exist once the platforms are set up,
+    so the link is made here instead. Only an unset link is filled: the ESP
+    bridge path moves the Connection device under the ESPHome node, and that
+    must survive a restart.
+    """
+    device_id = device_id_for_entry(entry)
+    dev_reg = dr.async_get(hass)
+    main_device = async_get_own_device(dev_reg, device_id, entry.entry_id)
+    if main_device is None:
+        _LOGGER.debug(
+            "Shaver device '%s' not in registry, Connection left unlinked",
+            device_id,
+        )
+        return
+    sub_device = async_get_own_device(
+        dev_reg, f"{device_id}_bridge", entry.entry_id
+    )
+    if sub_device is not None and sub_device.via_device_id is None:
+        dev_reg.async_update_device(sub_device.id, via_device_id=main_device.id)
+
+
 def _async_apply_yaml_area(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Fill the device's area_id from the ESP YAML ``area:`` when unset.
 
@@ -195,7 +218,7 @@ def _async_apply_yaml_area(hass: HomeAssistant, entry: ConfigEntry) -> None:
         return
 
     dev_reg = dr.async_get(hass)
-    device = dev_reg.async_get_device(identifiers={(DOMAIN, device_id)})
+    device = async_get_own_device(dev_reg, device_id, entry.entry_id)
     if device is None:
         return
 
@@ -264,6 +287,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator.async_set_updated_data(coordinator.data or {})
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    _async_link_sub_devices(hass, entry)
 
     # Link shaver device to ESP bridge device via device registry
     if transport_type == TRANSPORT_ESP_BRIDGE:

@@ -11,6 +11,7 @@ from homeassistant.helpers import device_registry as dr
 
 from .coordinator import PhilipsShaverCoordinator
 from .const import DOMAIN, CONF_ADDRESS, CONF_TRANSPORT_TYPE, TRANSPORT_ESP_BRIDGE, CONF_ESP_DEVICE_NAME, CONF_ESP_BRIDGE_ID, CONF_DEVICE_NAME
+from .utils import device_id_for_entry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,10 +34,7 @@ class PhilipsShaverEntity(CoordinatorEntity[PhilipsShaverCoordinator]):
         )
 
         # Device identifier: shaver MAC (preferred) or esp_device_name fallback
-        if self._is_esp_bridge:
-            self._device_id = entry.data.get(CONF_ADDRESS) or entry.data[CONF_ESP_DEVICE_NAME]
-        else:
-            self._device_id = entry.data["address"]
+        self._device_id = device_id_for_entry(entry)
 
         # User-chosen name (set during setup). For pre-name entries fall back
         # to a bridge_id-disambiguated default so multi-device households stay
@@ -126,7 +124,6 @@ class PhilipsConnectionEntity(PhilipsShaverEntity):
             manufacturer=manufacturer,
             translation_key="connection",
             translation_placeholders={"device_name": self._device_name},
-            via_device=(DOMAIN, self._device_id),
         )
 
     @property

@@ -93,6 +93,8 @@ from .const import (
     SHAVING_MODES,
 )
 from .utils import (
+    async_get_own_device,
+    device_id_for_entry,
     parse_color,
     parse_shaving_settings_to_dict,
     parse_capabilities,
@@ -720,9 +722,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not model and not firmware and not serial and not hardware:
             return
         dev_reg = dr.async_get(self.hass)
-        device = dev_reg.async_get_device(
-            identifiers={(DOMAIN, self.address)}
-        )
+        device = async_get_own_device(dev_reg, self.address, self.entry.entry_id)
         if device is None:
             return
 
@@ -1219,10 +1219,10 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ir.async_delete_issue(self.hass, DOMAIN, "esp_bridge_outdated")
 
         # Update sw_version on the bridge sub-device
-        device_id = self.entry.data.get(CONF_ESP_DEVICE_NAME, "")
+        device_id = device_id_for_entry(self.entry)
         dev_reg = dr.async_get(self.hass)
-        bridge_device = dev_reg.async_get_device(
-            identifiers={(DOMAIN, f"{device_id}_bridge")}
+        bridge_device = async_get_own_device(
+            dev_reg, f"{device_id}_bridge", self.entry.entry_id
         )
         if bridge_device:
             dev_reg.async_update_device(bridge_device.id, sw_version=version)

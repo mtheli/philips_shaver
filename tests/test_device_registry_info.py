@@ -25,6 +25,7 @@ from custom_components.philips_shaver.const import (
     TRANSPORT_ESP_BRIDGE,
 )
 from custom_components.philips_shaver.coordinator import PhilipsShaverCoordinator
+from custom_components.philips_shaver import _async_link_sub_devices
 from custom_components.philips_shaver.entity import PhilipsConnectionEntity
 
 ADDRESS = "AA:BB:CC:DD:EE:FF"
@@ -198,8 +199,9 @@ def test_connection_sub_device_links_to_the_main_device(hass) -> None:
     """With direct BLE nothing rewires the Connection sub-device later.
 
     The ESP path re-parents it to the ESP host after setup, but on a local
-    adapter the declared via_device is the only parent link — without it the
-    sub-device floats around unattached in the device list.
+    adapter the link made after setup is the only parent link — without it the
+    sub-device floats around unattached in the device list. DeviceInfo carries
+    no parent any more: its via_device tuple is deprecated since HA 2026.8.
     """
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -210,10 +212,20 @@ def test_connection_sub_device_links_to_the_main_device(hass) -> None:
     )
     entry.add_to_hass(hass)
     coordinator = PhilipsShaverCoordinator(hass, entry, StubTransport())
+    info = PhilipsConnectionEntity(coordinator, entry)._attr_device_info
+    assert "via_device" not in info
 
-    entity = PhilipsConnectionEntity(coordinator, entry)
+    reg = dr.async_get(hass)
+    main = reg.async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={(DOMAIN, ADDRESS)}
+    )
+    connection = reg.async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers=info["identifiers"]
+    )
 
-    assert entity._attr_device_info["via_device"] == (DOMAIN, ADDRESS)
+    _async_link_sub_devices(hass, entry)
+
+    assert reg.async_get(connection.id).via_device_id == main.id
 
 
 def test_connection_sub_device_name_is_translatable(hass) -> None:

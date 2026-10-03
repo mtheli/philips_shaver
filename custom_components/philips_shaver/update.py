@@ -41,6 +41,7 @@ from .const import (
 )
 from .coordinator import PhilipsShaverCoordinator
 from .entity import PhilipsConnectionEntity
+from .utils import async_get_own_device
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -89,8 +90,8 @@ class ShaverBridgeUpdate(PhilipsConnectionEntity, UpdateEntity):
         if live:
             return live
         dev_reg = dr.async_get(self.hass)
-        device = dev_reg.async_get_device(
-            identifiers={(DOMAIN, f"{self._device_id}_bridge")}
+        device = async_get_own_device(
+            dev_reg, f"{self._device_id}_bridge", self.entry.entry_id
         )
         return device.sw_version if device else None
 

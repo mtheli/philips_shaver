@@ -3,6 +3,37 @@ import struct
 import time
 from dataclasses import dataclass
 
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers import device_registry as dr
+
+from .const import CONF_ADDRESS, CONF_ESP_DEVICE_NAME, DOMAIN
+
+
+def device_id_for_entry(entry: ConfigEntry) -> str:
+    """The identifier our devices are registered under.
+
+    The shaver's MAC when known; a bridge entry set up before the MAC was
+    learned falls back to the ESP device name. Entities and registry lookups
+    must agree on this, or a lookup silently finds nothing.
+    """
+    return entry.data.get(CONF_ADDRESS) or entry.data[CONF_ESP_DEVICE_NAME]
+
+
+def async_get_own_device(
+    dev_reg: dr.DeviceRegistry, identifier: str, entry_id: str
+) -> dr.DeviceEntry | None:
+    """Return the device with ``(DOMAIN, identifier)`` owned by this entry.
+
+    async_get_device is deprecated since HA 2026.9 and logs a warning on every
+    call: identifiers are only unique within a config entry, so a lookup
+    across entries can be ambiguous. async_get_device_by_identifier scopes the
+    lookup to the entry. It only exists from 2026.8 on; older cores have no
+    split devices, so the plain lookup is correct there.
+    """
+    if hasattr(dev_reg, "async_get_device_by_identifier"):
+        return dev_reg.async_get_device_by_identifier((DOMAIN, identifier), entry_id)
+    return dev_reg.async_get_device(identifiers={(DOMAIN, identifier)})
+
 
 def parse_color(value: bytes | None):
     """Parse Philips RGBA into an (r, g, b) tuple."""
