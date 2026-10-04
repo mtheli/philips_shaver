@@ -47,7 +47,6 @@ DYNAMIC_BLOCKS = {
     "confirm_alert_aborted",
     "confirm_alert_failed",
     "confirm_warn_proxy",
-    "confirm_warn_proxy_local",
     "esp_status_read_failed",
     "esp_status_read_error",
 }

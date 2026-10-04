@@ -82,16 +82,16 @@ def test_proxy_via_and_hard_warning(monkeypatch) -> None:
     assert "ESP32 bridge" in warning
 
 
-def test_proxy_preferred_with_local_fallback_hint(monkeypatch) -> None:
+def test_local_direct_route_wins_over_stronger_proxy(monkeypatch) -> None:
     _patch_paths(monkeypatch, [
         {"name": "atom-lite", "rssi": -64, "is_local": False},
         {"name": "hci0 (00:0A:CD:46:B2:2D)", "rssi": -82, "is_local": True},
     ])
     via, variant, values = _flow()._transport_lines()
     warning = _warning(variant, values)
-    assert via == " via **Bluetooth proxy** (atom-lite, -64 dBm)"
-    assert "<b>hci0</b>" in warning
-    assert "strongest signal" in warning
+    assert via == " via **Direct Bluetooth** (hci0, -82 dBm)"
+    assert variant == ""
+    assert warning == ""
 
 
 def test_local_strongest_wins_over_weaker_proxy(monkeypatch) -> None:

@@ -103,6 +103,8 @@ from .transport import (
     describe_available_paths,
     describe_connection_path,
     is_local_bluez_connection,
+    local_bluez_client_class,
+    local_bluez_device_from_address,
     slot_changed_at,
 )
 from .exceptions import (
@@ -646,9 +648,24 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             )
             raise DeviceAsleepException
 
-        device = async_ble_device_from_address(self.hass, address)
+        # "Direct Bluetooth" means the Home Assistant host adapter.
+        # Do not let HA's normal RSSI-based connection ranking escape to a
+        # stronger stock ESPHome proxy, whose bond is unrelated to BlueZ.
+        device = local_bluez_device_from_address(self.hass, address)
         if not device:
-            raise DeviceNotFoundException("BLE device not found")
+            paths = describe_available_paths(self.hass, address)
+            proxy = next((p for p in paths if not p["is_local"]), None)
+            if proxy is not None:
+                self._probe_via_proxy = True
+                self._probe_proxy_name = self._short_scanner(proxy)
+                raise NotPairedException(
+                    "Device is visible only through a standard Bluetooth proxy"
+                )
+            raise DeviceNotFoundException(
+                "BLE device not found on a local Bluetooth adapter"
+            )
+        self._probe_via_proxy = False
+        self._probe_proxy_name = None
 
         client: BleakClient | None = None
         try:
@@ -668,7 +685,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             )
             try:
                 client = await establish_connection(
-                    BleakClient, device, "philips_shaver",
+                    local_bluez_client_class(), device, "philips_shaver",
                     use_services_cache=True, timeout=30.0,
                 )
             finally:
@@ -676,23 +693,20 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
             if not client.is_connected:
                 raise CannotConnectException("BLE connection failed")
+
+            connection_path = describe_connection_path(self.hass, client, device)
+            if not is_local_bluez_connection(client):
+                raise CannotConnectException(
+                    f"Direct Bluetooth connection was routed through "
+                    f"{connection_path} instead of a local adapter"
+                )
+
             _LOGGER.info("Connected to %s, address=%s", device.name, address)
             self._bump_progress(0.4)
 
-            capabilities["connection_path"] = describe_connection_path(
-                self.hass, client, device
-            )
-            # Remember which transport carried this probe: a later
-            # NotPairedException must route to the matching pairing
-            # dialog (host instructions vs. proxy guidance) and decide
-            # whether the D-Bus pairing machinery applies at all.
-            self._probe_via_proxy = not is_local_bluez_connection(client)
-            # Scanner names carry the adapter MAC in parentheses — strip it
-            # for the dialog (same as _short_scanner in the preview).
-            self._probe_proxy_name = (
-                capabilities["connection_path"].split(" (")[0]
-                if self._probe_via_proxy else None
-            )
+            capabilities["connection_path"] = connection_path
+            self._probe_via_proxy = False
+            self._probe_proxy_name = None
             _LOGGER.info(
                 "%s: capabilities probe connected via %s",
                 address,
@@ -1028,7 +1042,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             # scanner is the likely carrier — the BlueZ bond state says
             # nothing about a proxy-carried connection.
             paths = describe_available_paths(self.hass, address)
-            likely_proxy = bool(paths) and not paths[0]["is_local"]
+            has_local = any(bool(p["is_local"]) for p in paths)
+            likely_proxy = bool(paths) and not has_local
             if not likely_proxy:
                 from .dbus_pairing import is_dbus_available, async_is_device_paired
 
@@ -1100,9 +1115,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         a standard Bluetooth proxy cannot complete — pairing over one
         fails outright, so the warning is unconditional and hard.
 
-        habluetooth routes by signal strength, so the strongest scanner
-        is only the *likely* carrier; recomputed each render so the
-        ranking stays current.
+        Direct Bluetooth deliberately prefers a local HA Host adapter.
+        A stock proxy is shown only when no usable local path is available.
         """
         address = self.discovery_info.address if self.discovery_info else ""
         paths = describe_available_paths(self.hass, address)
@@ -1114,22 +1128,22 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         def _rssi(p: dict) -> str:
             return f" ({p['rssi']} dBm)" if p["rssi"] is not None else ""
 
+        local = next((p for p in paths if p["is_local"]), None)
+        if local is not None:
+            local_name = self._short_scanner(local)
+            local_rssi = (
+                f", {local['rssi']} dBm" if local["rssi"] is not None else ""
+            )
+            return (
+                f" via **Direct Bluetooth** ({local_name}{local_rssi})",
+                "",
+                empty,
+            )
+
         best = paths[0]
         best_name = self._short_scanner(best)
         best_rssi = f", {best['rssi']} dBm" if best["rssi"] is not None else ""
-
-        if best["is_local"]:
-            via = f" via **Direct Bluetooth** ({best_name}{best_rssi})"
-            return via, "", empty
-
         via = f" via **Bluetooth proxy** ({best_name}{best_rssi})"
-
-        # Markdown is not parsed inside an HTML block, so the warning uses
-        # <b>/<br> for emphasis and paragraph breaks.
-        # Only names, signal strengths and the markup ha-markdown needs
-        # inside an HTML block travel as values; the wording itself lives
-        # in the translations.
-        local = next((p for p in paths if p["is_local"]), None)
         values = {
             "proxy_name": f"<b>{best_name}</b>",
             "proxy_rssi": _rssi(best),
@@ -1137,11 +1151,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             "local_rssi": "",
             "nl": "<br><br>",
         }
-        if local is None:
-            return via, "proxy", values
-        values["local_name"] = f"<b>{self._short_scanner(local)}</b>"
-        values["local_rssi"] = _rssi(local)
-        return via, "proxy_local", values
+        return via, "proxy", values
 
     # ------------------------------------------------------------------
     # Direct BLE probe as a progress task (discovery + manual + pair)
@@ -1432,13 +1442,16 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._manual_address_entry = True
             else:
                 address = raw.upper()
-                await self.async_set_unique_id(address)
+                await self.async_set_unique_id(
+                    address, raise_on_progress=False
+                )
                 self._abort_if_already_configured()
 
                 # Quick D-Bus pre-check (same as bluetooth_confirm path);
                 # skipped when a remote scanner is the likely carrier.
                 paths = describe_available_paths(self.hass, address)
-                likely_proxy = bool(paths) and not paths[0]["is_local"]
+                has_local = any(bool(p["is_local"]) for p in paths)
+                likely_proxy = bool(paths) and not has_local
                 if not likely_proxy:
                     from .dbus_pairing import is_dbus_available, async_is_device_paired
 
@@ -1466,10 +1479,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             )
 
         # Build the discovered-device picker. Each option label carries the
-        # advertisement age, RSSI and the scanner that would likely carry
-        # the connect — the step is titled "Direct Bluetooth", but
-        # habluetooth routes by signal strength and may pick a
-        # bluetooth_proxy (which cannot pair a shaver).
+        # advertisement age, RSSI and the route Direct Bluetooth will use.
+        # Prefer a local HA Host adapter whenever one sees the shaver.
         now_mono = time.monotonic()
         scored: list[tuple[int, SelectOptionDict]] = []
         for info in async_discovered_service_info(self.hass):
@@ -1487,10 +1498,12 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             # strip it to keep the label compact ("hci0" / "atom-lite (proxy)").
             paths = describe_available_paths(self.hass, info.address)
             if paths:
-                best = paths[0]
-                via = str(best["name"]).split(" (")[0]
+                local = next((p for p in paths if p["is_local"]), None)
+                selected = local or paths[0]
+                via = str(selected["name"]).split(" (")[0]
                 label_parts.append(
-                    f"via {via}" + ("" if best["is_local"] else " (proxy)")
+                    f"via {via}"
+                    + ("" if selected["is_local"] else " (proxy)")
                 )
             label = label_parts[0] + (
                 " — " + ", ".join(label_parts[1:]) if len(label_parts) > 1 else ""
