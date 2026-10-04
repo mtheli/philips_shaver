@@ -332,9 +332,7 @@ class NewerProtocolProbe:
     CFG_REQUEST = bytes([0xFF, 0xFF, 0xFF, 0xFF])
     DEFAULT_PACKET_SIZE = 20
 
-    # Known Condor port names from decompiled com.philips.d2cmobile (OneBlade
-    # app 3.6.0) and the common Condor framework. Wire names are the strings
-    # returned by each Port's getPortName(). Probing these with GetProps lets
+    # Known Condor port names. Probing these with GetProps lets
     # us discover which ones the device actually implements without going
     # through GetPorts, which on the XP9201 crashes the device firmware when
     # called on Product "1".
@@ -764,8 +762,8 @@ class NewerProtocolProbe:
                         await self._send_and_wait(MSG_GET_PROPS, payload, timeout=3.0)
                         await asyncio.sleep(0.2)
 
-            # Port-name brute force: probe known Condor port names (from the
-            # decompiled app) via GetProps. Known XP9201 FW 1.3.4 behaviour:
+            # Port-name brute force: probe known Condor port names via
+            # GetProps. Known XP9201 FW 1.3.4 behaviour:
             # ANY request (GetPorts, GetProps, …) with product="1" hangs
             # the shaver for several seconds and drops the link. Restrict
             # probing to product "0" unless --probe-product-1 explicitly
@@ -1345,7 +1343,7 @@ async def main():
         action="store_true",
         help=(
             "After the safe probe, call GetProps on each product with a list "
-            "of known Condor port names from the decompiled app (bitmap, "
+            "of known Condor port names (bitmap, "
             "firmware, device, time, …). GetProps on an invalid port replies "
             "with NoSuchPort without crashing, so this is safer than "
             "GetPorts for enumerating real ports."
