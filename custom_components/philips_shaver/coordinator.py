@@ -955,6 +955,15 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     except Exception:
                         pass
 
+                    # A failed connect can leave no client/callback to
+                    # restore the activity state. Avoid a second update if
+                    # disconnect() already cleared the connecting flag.
+                    if not self._is_esp_bridge and self.data and self.data.pop(
+                        "_connecting", None
+                    ):
+                        self.data["device_state"] = "off"
+                        self.async_set_updated_data(self.data)
+
                     if not self._is_esp_bridge:
                         # Direct BLE: quick retries, then wait for ADV
                         for attempt in range(MAX_QUICK_RETRIES):
