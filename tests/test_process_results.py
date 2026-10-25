@@ -1,7 +1,8 @@
 """Golden-decode tests: feed captured GATT bytes through the coordinator's
 ``_process_results`` and pin the parsed values.
 
-``_process_results`` only touches ``self.data``, so a tiny stub stands in for
+``_process_results`` only touches ``self.data`` and the per-source cleaning
+progress, so a tiny stub stands in for
 the full coordinator — no Home Assistant instance needed beyond the imports.
 """
 
@@ -12,6 +13,8 @@ from types import SimpleNamespace
 from custom_components.philips_shaver.const import (
     LIGHTRING_DEFAULT_COLORS,
     CHAR_BATTERY_LEVEL,
+    CHAR_CLEANING_PROGRESS,
+    CHAR_CLEANING_PROGRESS_CONTROL,
     CHAR_DEVICE_STATE,
     CHAR_LIGHTRING_COLOR_MOTION,
     CHAR_LIGHTRING_COLOR_OK,
@@ -24,9 +27,12 @@ from custom_components.philips_shaver.coordinator import PhilipsShaverCoordinato
 from .conftest import chars_as_bytes
 
 
+def make_stub(data: dict | None = None) -> SimpleNamespace:
+    return SimpleNamespace(data=data or {}, _cleaning_sources={})
+
+
 def process(results: dict[str, bytes], data: dict | None = None) -> dict:
-    stub = SimpleNamespace(data=data or {})
-    return PhilipsShaverCoordinator._process_results(stub, results)
+    return PhilipsShaverCoordinator._process_results(make_stub(data), results)
 
 
 def test_xp9201_snapshot_decodes(xp9201) -> None:
@@ -46,6 +52,9 @@ def test_xp9201_snapshot_decodes(xp9201) -> None:
     # 0x0106 device age — reset to 0 by a firmware event, useless as runtime
     assert data["total_age"] == 0
     assert data["cleaning_cycles"] == 52
+    # 0x011A idle value; the XP9201 has no 0x0318
+    assert data["cleaning_progress"] == 100
+    assert data["cleaning_progress_reported"] is True
     assert data["shaving_mode"] == "custom"
     assert data["handle_load_type"] == "shaving_heads"
 
@@ -121,3 +130,33 @@ def test_pressure_parses_signed_int16_le() -> None:
 def test_default_ring_colors_ok_green_motion_pink() -> None:
     assert LIGHTRING_DEFAULT_COLORS[CHAR_LIGHTRING_COLOR_OK] == (0x37, 0xFF, 0x00)
     assert LIGHTRING_DEFAULT_COLORS[CHAR_LIGHTRING_COLOR_MOTION] == (0xFF, 0x49, 0xFF)
+
+
+def test_cleaning_progress_from_either_source() -> None:
+    # XP line: platform service only
+    assert process({CHAR_CLEANING_PROGRESS: b"\x09"})["cleaning_progress"] == 9
+    # Series 7000/8000/9000: control service only
+    data = process({CHAR_CLEANING_PROGRESS_CONTROL: b"\x2a"})
+    assert data["cleaning_progress"] == 42
+    assert data["cleaning_progress_reported"] is True
+
+
+def test_running_cleaning_wins_over_idle_source() -> None:
+    stub = make_stub()
+    run = PhilipsShaverCoordinator._process_results
+    stub.data = run(stub, {CHAR_CLEANING_PROGRESS: b"\x64"})
+    assert stub.data["cleaning_progress"] == 100
+
+    # The other source starts a cleaning: its progress is shown ...
+    stub.data = run(stub, {CHAR_CLEANING_PROGRESS_CONTROL: b"\x1e"})
+    assert stub.data["cleaning_progress"] == 30
+
+    # ... and once it is idle again (0), the idle 100 comes back.
+    stub.data = run(stub, {CHAR_CLEANING_PROGRESS_CONTROL: b"\x00"})
+    assert stub.data["cleaning_progress"] == 100
+
+
+def test_no_cleaning_source_leaves_progress_untouched() -> None:
+    data = process({CHAR_BATTERY_LEVEL: b"\x50"}, {"cleaning_progress": None})
+    assert data["cleaning_progress"] is None
+    assert "cleaning_progress_reported" not in data

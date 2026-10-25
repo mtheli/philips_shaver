@@ -77,7 +77,7 @@ The two modes are mutually exclusive — polling is skipped while a live connect
 | Head Remaining Minutes | `0x0118` | NOTIFY, READ | uint16 LE | Shaver head remaining life (minutes) |
 | Total Running Motor | `0x0112` | NOTIFY, READ | uint16 LE | Cumulative motor runtime (minutes); not present on all models |
 | Device Type | `0x0119` | READ | UTF-8 string | Device type identifier (e.g. "m" for OneBlade QP4530) |
-| Cleaning Progress | `0x011A` | NOTIFY, READ | uint8 | Cleaning cycle progress (0–100%) |
+| Cleaning Progress | `0x011A` | NOTIFY, READ | uint8 | Cleaning cycle progress (0–100%, 100 when idle). Present on the i9000 Prestige (XP); some models report it as `0x0318` instead |
 
 ### History Service (Service 8d5602xx)
 
@@ -99,6 +99,7 @@ The two modes are mutually exclusive — polling is skipped while a live connect
 | Light Ring Low | `0x0311` | READ, WRITE | [4 bytes RGBA](#light-ring-colors-0x8d5603110x8d56031c) | LED color for low pressure state |
 | Light Ring OK | `0x0312` | READ, WRITE | 4 bytes RGBA | LED color for optimal pressure state |
 | Light Ring High | `0x0313` | READ, WRITE | 4 bytes RGBA | LED color for high pressure state |
+| Cleaning Progress | `0x0318` | NOTIFY, READ | uint8 | Cleaning cycle progress (0–100%), same meaning as `0x011A`. The integration reads both and shows a running cleaning from either |
 | App Handle Settings | `0x0319` | NOTIFY, READ, WRITE | uint32 LE | [Coaching/feedback bitfield](#app-handle-settings-0x0319) (bit 4 = light ring on/off) |
 | Cleaning Cycles | `0x031A` | NOTIFY, READ, WRITE | uint16 LE | Number of cleaning cycles performed |
 | Light Ring Motion | `0x031C` | READ, WRITE | 4 bytes RGBA | LED color for motion feedback |

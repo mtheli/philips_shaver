@@ -167,3 +167,37 @@ async def test_entity_unavailable_when_never_seen(hass) -> None:
 
     coordinator.transport.is_connected = True
     assert entity.available is True
+
+
+async def test_cleaning_progress_unknown_without_source(hass, hass_storage) -> None:
+    """A model that never reported cleaning progress shows it as unknown."""
+    coordinator, entry = make_coordinator(hass)
+    assert coordinator.data["cleaning_progress"] is None
+
+    hass_storage[_storage_key(entry.entry_id)] = {
+        "version": STORAGE_VERSION,
+        "data": {"battery": 42, "cleaning_progress_reported": False},
+    }
+    await coordinator.async_load_stored_data()
+
+    assert coordinator.data["cleaning_progress"] is None
+
+
+async def test_cleaning_progress_restarts_idle_once_reported(hass, hass_storage) -> None:
+    """The progress is never stored, but a known source restarts at idle."""
+    coordinator, entry = make_coordinator(hass)
+    coordinator.data.update(
+        {"cleaning_progress": 45, "cleaning_progress_reported": True}
+    )
+    saved = coordinator._data_to_save()
+    assert "cleaning_progress" not in saved
+    assert saved["cleaning_progress_reported"] is True
+
+    restarted, _ = make_coordinator(hass)
+    hass_storage[_storage_key(restarted.entry.entry_id)] = {
+        "version": STORAGE_VERSION,
+        "data": saved,
+    }
+    await restarted.async_load_stored_data()
+
+    assert restarted.data["cleaning_progress"] == 100

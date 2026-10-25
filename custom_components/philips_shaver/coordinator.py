@@ -44,6 +44,7 @@ from .const import (
     CHAR_BATTERY_LEVEL,
     CHAR_CLEANING_CYCLES,
     CHAR_CLEANING_PROGRESS,
+    CHAR_CLEANING_PROGRESS_CONTROL,
     CHAR_DAYS_SINCE_LAST_USED,
     CHAR_DEVICE_STATE,
     CHAR_FIRMWARE_REVISION,
@@ -168,6 +169,14 @@ _CHAR_NAMES = {
 }
 
 
+# Characteristics that carry the same value on different models. A model
+# missing one of them is only reported when it lacks the other as well.
+_ALTERNATIVE_CHARS = {
+    CHAR_CLEANING_PROGRESS: CHAR_CLEANING_PROGRESS_CONTROL,
+    CHAR_CLEANING_PROGRESS_CONTROL: CHAR_CLEANING_PROGRESS,
+}
+
+
 def _describe_char(char_uuid: str) -> str:
     """Readable name plus the 16-bit short id, e.g. 'head remaining (0117)'."""
     short = char_uuid[4:8].upper()
@@ -195,6 +204,7 @@ NOTIFICATION_CHARS = [
     CHAR_AMOUNT_OF_CHARGES,
     CHAR_AMOUNT_OF_OPERATIONAL_TURNS,
     CHAR_CLEANING_PROGRESS,
+    CHAR_CLEANING_PROGRESS_CONTROL,
     CHAR_CLEANING_CYCLES,
     CHAR_HEAD_REMAINING,
     CHAR_HEAD_REMAINING_MINUTES,
@@ -267,6 +277,8 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # set event as "device is awake".
         self._adv_wake = False
         self._unsub_advertisement = None
+        # Last value per cleaning-progress source (0x011A, 0x0318).
+        self._cleaning_sources: dict[str, int] = {}
 
         _LOGGER.debug(
             "Initializing coordinator for %s (transport: %s)",
@@ -293,7 +305,10 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "shaving_time": None,
             "device_state": "off",
             "travel_lock": None,
-            "cleaning_progress": 100,
+            # Unknown until a cleaning-progress characteristic reports; see
+            # async_load_stored_data for the value after a restart.
+            "cleaning_progress": None,
+            "cleaning_progress_reported": False,
             "cleaning_cycles": None,
             "motor_rpm": 0,
             "motor_current_ma": 0,
@@ -356,6 +371,11 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for key in _COLOR_KEYS:
             if isinstance(restored.get(key), list):
                 restored[key] = tuple(restored[key])
+        # The progress itself is not persisted (a stored mid-cleaning value
+        # would fake a running cleaning). A model that has reported one
+        # before starts at its idle value instead of "unknown".
+        if restored.get("cleaning_progress_reported"):
+            restored["cleaning_progress"] = 100
         self.data = {**(self.data or {}), **restored}
         _LOGGER.debug(
             "Restored %d stored values for %s", len(restored), self.address
@@ -594,8 +614,16 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if raw := results.get(CHAR_TRAVEL_LOCK):
             new_data["travel_lock"] = raw[0] == 1
 
-        if raw := results.get(CHAR_CLEANING_PROGRESS):
-            new_data["cleaning_progress"] = raw[0]
+        for char in (CHAR_CLEANING_PROGRESS, CHAR_CLEANING_PROGRESS_CONTROL):
+            if raw := results.get(char):
+                self._cleaning_sources[char] = raw[0]
+        if self._cleaning_sources:
+            # A running cleaning (1–99) wins; otherwise the highest value.
+            # 100 is the idle value, 0 means no cleaning is running.
+            values = self._cleaning_sources.values()
+            running = [v for v in values if 0 < v < 100]
+            new_data["cleaning_progress"] = running[0] if running else max(values)
+            new_data["cleaning_progress_reported"] = True
 
         if raw := results.get(CHAR_CLEANING_CYCLES):
             new_data["cleaning_cycles"] = int.from_bytes(raw, "little")
@@ -1084,6 +1112,11 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # out. Drop it so reconnects don't retry, and report it once in
             # one line: it is harmless, but it is how unknown models show up.
             self._notify_chars = [c for c in self._notify_chars if c not in missing]
+            missing = [
+                c for c in missing
+                if c not in _ALTERNATIVE_CHARS or _ALTERNATIVE_CHARS[c] in missing
+            ]
+        if missing:
             data = self.data or {}
             _LOGGER.warning(
                 "Philips shaver %s (firmware %s) does not provide: %s. "
