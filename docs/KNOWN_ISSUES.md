@@ -4,9 +4,17 @@ Limitations that sit outside the integration — in the host adapter, the
 Bluetooth stack or the shaver firmware — collected here so they are easy to
 rule in or out when setup misbehaves.
 
+## Contents
+
+- [ESP bridge loses pairings with ESP-IDF 5.5.6](#esp-bridge-loses-pairings-with-esp-idf-556)
+- [Some USB dongles cannot complete SMP bonding](#some-usb-dongles-cannot-complete-smp-bonding)
+- [Standard ESPHome Bluetooth proxies cannot pair a shaver](#standard-esphome-bluetooth-proxies-cannot-pair-a-shaver)
+
 ---
 
 ## ESP bridge loses pairings with ESP-IDF 5.5.6
+
+**Known since:** 2026-10-25
 
 **Status:** Bug in ESP-IDF 5.5.6 ([espressif/esp-idf#19286](https://github.com/espressif/esp-idf/issues/19286)), not fixed in any release yet. Workaround: build the bridge with ESP-IDF 5.5.5.
 
@@ -37,6 +45,8 @@ Remove the line again once an ESPHome release ships an ESP-IDF version with the 
 ---
 
 ## Some USB dongles cannot complete SMP bonding
+
+**Known since:** 2026-07-22
 
 **Status:** Hardware limitation of the adapter's SMP implementation, no integration-side fix
 
@@ -84,6 +94,8 @@ culprit.
 ---
 
 ## Standard ESPHome Bluetooth proxies cannot pair a shaver
+
+**Known since:** 2026-07-22
 
 **Status:** By design (proxy firmware limitation), use the dedicated bridge instead
 
