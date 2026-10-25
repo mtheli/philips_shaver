@@ -1,3 +1,4 @@
+import logging
 import zlib
 from pathlib import Path
 
@@ -5,7 +6,8 @@ import esphome.codegen as cg
 import esphome.config_validation as cv
 import esphome.final_validate as fv
 from esphome.components import binary_sensor, ble_client, esp32_ble_tracker
-from esphome.const import CONF_ID, CONF_MAC_ADDRESS
+from esphome.const import CONF_ID, CONF_MAC_ADDRESS, KEY_CORE, KEY_FRAMEWORK_VERSION
+from esphome.core import CORE
 
 DEPENDENCIES = ["esp32_ble_tracker", "api"]
 AUTO_LOAD = ["binary_sensor", "esp32_ble_client"]
@@ -115,6 +117,52 @@ def _validate_config(config):
 
 CONFIG_SCHEMA = _validate_config
 
+_LOGGER = logging.getLogger(__name__)
+
+# ESP-IDF releases whose Bluetooth stack forgets a bond after the first
+# reconnect (espressif/esp-idf#19286). ESP-IDF 5.5.6 is the default of ESPHome
+# 2026.10.0. Building is still allowed — a bridge without paired devices works —
+# but the warning names the one-line fix. The integration raises a matching
+# repair issue once such a bridge reports in.
+_IDF_BOND_LOSS = (cv.Version(5, 5, 6),)
+_IDF_BOND_LOSS_URL = (
+    "https://github.com/mtheli/philips_shaver/blob/main/docs/KNOWN_ISSUES.md"
+    "#esp-bridge-loses-pairings-with-esp-idf-556"
+)
+_warned_idf_bond_loss = False
+
+
+def _warn_idf_bond_loss():
+    global _warned_idf_bond_loss
+    if _warned_idf_bond_loss:
+        return
+    if not CORE.is_esp32 or CORE.target_framework != "esp-idf":
+        return
+    idf_version = CORE.data[KEY_CORE][KEY_FRAMEWORK_VERSION]
+    if idf_version not in _IDF_BOND_LOSS:
+        return
+    _warned_idf_bond_loss = True
+    _LOGGER.warning(
+        "\n"
+        "**************************************************************\n"
+        "philips_shaver: ESP-IDF %s LOSES PAIRINGS AFTER THE FIRST RECONNECT\n"
+        "**************************************************************\n"
+        "This build uses ESP-IDF %s (the default of ESPHome 2026.10.0).\n"
+        "Its Bluetooth stack forgets a paired device after the first\n"
+        "disconnect, until the ESP restarts. Pin ESP-IDF 5.5.5 instead:\n"
+        "\n"
+        "esp32:\n"
+        "  framework:\n"
+        "    type: esp-idf\n"
+        "    version: 5.5.5\n"
+        "\n"
+        "Details: %s",
+        idf_version,
+        idf_version,
+        _IDF_BOND_LOSS_URL,
+    )
+
+
 
 def _final_validate(config):
     """Check the required api flags, and bridge_id when multiple instances exist."""
@@ -157,6 +205,8 @@ def _final_validate(config):
                 f"Each philips_shaver instance must have a unique 'bridge_id', "
                 f"found duplicates: {ids}"
             )
+
+    _warn_idf_bond_loss()
     return config
 
 

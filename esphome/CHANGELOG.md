@@ -8,10 +8,10 @@
      an Unreleased block placed between two releases would be served as part of
      the release above it. -->
 
-## Unreleased
+## v1.14.1 — 2026-10-25
 
+- **Builds with ESP-IDF 5.5.6 print a warning.** ESP-IDF 5.5.6, the default of ESPHome 2026.10.0, forgets a pairing after the first reconnect ([espressif/esp-idf#19286](https://github.com/espressif/esp-idf/issues/19286)). The build still runs, but a framed warning names the YAML pin to 5.5.5 and links the known issue.
 - **No more deprecation warnings on ESPHome 2026.8 and later.** `ESPBTDevice::address_str()` is deprecated there and removed in ESPHome 2027.2.0; the bridge now formats the scanned address itself, with the same `AA:BB:CC:DD:EE:FF` text as before, so it keeps building on older ESPHome versions as well.
-- A CI build now compiles the component against several ESPHome versions for the classic ESP32 and the ESP32-S3 and fails on any compiler warning from the component.
 - **Missing `api:` flags now fail with their own name.** The bridge registers
   its services through `CustomAPIDevice` and fires events via
   `fire_homeassistant_event`, both gated behind `custom_services` and
@@ -21,8 +21,7 @@
   who already suspects them goes looking. Reported against the Sonicare bridge
   ([philips_sonicare_ble#32](https://github.com/mtheli/philips_sonicare_ble/issues/32)),
   which shares this component's structure. Validation now names the flag that
-  is actually missing and quotes the block to paste. Build-time change only —
-  no firmware behavior change, no version bump.
+  is actually missing and quotes the block to paste.
 
 ## v1.14.0 — 2026-07-27
 
