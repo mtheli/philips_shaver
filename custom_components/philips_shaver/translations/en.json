@@ -278,7 +278,7 @@
         "name": "Last Seen"
       },
       "rssi": {
-        "name": "Signal Strength"
+        "name": "BLE RSSI"
       },
       "adapter_type": {
         "name": "Adapter Type",
@@ -399,7 +399,7 @@
         }
       },
       "shaver_ble_connected": {
-        "name": "BLE Status",
+        "name": "BLE Connected",
         "state": {
           "on": "Connected",
           "off": "Disconnected"

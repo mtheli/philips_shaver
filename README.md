@@ -160,14 +160,15 @@ This integration creates a new device for your shaver and provides the following
 | Entity | Type | Description |
 | :--- | :--- | :--- |
 | **Last Seen** | Sensor | Time in minutes since the device was last reachable. |
-| **Signal Strength** | Sensor | Bluetooth signal strength (`dBm`, direct BLE only). |
+| **BLE RSSI** | Sensor | Bluetooth signal strength (`dBm`, direct BLE only). |
 | **Adapter** | Sensor | Bluetooth adapter currently carrying the connection (e.g. `hci0`, `<esp_name>`). |
 | **Adapter Type** | Sensor | Classification of the active transport: `direct_ble` / `esp_bridge` / `stock_proxy` / `unknown`. |
-| **BLE Status** | Binary Sensor | BLE connection status to the shaver. |
-| **Bridge Status** | Binary Sensor | ESP32 bridge online status (ESP bridge only). |
+| **BLE Connected** | Binary Sensor | BLE connection status to the shaver. |
+| **ESP Connected** | Binary Sensor | ESP32 bridge online status (ESP bridge only). |
+| **ESP Build** | Sensor | ESPHome and ESP-IDF version the bridge firmware was built with (ESP bridge only). |
 | **Bridge Version** | Sensor | ESP bridge firmware version (ESP bridge only). |
 | **Bridge Firmware** | Update | Passive notification when newer ESP bridge firmware is available, with cumulative release notes. Informational only — there's no install button; reflash via ESPHome (ESP bridge only). |
-| **Bridge Last Boot** | Sensor | Timestamp of the ESP bridge's last boot — useful to detect ESP reboots (ESP bridge only). |
+| **ESP Last Boot** | Sensor | Timestamp of the ESP bridge's last boot — useful to detect ESP reboots (ESP bridge only). |
 | **Firmware** | Sensor | Installed firmware version (disabled by default). |
 | **Model Number** | Sensor | Device model number (disabled by default). |
 

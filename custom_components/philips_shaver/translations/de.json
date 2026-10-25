@@ -211,10 +211,10 @@
     },
     "sensor": {
       "bridge_version": {
-        "name": "Bridge Version"
+        "name": "Bridge-Version"
       },
       "bridge_build": {
-        "name": "ESP Build"
+        "name": "ESP-Build"
       },
       "bridge_boot_time": {
         "name": "ESP letzter Start"
@@ -278,7 +278,7 @@
         "name": "Zuletzt gesehen"
       },
       "rssi": {
-        "name": "Signalstärke"
+        "name": "BLE-RSSI"
       },
       "adapter_type": {
         "name": "Adaptertyp",
@@ -399,7 +399,7 @@
         }
       },
       "shaver_ble_connected": {
-        "name": "BLE Status",
+        "name": "BLE verbunden",
         "state": {
           "on": "Verbunden",
           "off": "Getrennt"
