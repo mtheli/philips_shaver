@@ -34,6 +34,8 @@ from .exceptions import TransportError
 from .const import (
     DOMAIN,
     MIN_BRIDGE_VERSION,
+    IDF_BOND_LOSS_VERSIONS,
+    IDF_BOND_LOSS_ISSUE_URL,
     CHAR_AMOUNT_OF_CHARGES,
     CHAR_AMOUNT_OF_OPERATIONAL_TURNS,
     CHAR_APP_HANDLE_SETTINGS,
@@ -844,6 +846,12 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     _LOGGER.info("Establishing live connection to %s...", self.address)
                     await self.transport.connect()
 
+                    # The bridge reports its build environment while the
+                    # transport waits for it, before the shaver is connected —
+                    # check here so the warning shows even if it never is.
+                    if self._is_esp_bridge:
+                        self._check_bridge_idf()
+
                     # ESP bridge: wait for BLE device to actually connect
                     if self._is_esp_bridge and not self.transport.is_connected:
                         _LOGGER.debug(
@@ -931,6 +939,7 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
                     if self._is_esp_bridge:
                         self._check_bridge_version()
+                        self._check_bridge_idf()
                         if self.transport.needs_resubscribe:
                             self.transport.acknowledge_resubscribe()
 
@@ -1228,6 +1237,42 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         else:
             return self._last_adapter_type or "unknown"
         return self._last_adapter_type
+
+    def _check_bridge_idf(self) -> None:
+        """Create or clear a repair issue if the bridge runs an ESP-IDF that loses bonds."""
+        assert isinstance(self.transport, EspBridgeTransport)
+        idf = self.transport.idf_version
+        if not idf:
+            return
+        esp_name = self.entry.data.get(CONF_ESP_DEVICE_NAME) or self.address
+        # One issue per ESP device: every slot on it is affected the same way.
+        issue_id = f"esp_bridge_idf_bond_loss_{esp_name.lower()}"
+        # esp_get_idf_version() reports e.g. "v5.5.6" or "v5.5.6-dirty".
+        release = idf.lstrip("v").split("-")[0]
+        if release in IDF_BOND_LOSS_VERSIONS:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                learn_more_url=IDF_BOND_LOSS_ISSUE_URL,
+                translation_key="esp_bridge_idf_bond_loss",
+                translation_placeholders={
+                    "esp_device": esp_name,
+                    "idf_version": idf,
+                },
+            )
+            _LOGGER.warning(
+                "%s: ESP bridge %s is built with ESP-IDF %s, which loses "
+                "bonds after the first reconnect (esp-idf#19286) — rebuild "
+                "with `esp32: framework: version: 5.5.5`",
+                self.address,
+                esp_name,
+                idf,
+            )
+        else:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
 
     def _check_bridge_version(self) -> None:
         """Create or clear a HA repair issue if the ESP bridge firmware is outdated."""

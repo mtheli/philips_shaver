@@ -7,6 +7,10 @@
     "standalone_card_installed": {
       "title": "Standalone Philips Shaver Card is still installed",
       "description": "The Philips Shaver Card now ships with this integration and no longer needs to be installed separately.\n\nA standalone copy of the card is still registered as a dashboard resource (`{url}`). Both copies register the same card element and only one of them wins, so the standalone copy can silently shadow the bundled, up-to-date card.\n\nPlease remove the standalone installation:\n\n1. If installed via HACS: open HACS, find *Philips Shaver Card* and uninstall it (this also removes the dashboard resource).\n2. If added manually: delete the resource under *Settings → Dashboards → Resources* and remove the file from your `www` folder.\n\nYour dashboards keep working unchanged — the bundled card uses the same `custom:philips-shaver-card` type."
+    },
+    "esp_bridge_idf_bond_loss": {
+      "title": "Philips Shaver: ESP bridge {esp_device} loses pairings (ESP-IDF {idf_version})",
+      "description": "The **Philips Shaver** integration found that its ESP bridge **{esp_device}** runs firmware built with ESP-IDF **{idf_version}**, the default of ESPHome 2026.10.0. This ESP-IDF version has a Bluetooth bug: after the first disconnect, the bridge forgets the pairing with your shaver until the ESP restarts. The shaver then refuses the new pairing attempt, and the bridge eventually drops its copy of the pairing, so only unpairing on the shaver helps.\n\n**To fix:** pin ESP-IDF 5.5.5 in the bridge's YAML, then rebuild and flash it:\n\n```yaml\nesp32:\n  framework:\n    type: esp-idf\n    version: 5.5.5\n```\n\nThis warning clears automatically once the bridge runs firmware built with a different ESP-IDF version."
     }
   },
   "options": {
