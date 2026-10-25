@@ -10,6 +10,8 @@
 
 ## Unreleased
 
+- **No more deprecation warnings on ESPHome 2026.8 and later.** `ESPBTDevice::address_str()` is deprecated there and removed in ESPHome 2027.2.0; the bridge now formats the scanned address itself, with the same `AA:BB:CC:DD:EE:FF` text as before, so it keeps building on older ESPHome versions as well.
+- A CI build now compiles the component against several ESPHome versions for the classic ESP32 and the ESP32-S3 and fails on any compiler warning from the component.
 - **Missing `api:` flags now fail with their own name.** The bridge registers
   its services through `CustomAPIDevice` and fires events via
   `fire_homeassistant_event`, both gated behind `custom_services` and

@@ -3,3 +3,7 @@ __pycache__/
 *.pyo
 todo.md
 TODO.md
+
+# ESPHome build output (esphome/tests/ CI build test)
+.esphome/
+esphome/tests/build.log
