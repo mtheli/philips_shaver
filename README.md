@@ -317,7 +317,7 @@ See **[AUTOMATIONS.md](docs/AUTOMATIONS.md)** for ready-to-use automation exampl
 * *Shaver ignores all pairing requests*: If the shaver no longer pairs with anything — not even the official Philips app — a **30-second factory reset** usually recovers it. See the [Unpairing Guide](docs/UNPAIRING.md#last-resort-factory-reset-30-seconds).
 * *Pairing times out on one adapter but works on another*: Some cheap USB Bluetooth dongles cannot complete the SMP bonding handshake at all — see [Known Issues](docs/KNOWN_ISSUES.md#some-usb-dongles-cannot-complete-smp-bonding).
 * *Connection Conflict*: If the integration fails to set up, ensure no smartphone is currently connected to the shaver.
-* *ESPHome Bluetooth Proxy*: The standard ESPHome Bluetooth Proxy does **not** work with this shaver because it requires LE Secure Connections pairing ([details](docs/KNOWN_ISSUES.md#standard-esphome-bluetooth-proxies-cannot-pair-a-shaver)). Use the dedicated [ESP32 BLE Bridge](esphome/SETUP.md) instead.
+* *ESPHome Bluetooth Proxy*: The standard ESPHome Bluetooth Proxy does **not** work with this shaver because it requires LE Secure Connections pairing ([details](esphome/KNOWN_ISSUES.md#standard-esphome-bluetooth-proxies-cannot-pair-a-shaver)). Use the dedicated [ESP32 BLE Bridge](esphome/SETUP.md) instead.
 * *Stability:* Bluetooth signals are weak. Ensure your HA host or ESP32 bridge is placed as close to the shaver's location as possible.
 
 ---

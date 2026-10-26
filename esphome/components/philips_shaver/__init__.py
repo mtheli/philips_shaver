@@ -126,7 +126,7 @@ _LOGGER = logging.getLogger(__name__)
 # repair issue once such a bridge reports in.
 _IDF_BOND_LOSS = (cv.Version(5, 5, 6),)
 _IDF_BOND_LOSS_URL = (
-    "https://github.com/mtheli/philips_shaver/blob/main/docs/KNOWN_ISSUES.md"
+    "https://github.com/mtheli/philips_shaver/blob/main/esphome/KNOWN_ISSUES.md"
     "#esp-bridge-loses-pairings-with-esp-idf-556"
 )
 _warned_idf_bond_loss = False

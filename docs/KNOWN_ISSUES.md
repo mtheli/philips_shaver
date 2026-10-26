@@ -1,46 +1,14 @@
-# Known Issues
+# Known issues
 
-Limitations that sit outside the integration — in the host adapter, the
-Bluetooth stack or the shaver firmware — collected here so they are easy to
-rule in or out when setup misbehaves.
+Limitations that sit outside the integration — in the host adapter, the Bluetooth stack or the shaver firmware — collected here so they are easy to rule in or out when setup misbehaves.
+
+> **Using an ESP32 bridge or an ESPHome Bluetooth proxy?** Issues with the bridge, ESPHome and ESP-IDF are in the [ESP bridge known issues](../esphome/KNOWN_ISSUES.md).
 
 ## Contents
 
-- [ESP bridge loses pairings with ESP-IDF 5.5.6](#esp-bridge-loses-pairings-with-esp-idf-556)
-- [Some USB dongles cannot complete SMP bonding](#some-usb-dongles-cannot-complete-smp-bonding)
-- [Standard ESPHome Bluetooth proxies cannot pair a shaver](#standard-esphome-bluetooth-proxies-cannot-pair-a-shaver)
-
----
-
-## ESP bridge loses pairings with ESP-IDF 5.5.6
-
-**Known since:** 2026-10-25
-
-**Status:** Bug in ESP-IDF 5.5.6 ([espressif/esp-idf#19286](https://github.com/espressif/esp-idf/issues/19286)), not fixed in any release yet. Workaround: build the bridge with ESP-IDF 5.5.5.
-
-ESPHome 2026.10.0 builds with ESP-IDF 5.5.6 by default. In that version, the Bluetooth stack drops the stored pairing from memory when a paired shaver reconnects, and deletes the device record when the connection ends. On the next connection attempt the bridge has no key anymore and starts a new pairing, which the shaver refuses because it is still paired.
-
-### Symptoms
-
-- The shaver stays connected for hours, but after the first disconnect it does not reconnect anymore.
-- The bridge log shows `Deleting unpaired device` when the connection ends, and then `auth fail reason=82` on the next attempts.
-- After three failed attempts the bridge deletes its copy of the pairing. From then on only unpairing on the shaver and pairing again helps.
-- Home Assistant shows a repair issue "Philips Shaver: ESP bridge … loses pairings (ESP-IDF v5.5.6)". The bridge reports its ESP-IDF version, and the integration raises the issue whenever it is 5.5.6.
-
-### Fix
-
-Pin ESP-IDF 5.5.5 in the bridge's YAML, then rebuild and flash it:
-
-```yaml
-esp32:
-  framework:
-    type: esp-idf
-    version: 5.5.5
-```
-
-ESPHome prints a warning that this is not the recommended framework version; that is expected. A working pairing stays valid. If the bridge is already in the `reason=82` loop, unpair on the shaver and pair again once.
-
-Remove the line again once an ESPHome release ships an ESP-IDF version with the fix.
+| Issue | Affects | Known since | Status |
+| :--- | :--- | :--- | :--- |
+| [Some USB dongles cannot complete SMP bonding](#some-usb-dongles-cannot-complete-smp-bonding) | Some USB Bluetooth dongles | 2026-07-22 | ❌ Adapter limitation |
 
 ---
 
@@ -93,29 +61,14 @@ culprit.
 
 ---
 
-## Standard ESPHome Bluetooth proxies cannot pair a shaver
+## Moved sections
 
-**Known since:** 2026-07-22
+These sections now live in the [ESP bridge known issues](../esphome/KNOWN_ISSUES.md). The headings stay here so that older links keep working.
 
-**Status:** By design (proxy firmware limitation), use the dedicated bridge instead
+### ESP bridge loses pairings with ESP-IDF 5.5.6
 
-Philips shavers pair via **LE Secure Connections with numeric comparison**.
-A standard ESPHome `bluetooth_proxy` runs with `io_capability: none`, which
-can only produce Just Works pairings — the proxy-side stack does not even
-attempt the handshake, and every encrypted read fails with
-`status=5` (insufficient authentication). Verified at the protocol level:
-the proxy holds the connection, both probe reads fail, no SMP traffic
-appears.
+Moved to the [ESP bridge known issues](../esphome/KNOWN_ISSUES.md#esp-bridge-loses-pairings-with-esp-idf-556).
 
-The config flow detects a proxy-carried connection and shows a dedicated
-dialog with the working alternatives instead of running pairing tools that
-cannot reach the proxy's bond store:
+### Standard ESPHome Bluetooth proxies cannot pair a shaver
 
-1. Set the shaver up via a **local Bluetooth adapter** on the Home
-   Assistant host.
-2. Use the dedicated **[ESP32 BLE Bridge](ESP_BRIDGE_SETUP.md)** — its
-   firmware ships display-capable IO (DisplayYesNo) with auto-confirm, so
-   the numeric-comparison pairing completes on the ESP32.
-
-A proxy is still useful *alongside* the bridge for other BLE devices — the
-bridge component and a `bluetooth_proxy` can share one ESP32.
+Moved to the [ESP bridge known issues](../esphome/KNOWN_ISSUES.md#standard-esphome-bluetooth-proxies-cannot-pair-a-shaver).

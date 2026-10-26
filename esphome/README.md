@@ -61,6 +61,7 @@ setups, troubleshooting) see [`SETUP.md`](SETUP.md).
 | [`atom-lite.yaml`](atom-lite.yaml) | Ready-to-flash config for the M5Stack Atom Lite, configured for **two** devices via one bridge (e.g. shaver + OneBlade). Raises `BTA_GATTC_NOTIF_REG_MAX` and `BTA_GATTC_MAX_CACHE_CHAR` accordingly. Also runs `bluetooth_proxy` for other BLE devices in parallel. |
 | [`esp32-generic.yaml`](esp32-generic.yaml) | Generic ESP32 dev-board config (`esp32dev`), single device. Use as a starting point for other boards. |
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history for the external component. |
+| [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) | Known problems with ESPHome, ESP-IDF and particular chips, with workarounds. |
 
 ## Requirements
 

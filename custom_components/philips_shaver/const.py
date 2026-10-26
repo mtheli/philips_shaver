@@ -567,7 +567,7 @@ MIN_BRIDGE_VERSION = "1.8.0"
 # ESPHome 2026.10.0. Bridges built with one of these raise a Repairs warning.
 IDF_BOND_LOSS_VERSIONS = ("5.5.6",)
 IDF_BOND_LOSS_ISSUE_URL = (
-    "https://github.com/mtheli/philips_shaver/blob/main/docs/KNOWN_ISSUES.md"
+    "https://github.com/mtheli/philips_shaver/blob/main/esphome/KNOWN_ISSUES.md"
     "#esp-bridge-loses-pairings-with-esp-idf-556"
 )
 

@@ -447,6 +447,8 @@ A full example is available in
 
 ## Troubleshooting
 
+Known problems with ESPHome, ESP-IDF and particular chips, with workarounds, are listed in the [ESP bridge known issues](KNOWN_ISSUES.md).
+
 ### Unpairing before switching to the ESP32 Bridge
 
 The shaver can only be paired with **one device at a time**. If it is currently
