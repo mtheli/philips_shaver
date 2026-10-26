@@ -6,6 +6,8 @@
 #include "esphome/core/version.h"
 
 #include <esp_system.h>
+#include "sdkconfig.h"
+#include "soc/soc_caps.h"
 
 namespace espbt = esphome::esp32_ble_tracker;
 
@@ -20,6 +22,35 @@ static espbt::ESPBTUUID parse_uuid(const std::string &uuid_str) {
     return espbt::ESPBTUUID::from_uint16(uuid16);
   }
   return espbt::ESPBTUUID::from_raw(uuid_str);
+}
+
+// Whether Bluedroid hands address resolution to a resolving list in the
+// controller. It does on every chip but the original ESP32 (ESP-IDF 5.1+ hides
+// the Kconfig option there); -DCONFIG_BT_BLE_RPA_SUPPORTED=0 moves it back to
+// the host, as on the original ESP32.
+#if defined(CONFIG_BT_BLE_RPA_SUPPORTED)
+#define SHAVER_CONTROLLER_RPA_LIST CONFIG_BT_BLE_RPA_SUPPORTED
+#elif defined(SOC_BLE_DEVICE_PRIVACY_SUPPORTED) && SOC_BLE_DEVICE_PRIVACY_SUPPORTED
+#define SHAVER_CONTROLLER_RPA_LIST 1
+#else
+#define SHAVER_CONTROLLER_RPA_LIST 0
+#endif
+
+// "host": the host resolves rotating peer addresses and connects to the
+// current one. "ctrl": the controller resolves them, which it only does with
+// local privacy on — a device bonded under a rotating address would not
+// reconnect. "ctrl_priv": local privacy is on.
+static const char *address_resolution_mode() {
+#if SHAVER_CONTROLLER_RPA_LIST
+  esp_bd_addr_t own_addr;
+  uint8_t own_type = BLE_ADDR_TYPE_PUBLIC;
+  if (esp_ble_gap_get_local_used_addr(own_addr, &own_type) == ESP_OK &&
+      own_type != BLE_ADDR_TYPE_PUBLIC)
+    return "ctrl_priv";
+  return "ctrl";
+#else
+  return "host";
+#endif
 }
 
 static bool parse_mac_to_bda(const std::string &mac, uint8_t out[6]) {
@@ -346,6 +377,8 @@ std::map<std::string, std::string> ShaverCoordinator::collect_info_data() {
   // ship via ESP-IDF), so surface both for support/diagnostics.
   data["esphome_version"] = ESPHOME_VERSION;
   data["idf_version"] = esp_get_idf_version();
+  data["chip"] = CONFIG_IDF_TARGET;
+  data["addr_res"] = address_resolution_mode();
 
   return data;
 }
