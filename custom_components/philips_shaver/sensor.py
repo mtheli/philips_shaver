@@ -214,7 +214,6 @@ class PhilipsRemainingShavesSensor(PhilipsShaverEntity, SensorEntity):
     """Estimated remaining shaves based on battery level."""
 
     _attr_translation_key = "remaining_shaves"
-    _attr_native_unit_of_measurement = "shaves"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:face-man-shimmer"
 
@@ -280,7 +279,6 @@ class PhilipsRemainingShavesSensor(PhilipsShaverEntity, SensorEntity):
 # =============================================================================
 class PhilipsAmountOfChargesSensor(PhilipsShaverEntity, SensorEntity):
     _attr_translation_key = "amount_of_charges"
-    _attr_native_unit_of_measurement = "charges"
     _attr_icon = "mdi:counter"
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_entity_category = EntityCategory.DIAGNOSTIC

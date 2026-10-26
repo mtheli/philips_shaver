@@ -234,10 +234,12 @@
         }
       },
       "remaining_shaves": {
-        "name": "Verbleibende Rasuren"
+        "name": "Verbleibende Rasuren",
+        "unit_of_measurement": "Rasuren"
       },
       "amount_of_charges": {
-        "name": "Ladezyklen"
+        "name": "Ladezyklen",
+        "unit_of_measurement": "Ladungen"
       },
       "amount_of_operational_turns": {
         "name": "Anzahl Nutzungen"

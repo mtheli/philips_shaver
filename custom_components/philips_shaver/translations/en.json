@@ -234,10 +234,12 @@
         }
       },
       "remaining_shaves": {
-        "name": "Remaining Shaves"
+        "name": "Remaining Shaves",
+        "unit_of_measurement": "shaves"
       },
       "amount_of_charges": {
-        "name": "Charge Cycles"
+        "name": "Charge Cycles",
+        "unit_of_measurement": "charges"
       },
       "amount_of_operational_turns": {
         "name": "Number of Uses"
