@@ -813,6 +813,16 @@ class EspBridgeTransport(ShaverTransport):
         # with. Purely diagnostic — surfaced by the ESP Build sensor.
         self._esphome_version: str | None = None
         self._idf_version: str | None = None
+        # Chip and where rotating peer addresses get resolved (firmware
+        # >= 1.14.2): "host", "ctrl" or "ctrl_priv". Diagnostic — surfaced
+        # by the ESP Chip sensor.
+        self._chip: str | None = None
+        self._addr_res: str | None = None
+        # Called when any of the build fields above changes. The info event
+        # often arrives after the coordinator's setup has already read them
+        # (e.g. right after a reflash), so checks that depend on them must
+        # re-run then instead of waiting for the next shaver connection.
+        self._build_info_cb: Callable[[], None] | None = None
         self._pending_info: asyncio.Future[dict[str, str]] | None = None
         self._needs_resubscribe = False
         self._ready_event = asyncio.Event()
@@ -904,6 +914,18 @@ class EspBridgeTransport(ShaverTransport):
     @property
     def idf_version(self) -> str | None:
         return self._idf_version
+
+    @property
+    def chip(self) -> str | None:
+        return self._chip
+
+    @property
+    def addr_res(self) -> str | None:
+        return self._addr_res
+
+    def set_build_info_callback(self, cb: Callable[[], None]) -> None:
+        """Register a callback for changes of the reported build fields."""
+        self._build_info_cb = cb
 
     @property
     def bridge_boot_time(self) -> datetime | None:
@@ -1056,13 +1078,21 @@ class EspBridgeTransport(ShaverTransport):
 
             # Build-environment fields ride on info events only (not on
             # heartbeats), so keep the last seen value.
+            build_changed = False
             for key, attr in (
                 ("esphome_version", "_esphome_version"),
                 ("idf_version", "_idf_version"),
+                ("chip", "_chip"),
+                ("addr_res", "_addr_res"),
             ):
                 value = event.data.get(key)
                 if value:
-                    setattr(self, attr, str(value).strip().strip("\"'").strip())
+                    value = str(value).strip().strip("\"'").strip()
+                    if value != getattr(self, attr):
+                        setattr(self, attr, value)
+                        build_changed = True
+            if build_changed and self._build_info_cb is not None:
+                self._build_info_cb()
 
             # Every status event (including heartbeat) proves ESP is alive
             self._last_heartbeat = time.monotonic()

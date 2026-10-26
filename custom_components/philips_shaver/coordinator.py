@@ -251,6 +251,8 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._notify_chars = list(NOTIFICATION_CHARS)
 
         self._is_esp_bridge = isinstance(transport, EspBridgeTransport)
+        if self._is_esp_bridge:
+            transport.set_build_info_callback(self._on_bridge_build_changed)
         # Sticky cache for adapter_type — backend object can become None on
         # disconnect, but the diagnostic sensor should keep showing the last
         # known classification rather than flickering to "unknown" every time
@@ -1270,6 +1272,18 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         else:
             return self._last_adapter_type or "unknown"
         return self._last_adapter_type
+
+    @callback
+    def _on_bridge_build_changed(self) -> None:
+        """Re-run the build-dependent check and refresh the build sensors.
+
+        The bridge reports its build fields in info events, which after a
+        reflash often arrive only after the live setup already ran its
+        check — without this the repair issue and the ESP Build/Chip
+        sensors would keep the previous firmware's values.
+        """
+        self._check_bridge_idf()
+        self.async_update_listeners()
 
     def _check_bridge_idf(self) -> None:
         """Create or clear a repair issue if the bridge runs an ESP-IDF that loses bonds."""

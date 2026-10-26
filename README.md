@@ -166,6 +166,7 @@ This integration creates a new device for your shaver and provides the following
 | **BLE Connected** | Binary Sensor | BLE connection status to the shaver. |
 | **ESP Connected** | Binary Sensor | ESP32 bridge online status (ESP bridge only). |
 | **ESP Build** | Sensor | ESPHome and ESP-IDF version the bridge firmware was built with (ESP bridge only). |
+| **ESP Chip** | Sensor | Chip of the ESP bridge (e.g. *ESP32-S3*); the `address_resolution` attribute shows whether the host (`host`) or the Bluetooth controller (`controller`) resolves rotating Bluetooth addresses (ESP bridge only, bridge firmware 1.14.2 or later). |
 | **Bridge Version** | Sensor | ESP bridge firmware version (ESP bridge only). |
 | **Bridge Firmware** | Update | Passive notification when newer ESP bridge firmware is available, with cumulative release notes. Informational only — there's no install button; reflash via ESPHome (ESP bridge only). |
 | **ESP Last Boot** | Sensor | Timestamp of the ESP bridge's last boot — useful to detect ESP reboots (ESP bridge only). |

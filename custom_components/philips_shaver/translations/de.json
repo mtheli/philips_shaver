@@ -216,6 +216,9 @@
       "bridge_build": {
         "name": "ESP-Build"
       },
+      "bridge_chip": {
+        "name": "ESP-Chip"
+      },
       "bridge_boot_time": {
         "name": "ESP letzter Start"
       },
