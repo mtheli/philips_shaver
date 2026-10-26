@@ -220,7 +220,7 @@
         "name": "ESP-Chip"
       },
       "bridge_boot_time": {
-        "name": "ESP letzter Start"
+        "name": "ESP-Start"
       },
       "adapter": {
         "name": "Adapter"
@@ -404,14 +404,14 @@
         }
       },
       "shaver_ble_connected": {
-        "name": "BLE verbunden",
+        "name": "BLE-Verbindung",
         "state": {
           "on": "Verbunden",
           "off": "Getrennt"
         }
       },
       "esp_bridge_alive": {
-        "name": "ESP verbunden",
+        "name": "ESP-Verbindung",
         "state": {
           "on": "Online",
           "off": "Offline"
