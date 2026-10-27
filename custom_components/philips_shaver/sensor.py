@@ -477,6 +477,7 @@ class PhilipsDeviceStateSensor(PhilipsShaverEntity, SensorEntity):
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = ["off", "shaving", "charging", "unknown"]
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
 
     def __init__(
         self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
