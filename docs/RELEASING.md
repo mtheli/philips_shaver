@@ -83,6 +83,24 @@ Home Assistant and then saw something break deserves to know the two are
 connected — a release that fixes pairing under Home Assistant's Auto
 scanning links the core pull request that changed the default scanning mode.
 
+## Between releases: the draft release
+
+User-facing changes that land on `main` without a release of their own are
+collected in a **draft release** on GitHub, titled `Unreleased`. Drafts are
+invisible to users and HACS does not offer them, so the draft is where notes
+wait without reaching anyone.
+
+- **Add the note with the commit**, in the final release-note style above,
+  so the release only needs a title and the firmware line.
+- **There is only one draft.** If none exists, create it with
+  `gh release create unreleased --draft --title Unreleased --notes-file
+  <file>`. A draft does not create its tag, so `unreleased` stays a
+  placeholder until the release is published under its real tag.
+- **The integration has no changelog file.** The release notes are the
+  changelog, so a second copy in the repository would only drift. Bridge
+  firmware is different: its changelog is read live by the update entity,
+  see below.
+
 ## Bridge firmware: two files, always together
 
 The bridge firmware carries its version in **two** places, and a change to
@@ -161,4 +179,8 @@ is one product: they update the integration and the card changes with it.
    version and commit the refreshed `custom_components/philips_shaver/www/`
    bundle. It has to run *after* the bump: the script reads the version out
    of the manifest and stamps it into the bundle.
-6. Tag `vX.Y.Z`, push, then `gh release create` with the notes above.
+6. Tag `vX.Y.Z`, push, then publish the `Unreleased` draft: set its tag to
+   `vX.Y.Z`, its title as above, finish the notes and add the firmware line
+   (`gh release edit unreleased --tag vX.Y.Z --title … --notes-file …
+   --draft=false`). Without a draft, `gh release create` with the notes
+   above.
