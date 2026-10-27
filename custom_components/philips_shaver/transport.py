@@ -1191,6 +1191,9 @@ class EspBridgeTransport(ShaverTransport):
                 _LOGGER.warning(
                     "ESP heartbeat timeout (%.0fs) — bridge offline", elapsed
                 )
+                # An unreachable bridge cannot hold the shaver link either;
+                # the next heartbeat reports the real state again.
+                self._shaver_connected = False
                 self._cancel_pending_reads()
                 if self._disconnect_cb:
                     self._disconnect_cb()
