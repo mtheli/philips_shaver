@@ -541,10 +541,13 @@ async def _cleanup_disconnected_client(client: BleakClient) -> None:
     shorter than that, or it cancels ``disconnect()`` before it reaches
     the bus-closing step, leaking the bus instead of closing it.
     """
+    address = getattr(client, "address", "?")
     try:
         await client.disconnect()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.debug("Bus cleanup for %s raised (ignored): %s", address, err)
+    else:
+        _LOGGER.debug("Bus cleanup for %s done", address)
 
 
 class BleakTransport(ShaverTransport):
@@ -714,6 +717,8 @@ class BleakTransport(ShaverTransport):
                     self._address,
                     exc_info=True,
                 )
+            else:
+                _LOGGER.debug("%s: bus cleanup done", self._address)
             finally:
                 if self._disconnect_cb:
                     self._disconnect_cb()
@@ -773,12 +778,10 @@ class BleakTransport(ShaverTransport):
         finally:
             # Not gated on is_connected: a client the shaver already
             # disconnected still needs disconnect() called to close
-            # bleak's own D-Bus connection (see _cleanup_disconnected_client).
+            # bleak's own D-Bus connection. Reuses the shared helper
+            # instead of a duplicated inline try/except.
             if client:
-                try:
-                    await client.disconnect()
-                except Exception:
-                    pass
+                await _cleanup_disconnected_client(client)
         return results
 
     async def write_char(self, char_uuid: str, data: bytes) -> None:

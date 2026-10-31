@@ -99,6 +99,7 @@ from .transport import (
     UNPAIR_OK,
     UNPAIR_UNAVAILABLE,
     EspBridgeTransport,
+    _cleanup_disconnected_client,
     async_unpair_bridge_slot,
     describe_available_paths,
     describe_connection_path,
@@ -886,15 +887,12 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         finally:
             # Not gated on is_connected: a client the shaver already
             # disconnected still needs disconnect() called to close
-            # bleak's own D-Bus connection (see transport.py's
-            # _cleanup_disconnected_client for why that matters). Now
-            # reachable in more cases than before, so guard against
-            # disconnect() itself raising and masking the real error.
+            # bleak's own D-Bus connection. Reuses the shared helper
+            # instead of a duplicated inline try/except — it already
+            # swallows disconnect()'s own exceptions, so it can't mask
+            # the real error being raised from this block.
             if client:
-                try:
-                    await client.disconnect()
-                except Exception:
-                    pass
+                await _cleanup_disconnected_client(client)
 
         return capabilities
 
