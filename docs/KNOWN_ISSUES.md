@@ -9,6 +9,7 @@ Limitations that sit outside the integration — in the host adapter, the Blueto
 | Issue | Affects | Known since | Status |
 | :--- | :--- | :--- | :--- |
 | [Some USB dongles cannot complete SMP bonding](#some-usb-dongles-cannot-complete-smp-bonding) | Some USB Bluetooth dongles | 2026-07-22 | ❌ Adapter limitation |
+| [Realtek RTL8852BE: shaver drops the connection after ~30 s](#realtek-rtl8852be-shaver-drops-the-connection-after-30-s) | Realtek RTL8852BE Wi-Fi/Bluetooth cards | 2026-10-31 | ❌ Adapter limitation |
 
 ---
 
@@ -58,6 +59,32 @@ culprit.
 2. **Use the [ESP32 BLE Bridge](ESP_BRIDGE_SETUP.md)** — it performs the
    bonding on the ESP32 itself, taking the host adapter out of the
    equation entirely.
+
+---
+
+## Realtek RTL8852BE: shaver drops the connection after ~30 s
+
+**Known since:** 2026-10-31
+
+**Status:** Adapter limitation, no integration-side fix
+
+With the Bluetooth part of a **Realtek RTL8852BE** Wi-Fi/Bluetooth card as the host adapter, the connection itself works: the shaver pairs, all reads succeed and live monitoring starts. About 30 seconds after every connect, though, the shaver closes the link. Because it keeps advertising, the integration reconnects right away, and the cycle repeats every ~35 s around the clock.
+
+### Symptoms
+
+- The log shows `connection lost` roughly 30 s after each `connected via hci…`, with very little variation between cycles.
+- `Wake via ADV` follows a few seconds later, and the loop starts over.
+- Signal strength, pairing and a phone in range are not the cause; the same shaver stays connected on a different adapter.
+
+### Confirmed affected adapter
+
+- **Realtek RTL8852BE**, the built-in Wi-Fi/Bluetooth card of a Firebat R3 mini PC (also sold as CDW-C9852BE-00), with an S7887 over Direct Bluetooth. Moving to a different adapter ended the loop ([#27](https://github.com/mtheli/philips_shaver/issues/27)).
+
+### Mitigations
+
+1. **Use a different adapter.** See the list under [Some USB dongles cannot complete SMP bonding](#mitigations).
+2. **Use the [ESP32 BLE Bridge](ESP_BRIDGE_SETUP.md)**, which takes the host adapter out of the equation.
+3. If neither is possible right now, disable the config entry to spare the shaver's battery.
 
 ---
 
