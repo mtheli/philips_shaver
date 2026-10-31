@@ -29,7 +29,10 @@ def _transport(monkeypatch) -> tr.BleakTransport:
     )
     monkeypatch.setattr(tr, "is_local_bluez_connection", lambda client: True)
     monkeypatch.setattr(tr, "describe_connection_path", lambda *args: "hci0")
-    return tr.BleakTransport(SimpleNamespace(), ADDRESS)
+    hass = SimpleNamespace(
+        async_create_task=lambda coro: asyncio.ensure_future(coro)
+    )
+    return tr.BleakTransport(hass, ADDRESS)
 
 
 def _client() -> SimpleNamespace:
@@ -96,6 +99,10 @@ async def test_stale_disconnect_callback_cannot_clear_replacement(monkeypatch) -
     await transport.connect()
     callbacks[0](first)
 
+    # The second connect() call must close first's bus itself (no BlueZ
+    # callback was delivered for it) — same mechanism as
+    # philips_sonicare_ble issue #45.
+    first.disconnect.assert_awaited_once()
     assert transport._client is second
     assert transport.is_connected
     changed.assert_not_called()
@@ -137,6 +144,30 @@ async def test_intentional_disconnect_notifies_coordinator_once(monkeypatch) -> 
     changed.assert_called_once_with()
 
 
+async def test_remote_disconnect_closes_old_clients_bus(monkeypatch) -> None:
+    # Same mechanism as philips_sonicare_ble issue #45: a client the shaver
+    # disconnected on its own must still get disconnect() called, or
+    # bleak's private D-Bus connection for that session leaks and BlueZ
+    # re-arms its StartNotify registrations on the next connect.
+    transport = _transport(monkeypatch)
+    client = _client()
+    callbacks = []
+
+    async def establish(*args, disconnected_callback, **kwargs):
+        callbacks.append(disconnected_callback)
+        return client
+
+    monkeypatch.setattr(tr, "bleak_establish", AsyncMock(side_effect=establish))
+    await transport.connect()
+
+    client.disconnect.reset_mock()
+    callbacks[0](client)  # the shaver itself ends the link
+
+    assert transport._client is None
+    await asyncio.sleep(0)  # let the scheduled cleanup task run
+    client.disconnect.assert_awaited_once()
+
+
 async def test_intentional_disconnect_from_lost_link_still_notifies(monkeypatch) -> None:
     transport = _transport(monkeypatch)
     client = _client()
@@ -148,7 +179,11 @@ async def test_intentional_disconnect_from_lost_link_still_notifies(monkeypatch)
     client.is_connected = False  # link gone, but BlueZ callback not delivered
     await transport.disconnect()
 
-    client.disconnect.assert_not_awaited()
+    # disconnect() must still be called here, not skipped: with no BlueZ
+    # callback delivered, this is the only place left that can close
+    # bleak's own D-Bus connection for the dead client (bus otherwise
+    # leaks — same mechanism as philips_sonicare_ble issue #45).
+    client.disconnect.assert_awaited_once()
     changed.assert_called_once_with()
     assert transport._client is None
 
@@ -187,6 +222,7 @@ async def test_connect_rejects_client_already_disconnected(monkeypatch) -> None:
     with pytest.raises(TransportError, match="disconnected during BLE setup"):
         await transport.connect()
 
+    client.disconnect.assert_awaited_once()
     assert transport._client is None
 
 
@@ -246,6 +282,7 @@ async def test_disconnect_during_establish_notifies_before_assignment(
         await transport.connect()
 
     changes.assert_called_once_with()
+    client.disconnect.assert_awaited_once()
     assert transport._client is None
 
 

@@ -884,8 +884,17 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             _LOGGER.error("Connection error during capabilities fetch: %s", err)
             raise CannotConnectException from err
         finally:
-            if client and client.is_connected:
-                await client.disconnect()
+            # Not gated on is_connected: a client the shaver already
+            # disconnected still needs disconnect() called to close
+            # bleak's own D-Bus connection (see transport.py's
+            # _cleanup_disconnected_client for why that matters). Now
+            # reachable in more cases than before, so guard against
+            # disconnect() itself raising and masking the real error.
+            if client:
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
 
         return capabilities
 

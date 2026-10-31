@@ -519,6 +519,34 @@ class ShaverTransport(abc.ABC):
 # BleakTransport — wraps existing direct BLE code
 # ---------------------------------------------------------------------------
 
+
+async def _cleanup_disconnected_client(client: BleakClient) -> None:
+    """Close the private D-Bus connection bleak opened for this client.
+
+    bleak only tears this down inside ``BleakClient.disconnect()`` — a
+    remote disconnect (``disconnected_callback``) never calls it, so the
+    connection is otherwise left open — and stays open, since dbus-fast
+    registers its socket with the event loop (``loop.add_reader``), which
+    keeps it alive until the process exits, not until Python garbage-collects it.
+    Until it actually closes, BlueZ keeps every ``StartNotify``
+    registration made on it alive and re-arms them on the next connect
+    (see mtheli/philips_sonicare_ble#45 — same bleak/BlueZ mechanism).
+
+    Also used at call sites where the client may still be connected: on a
+    dead client, ``disconnect()`` is a fast no-op (skips BlueZ's
+    ``Device1.Disconnect`` since the link is already down, then closes
+    bleak's own bus). On a live one, it sends that D-Bus call and bleak
+    bounds the wait for BlueZ's reply itself (its own internal 10s
+    timeout) before closing the bus — an outer timeout here must not be
+    shorter than that, or it cancels ``disconnect()`` before it reaches
+    the bus-closing step, leaking the bus instead of closing it.
+    """
+    try:
+        await client.disconnect()
+    except Exception:  # noqa: BLE001
+        pass
+
+
 class BleakTransport(ShaverTransport):
     """Direct BLE transport using bleak."""
 
@@ -565,6 +593,12 @@ class BleakTransport(ShaverTransport):
         async with self._connect_lock:
             if self.is_connected:
                 return
+            if self._client is not None:
+                # The BlueZ disconnected callback for this client was
+                # never delivered (link already dead) — still need
+                # disconnect() to close bleak's own D-Bus connection for
+                # it, or it leaks (see _cleanup_disconnected_client).
+                await _cleanup_disconnected_client(self._client)
             self._client = None
             self._connection_path = None
             self._connected_scanner = None
@@ -590,6 +624,15 @@ class BleakTransport(ShaverTransport):
                         return
                     # A disconnect during bleak_establish() still needs to
                     # reach the coordinator's advertisement wake gate.
+                    #
+                    # Deliberately NOT scheduling cleanup here: this client
+                    # is still owned by the in-flight bleak_establish()
+                    # retry loop, which reuses the same client/bus across
+                    # attempts. Calling disconnect() on it concurrently
+                    # would close the bus a live retry attempt still needs.
+                    # bleak's own connect() already tears down each failed
+                    # attempt's bus itself (AsyncExitStack callback), so
+                    # nothing leaks here either way.
                     _LOGGER.info(
                         "%s: connection lost during setup", self._address
                     )
@@ -601,6 +644,15 @@ class BleakTransport(ShaverTransport):
                 self._client = None
                 self._connection_path = None
                 self._connected_scanner = None
+                # Scheduled before the disconnect callback: if that
+                # callback raises, cleanup must still happen or
+                # disconnected_client leaks its bus.
+                # disconnected_client is the now-dead client bleak handed
+                # us; self._client is already None above, so nothing else
+                # still references it.
+                self._hass.async_create_task(
+                    _cleanup_disconnected_client(disconnected_client)
+                )
                 if self._disconnect_cb:
                     self._disconnect_cb()
 
@@ -613,16 +665,13 @@ class BleakTransport(ShaverTransport):
             )
             if not is_local_bluez_connection(client):
                 path = describe_connection_path(self._hass, client, device)
-                try:
-                    if client.is_connected:
-                        await client.disconnect()
-                except Exception:  # noqa: BLE001
-                    pass
+                await _cleanup_disconnected_client(client)
                 raise TransportError(
                     f"Device {self._address} connected via {path}, not a local "
                     "Bluetooth adapter"
                 )
             if not client.is_connected:
+                await _cleanup_disconnected_client(client)
                 raise TransportError(
                     f"Device {self._address} disconnected during BLE setup"
                 )
@@ -652,8 +701,13 @@ class BleakTransport(ShaverTransport):
                 return
 
             try:
-                if client.is_connected:
-                    await client.disconnect()
+                # Not gated on is_connected: if the BlueZ disconnected
+                # callback was never delivered (see
+                # test_intentional_disconnect_from_lost_link_still_notifies),
+                # self._client still points to a dead client here. Calling
+                # disconnect() unconditionally is what actually closes
+                # bleak's own D-Bus connection for it.
+                await client.disconnect()
             except Exception:  # noqa: BLE001
                 _LOGGER.debug(
                     "%s: error disconnecting BLE client",
@@ -717,7 +771,10 @@ class BleakTransport(ShaverTransport):
         except Exception as err:
             _LOGGER.debug("BLE poll error (device likely sleeping): %s", err)
         finally:
-            if client and client.is_connected:
+            # Not gated on is_connected: a client the shaver already
+            # disconnected still needs disconnect() called to close
+            # bleak's own D-Bus connection (see _cleanup_disconnected_client).
+            if client:
                 try:
                     await client.disconnect()
                 except Exception:
