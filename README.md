@@ -50,6 +50,7 @@ See [Configuration](#configuration) for setup instructions.
 | [S7887](https://www.usa.philips.com/c-p/S7887_82/shaver-series-7000-wet-dry-electric-shaver) | :white_check_mark: | :white_check_mark: | Community ([forum](https://community.home-assistant.io/t/philips-bluetooth-shaver-monitoring/858822/8), [#27](https://github.com/mtheli/philips_shaver/issues/27)) |
 | [S7786](https://www.philips.co.uk/c-p/S7786_50/shaver-series-7000-wet-and-dry-electric-shaver) | :white_check_mark: | | Community ([#21](https://github.com/mtheli/philips_shaver/issues/21)) |
 | [S7788](https://www.usa.philips.com/c-p/S7788_82/norelco-shaver-7100-wet-dry-electric-shaver-series-7000) | | :white_check_mark: | Community ([#13](https://github.com/mtheli/philips_shaver/pull/13)) |
+| S7785 | | :white_check_mark: | Community ([#28](https://github.com/mtheli/philips_shaver/issues/28)) |
 | **Shaver Series 8000** | | | |
 | [S8697](https://www.philips.co.uk/c-p/S8697_55/shaver-series-8000-wet-and-dry-electric-shaver) | | :white_check_mark: | Community ([#25](https://github.com/mtheli/philips_shaver/issues/25)) |
 | **Shaver Series 9000** | | | |
