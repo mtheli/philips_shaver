@@ -113,6 +113,11 @@
   .toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.3); }
   .toggle.on { background: var(--accent); }
   .toggle.on::after { left: 22px; }
+  .sect { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px 6px; margin: 12px 0 8px; }
+  .sect .shead { display: flex; justify-content: space-between; font-weight: 600; font-size: 13.5px; margin-bottom: 4px; }
+  .sect .shead .caret { color: var(--muted); }
+  .sect .slabel { font-size: 12.5px; color: var(--muted); margin: 2px 0 2px; }
+  a.ulink { color: var(--accent-ink); }
   .menuopt {
     display: flex; align-items: center; gap: 12px; border: 1px solid var(--line);
     border-radius: 10px; padding: 12px 14px; margin: 8px 0; font-weight: 500; font-size: 14px;
@@ -234,10 +239,10 @@
 <div class="wrap">
   <p class="eyebrow">philips_shaver · interactive walkthrough</p>
   <h1>Play through the config flow</h1>
-  <p class="sub">One screen at a time, with every possible continuation below it — the normal path, conditional branches, errors (which stay in the dialog) and aborts. The breadcrumbs at the top lead back. Example data: XP9201 (i9000 Prestige) &amp; OneBlade QP4530 · ESP node <code>atom-s3r</code> with the slots <code>shaver</code> (“Bathroom Shaver”) and <code>oneblade</code> (“Beard Trimmer”).</p>
-  <p class="stamp">Last updated: 2026-07-27 · philips_shaver v0.26.0 — source references point at <code>config_flow.py</code> of that version.</p>
+  <p class="sub">One screen at a time, with every possible continuation below it — the normal path, conditional branches, errors (which stay in the dialog) and aborts. The breadcrumbs at the top lead back. Example data: XP9201 (i9000 Prestige) &amp; OneBlade QP4530 · two local Bluetooth adapters <code>hci0</code> and <code>hci1</code> · ESP node <code>atom-s3r</code> with the slots <code>shaver</code> (“Bathroom Shaver”) and <code>oneblade</code> (“Beard Trimmer”).</p>
+  <p class="stamp">Last updated: 2026-11-07 · philips_shaver v0.32.0 — source references point at <code>config_flow.py</code> of that version.</p>
 
-  <details class="index"><summary>Step index (S0–S20, A1–A4)</summary>
+  <details class="index"><summary>Step index (S0–S24, A1–A4)</summary>
     <div class="indexgrid" id="index"></div>
   </details>
 
@@ -252,6 +257,9 @@
 <script>
 const MAC = "AA:BB:CC:11:22:33";
 const MAC2 = "AA:BB:CC:44:55:66";
+const HCI0 = "hci0 (58:D8:12:3E:CA:B2)";
+const HCI1 = "hci1 (00:0A:CD:46:B2:2D)";
+const UNPAIR = `<a class="ulink" href="https://github.com/mtheli/philips_shaver/blob/main/docs/UNPAIRING.md#step-2-unpair-on-the-device-itself">unpairing guide</a>`;
 
 function dlg(title, body, actions, meta, note) {
   return `<div class="dlg">
@@ -264,6 +272,21 @@ function dlg(title, body, actions, meta, note) {
 }
 function meta(sid, src) { return `<span class="sid">${sid}</span><span class="src">${src}</span>`; }
 function errline(key, text) { return `<div class="formerr">⚠ ${text} <span class="mono">(${key})</span></div>`; }
+// "Bluetooth adapter" section of the Direct-BLE setup forms — only shown with
+// two or more local adapters. rows: [label, selected]
+function adapterSection(rows) {
+  return `<div class="sect">
+      <div class="shead"><span>Bluetooth adapter</span><span class="caret">▴</span></div>
+      <div class="slabel">Connect through</div>
+      ${rows.map(([l, sel]) => `<div class="radio${sel ? " sel" : ""}"><span class="dot"></span><span>${l}</span></div>`).join("")}
+      <div class="field" style="margin:4px 0 2px"><div class="fhelp">Local Bluetooth adapter the shaver connects through, starting with this first connection — only through that one: if it does not receive the shaver, there is no connection. The shaver keeps only one pairing, so it stays with one adapter; preselected is the one that receives it best right now. You can change this later in the options.</div></div>
+    </div>`;
+}
+function tipbar(pct, label) {
+  return `<div class="progressbar det"><div style="width:${pct}%"></div></div>
+    <p>💡 <b>Tip:</b> if the shaver is off, switch it on now — press the power button or place it on its charging stand.</p>
+    <p style="color:var(--muted)">${label}</p>`;
+}
 function detbar(pct, label) {
   return `<div class="progressbar det"><div style="width:${pct}%"></div></div>
     <p style="color:var(--muted)">${label}</p>`;
@@ -273,11 +296,13 @@ const ERRORS = {
   cannot_connect: "Failed to connect to the shaver. Please ensure it is powered on, in range, and not connected to another device (e.g. your phone).",
   device_asleep: "The shaver is asleep. Wake it (press the power button or place it on its charging stand), then try again.",
   device_not_found: "Device not found. Please ensure it is powered on and in range.",
-  pairing_failed: "Bluetooth pairing failed. Make sure the shaver is switched on and not connected to another device (phone / GroomTribe / OneBlade app). If it keeps failing, the shaver may still hold an old bond on its side — clear Bluetooth on the shaver (model-specific: long-press the power button until the Bluetooth LED clears, or unpair it in the app), then retry.",
+  pairing_failed: "Bluetooth pairing failed. Make sure the shaver is switched on and not connected to another device (phone / GroomTribe / OneBlade app). If it keeps failing, the shaver still holds an old pairing on its side — reset Bluetooth on the shaver itself (model-specific, see the unpairing guide; unpairing in the app is not enough), then retry.",
+  pair_not_found: "The Bluetooth adapter did not find the shaver for pairing. Switch the shaver on, bring it close to the adapter and try again.",
+  adapter_not_receiving: "The selected Bluetooth adapter does not receive the shaver right now. Switch the shaver on and bring it within range of that adapter, or choose another adapter.",
   service_call_failed: "Could not arm pair-mode on the ESP bridge. The bridge may be offline or a too-old firmware version. Update the bridge to v1.8.0 or newer and retry.",
   pair_timeout: "No shaver appeared during the 60-second pair-mode window. Make sure the shaver is on and advertising, and try again.",
   pair_timeout_passive_scanner: "<strong>No shaver appeared during the 60-second pair-mode window.</strong> The bridge <strong>scanned passively</strong> the whole time, so it could not see the shaver at all — a passive scan never asks for the scan response that carries the shaver's service UUID.<br><br><strong>What to do:</strong> set this ESPHome device's Bluetooth scanning mode to <strong>Active</strong> under <code>Settings &gt; Devices &amp; Services &gt; ESPHome &gt; Configure</code>, then try again.",
-  pair_failed_stale_bond: "Pairing failed with repeated auth errors. The shaver still holds the previous bond on its side and is rejecting fresh pairing. Clear Bluetooth on the shaver (model-specific: long-press the power button until the BT LED clears, or unpair via the GroomTribe / OneBlade app), then retry.",
+  pair_failed_stale_bond: "Pairing failed with repeated auth errors. The shaver still holds the previous pairing on its side and rejects a new one. Reset Bluetooth on the shaver itself (model-specific, see the unpairing guide; unpairing in the GroomTribe / OneBlade app is not enough), then retry.",
   no_esphome_devices: "No ESPHome devices found. Please set up an ESPHome device with the BLE bridge component first.",
   unknown: "Unexpected error. Check the logs (Settings → System → Logs) for details.",
   unpair_unconfirmed: "Couldn't confirm the bridge cleared the bond — it may need a reboot. Make sure it's online, then try again.",
@@ -311,7 +336,7 @@ const SCREENS = {
         <div class="tsub">Discovered · Bluetooth (${MAC})</div>
         <div class="tactions"><span class="fakebtn">Add</span><span class="fakebtn" style="color:var(--muted)">Ignore</span></div>
       </div>
-      <div class="meta">${meta("bluetooth","config_flow.py:721")}</div>
+      <div class="meta">${meta("bluetooth","config_flow.py:1768")}</div>
       <div class="metanote">UI-less routing step: sets the <code>unique_id</code> from the advertised address. If an ESP bridge slot already holds this shaver (identity or live MAC — probed via the 3-second <code>ble_get_info</code> event round-trip), the flow switches to the ESP path.</div>`,
     opts: [
       ["main","Add","bluetooth_confirm"],
@@ -326,7 +351,7 @@ const SCREENS = {
         <div class="tsub">Discovered · ESPHome (Shaver bridge)</div>
         <div class="tactions"><span class="fakebtn">Configure</span><span class="fakebtn" style="color:var(--muted)">Ignore</span></div>
       </div>
-      <div class="meta">${meta("zeroconf","config_flow.py:632")}</div>
+      <div class="meta">${meta("zeroconf","config_flow.py:1678")}</div>
       <div class="metanote">UI-less routing step: verifies the ESPHome device hosts Shaver bridge services (a Sonicare bridge sharing the service-name pattern never answers on our event channel), then continues based on the slot situation. Already-configured slots are matched on identity∪MAC plus a config-entry fallback — the live MAC reads <code>00:00:…</code> while the shaver is asleep.</div>`,
     opts: [
       ["cond","Bridge hosts several slots → device selection","esp_select_device"],
@@ -341,7 +366,7 @@ const SCREENS = {
       `<p>Choose how to connect to your shaver.</p>
        <div class="menuopt"><span class="ic">🖥</span> Direct Bluetooth <span class="chev">›</span></div>
        <div class="menuopt"><span class="ic">📡</span> ESP32 Bridge (ESPHome) <span class="chev">›</span></div>`,
-      [], meta("user","config_flow.py:1149")),
+      [], meta("user","config_flow.py:2251")),
     opts: [
       ["main","Direct Bluetooth","user_bleak"],
       ["main","ESP32 Bridge (ESPHome)","esp_bridge"],
@@ -352,33 +377,38 @@ const SCREENS = {
     render: (s) => dlg("Confirm detected device",
       `${s.variant==="asleep" ? `<div class="alert error">⚠ <span>The shaver is asleep — wake it (press the power button or place it on its charging stand), then click Read capabilities again.</span></div>` : ""}
        ${s.variant==="failed" ? `<div class="alert error">⚠ <span>Could not read the shaver. Make sure it is switched on and in range, then click Read capabilities to try again. Details are in the logs (Settings → System → Logs).</span></div>` : ""}
-       <p><b>Philips XP9201</b> discovered at <code>${MAC}</code>${s.variant==="proxy" ? " via <b>Bluetooth proxy</b> (atom-lite, −61 dBm)" : " via <b>Direct Bluetooth</b> (hci0, −68 dBm)"}.</p>
-       ${s.variant==="proxy" ? `<div class="alert warn">⚠ <span>This connection would go through the Bluetooth proxy <b>atom-lite</b> (−61 dBm).<br><br>Philips shavers cannot pair over a standard Bluetooth proxy — setup and live updates over this path will fail.<br><br>Your local adapter <b>hci0</b> also sees the shaver (−78 dBm) — Home Assistant connects through the strongest signal, so move the shaver closer to it to prefer that path.</span></div>` : ""}
+       ${s.variant==="adapter" ? `<div class="alert error">⚠ <span>The selected Bluetooth adapter does not receive the shaver right now. Switch the shaver on and bring it within range of that adapter, or choose another adapter.</span></div>` : ""}
+       <p><b>Philips XP9201</b> discovered at <code>${MAC}</code>${s.variant==="proxy" ? " via <b>Bluetooth proxy</b> (atom-lite, −61 dBm)" : " via <b>Direct Bluetooth</b> (hci1, −66 dBm)"}.</p>
+       ${s.variant==="proxy" ? `<div class="alert warn">⚠ <span>This connection would go through the Bluetooth proxy <b>atom-lite</b> (−61 dBm).<br><br>Philips shavers cannot pair over a standard Bluetooth proxy — setup and live updates over this path will fail.<br><br>Set the shaver up via a local Bluetooth adapter or the dedicated ESP32 bridge instead.</span></div>` : ""}
        <p>ℹ️ <b>Before continuing, please verify:</b><br>
        1. ⬜ Shaver is <b>turned on</b> or on its <b>charging stand</b><br>
-       2. ⬜ Shaver is <b>unpaired</b> from your phone — remove from Bluetooth settings <b>and</b> GroomTribe / OneBlade app</p>
-       <p>Pairing will be handled automatically during setup. The integration will then connect to the device to read hardware capabilities. This may take a few seconds.</p>`,
-      ["Read capabilities"], meta("bluetooth_confirm","config_flow.py:731"),
-      "The “via …” line and the proxy warning are computed per render from the connectable scanners that currently see the shaver (strongest first; stale BlueZ −127 entries are filtered). No scanner sees it → no prediction. On submit, a D-Bus pre-check takes a shortcut to the pairing step when BlueZ knows the device is unpaired (skipped when a remote scanner is the likely carrier — the BlueZ bond state says nothing about a proxy link)."),
+       2. ⬜ Shaver is <b>unpaired</b> from your phone and other devices<br>
+       &nbsp;&nbsp;&nbsp;— Remove it from Bluetooth settings <b>and</b> the GroomTribe / OneBlade app; if it still holds an old pairing, reset Bluetooth on the shaver itself — see the ${UNPAIR}</p>
+       <p>Pairing will be handled automatically during setup. The integration will then connect to the device to read hardware capabilities. This may take a few seconds.</p>
+       ${s.variant==="proxy" ? "" : adapterSection([[`${HCI1}, −66 dBm`, true], [`${HCI0}, −80 dBm`, false]])}`,
+      ["Read capabilities"], meta("bluetooth_confirm","config_flow.py:1797"),
+      "The “via …” line and the proxy warning are computed per render from the connectable scanners that currently see the shaver (strongest first; stale BlueZ −127 entries are filtered). No scanner sees it → no prediction. The <b>Bluetooth adapter</b> section appears only with two or more local adapters: adapters receiving the shaver first, strongest first and preselected; Bluetooth proxies are never listed. There is no “Automatic” — the shaver keeps one pairing only. On submit, a D-Bus pre-check on the chosen adapter takes a shortcut to the pairing step when BlueZ knows the device is unpaired there (skipped when a remote scanner is the likely carrier — the BlueZ bond state says nothing about a proxy link)."),
     opts: [
       ["main","Read capabilities → probe runs behind a progress bar","probing"],
-      ["cond","D-Bus pre-check: not paired → straight to the pairing dialog","pair"],
+      ["cond","D-Bus pre-check: not paired on the chosen adapter → straight to pairing","pair",{phase:"pairing"}],
       ["cond","Proxy would carry the connection → hard warning shown","bluetooth_confirm",{variant:"proxy"}],
-      ["cond","Shaver was asleep on submit → alert appears, card stays open","bluetooth_confirm",{variant:"asleep"}],
+      ["cond","No advertisement within 45 s → asleep alert, card stays open","bluetooth_confirm",{variant:"asleep"}],
+      ["cond","Chosen adapter stays silent while another one hears the shaver → alert","bluetooth_confirm",{variant:"adapter"}],
     ],
   },
 
   probing: {
     render: () => dlg("Confirm detected device",
-      detbar(45, "Connecting to Philips XP9201 and reading its data — usually a few seconds; if several connection attempts are needed (weak signal, first contact after a pairing problem) this can take up to two minutes…"),
-      [], meta("probing · ble_probing","config_flow.py:991"),
-      "The probe runs as a background task behind <code>async_show_progress</code> with a determinate bar; a wall-clock ticker keeps the bar moving while <code>establish_connection</code> retries internally (stale bond: 4 attempts, ~85 s). <code>ble_probe_finish</code> routes the boxed outcome back to whichever step started the probe."),
+      tipbar(45, "Connecting to Philips XP9201 and reading its data — usually a few seconds; if the shaver has to be switched on first or several connection attempts are needed (weak signal), this can take up to three minutes…"),
+      [], meta("probing · ble_probing","config_flow.py:2083"),
+      "The probe runs as a background task behind <code>async_show_progress</code> with a determinate bar. A shaver whose last advertisement is older than 15 s is not connected blindly: the task first waits up to 45 s for the next advertisement on the chosen adapter (the tip asks to switch it on). A wall-clock ticker keeps the bar moving while <code>establish_connection</code> retries internally. The task lasts at least one second, so the frontend never gets stuck on a spinner. <code>ble_probe_finish</code> routes the boxed outcome back to whichever step started the probe."),
     opts: [
       ["main","Probe succeeds (services + device info read)","show_capabilities_direct"],
       ["cond","Missing bond (auth error on the encrypted reads) → pairing","pair"],
       ["cond","Visible but unreachable — likely stale bond → pairing (removes + re-pairs)","pair"],
       ["cond","Probe rode a Bluetooth proxy and hit the missing bond → hard dead-end","not_paired_proxy"],
-      ["err","Shaver fell asleep → alert on the confirm card","bluetooth_confirm",{variant:"asleep"}],
+      ["err","No advertisement within 45 s → asleep alert on the confirm card","bluetooth_confirm",{variant:"asleep"}],
+      ["err","Chosen adapter silent, another one hears the shaver → alert","bluetooth_confirm",{variant:"adapter"}],
       ["err","Read failed → alert on the confirm card","bluetooth_confirm",{variant:"failed"}],
     ],
   },
@@ -389,18 +419,21 @@ const SCREENS = {
        <p><b>Important:</b> switch the shaver on (press the power button or place it on its charging stand) before clicking Submit — it must stay on so its services can be read.</p>
        <div class="field">
          <div class="flabel">MAC Address</div>
-         <div class="fbox"><span>Philips XP9201 (${MAC}) — 3s ago, −68 dBm, via hci0</span><span class="caret">▾</span></div>
-         <div class="fhelp">Other entries: “Philips QP4530 (${MAC2}) — 7s ago, −74 dBm, via atom-lite (proxy)” · “Other — enter address manually”</div>
+         <div class="radio sel"><span class="dot"></span><span>Philips XP9201 (${MAC}) — 3s ago, −66 dBm, via hci1</span></div>
+         <div class="radio"><span class="dot"></span><span>Philips QP4530 (${MAC2}) — 7s ago, −74 dBm, via atom-lite (proxy)</span></div>
+         <div class="radio"><span class="dot"></span><span>Other — enter address manually</span></div>
        </div>
+       ${adapterSection([[HCI0, true], [HCI1, false]])}
        ${s.error ? errline(s.error, ERRORS[s.error]) : ""}`,
-      ["Submit"], meta("user_bleak","config_flow.py:1158"),
-      "The picker lists devices that advertise the proprietary shaver services, freshest first, with advertisement age, RSSI and the scanner that would likely carry the connect (“(proxy)” marks a remote one). The sentinel entry switches to a free-text MAC field. Submit runs the same D-Bus pre-check and probe as the discovery path."),
+      ["Submit"], meta("user_bleak","config_flow.py:2260"),
+      "The picker lists devices that advertise the proprietary shaver services, freshest first, with advertisement age, RSSI and the scanner that would likely carry the connect (“(proxy)” marks a remote one). The sentinel entry switches to a free-text MAC field; the adapter chosen here is kept. The adapter section has no signal strengths on this form (no address chosen yet), so the adapters are listed by name — check the preselection. Submit runs the same D-Bus pre-check and probe as the discovery path."),
     opts: [
       ["main","Submit → probe runs behind a progress bar","probing"],
-      ["cond","D-Bus pre-check: not paired → straight to the pairing dialog","pair"],
+      ["cond","D-Bus pre-check: not paired on the chosen adapter → straight to pairing","pair",{phase:"pairing"}],
       {group:"Errors / abort"},
       ["err","Error: cannot_connect","user_bleak",{error:"cannot_connect"}],
       ["err","Error: device_asleep","user_bleak",{error:"device_asleep"}],
+      ["err","Error: adapter_not_receiving","user_bleak",{error:"adapter_not_receiving"}],
       ["abort","Address is already a config entry","abort_already_configured"],
     ],
   },
@@ -408,22 +441,25 @@ const SCREENS = {
   pair: {
     render: (s) => s.phase==="pairing"
       ? dlg("Pair Device",
-          detbar(45, "Pairing with Philips XP9201 and reading its data — this can take up to a minute…"),
-          [], meta("pair · pairing","config_flow.py:2477"),
-          "One background task: D-Bus pair + trust (a stale BlueZ bond is removed first), a short settle for key distribution, then the capabilities probe. <code>ble_probe_finish</code> routes the outcome.")
+          tipbar(45, "Pairing with Philips XP9201 and reading its data — usually under a minute; if the shaver has to be switched on first or the signal is weak, a few minutes…"),
+          [], meta("pair · pairing","config_flow.py:3837"),
+          "One background task: wait for a fresh advertisement (up to 45 s), D-Bus pair + trust on the chosen adapter (a stale BlueZ bond there is removed first), a short settle for key distribution, then the capabilities probe. The log names the adapter and how long a failed pairing took: “Authentication Failed” after ~0.5 s (the adapter the shaver already knows), “Authentication Canceled” after ~0.2 s (another adapter while the shaver holds a pairing) and a 30-s timeout although the shaver advertises (the adapter cannot reach it). <code>ble_probe_finish</code> routes the outcome.")
       : dlg("Pair Device",
-      `<p><b>Philips XP9201</b> needs to be paired with this system.</p>
+      `${s.error ? `<div class="alert error">⚠ <span>${ERRORS[s.error]}</span></div>` : ""}
+       <p><b>Philips XP9201</b> needs to be paired with this system.</p>
        <p>ℹ️ <b>Before pairing, please verify:</b><br>
        1. ⬜ Shaver is <b>turned on</b> or on its <b>charging stand</b><br>
-       2. ⬜ Shaver is <b>not connected</b> to your phone — remove from Bluetooth settings <b>and</b> GroomTribe / OneBlade app</p>
-       ${s.error ? errline(s.error, ERRORS[s.error]) : ""}`,
-      ["Start pairing"], meta("pair","config_flow.py:2477")),
+       2. ⬜ Shaver is <b>unpaired</b> from your phone and other devices<br>
+       &nbsp;&nbsp;&nbsp;— Remove it from Bluetooth settings <b>and</b> the GroomTribe / OneBlade app; if it still holds an old pairing, reset Bluetooth on the shaver itself — see the ${UNPAIR}</p>`,
+      ["Start pairing"], meta("pair","config_flow.py:3837"),
+      "Shown after a failed attempt, or when the pre-check found no bond but the confirm dialog was skipped. The adapter chosen before stays — this form has no adapter field, and on the discovery path the card reopens here; to choose another adapter, start a new flow via “+ Add integration”."),
     opts: [
       ["main","Start pairing → progress (pair + probe in one task)","pair",{phase:"pairing"}],
       ["main","Pairing + probe succeed","show_capabilities_direct"],
       {group:"Errors"},
-      ["err","Pairing rejected (pairing_failed)","pair",{error:"pairing_failed"}],
-      ["err","Shaver fell asleep (device_asleep)","pair",{error:"device_asleep"}],
+      ["err","Pairing rejected — the shaver still holds a pairing (pairing_failed)","pair",{error:"pairing_failed"}],
+      ["err","Adapter did not find the shaver (pair_not_found)","pair",{error:"pair_not_found"}],
+      ["err","No advertisement within 45 s (device_asleep)","pair",{error:"device_asleep"}],
       ["err","Post-pairing connect failed (cannot_connect)","pair",{error:"cannot_connect"}],
       ["cond","Paired, but reads still refused → manual instructions","not_paired"],
     ],
@@ -435,7 +471,7 @@ const SCREENS = {
        <p>Open the <b>Terminal &amp; SSH</b> addon (install it first if needed) and run the pairing script:</p>
        <pre>bash /config/custom_components/philips_shaver/scripts/pair.sh</pre>
        <p>The script will scan for nearby Philips devices and guide you through the pairing process.</p>`,
-      ["Retry"], meta("not_paired","config_flow.py:2542"),
+      ["Retry"], meta("not_paired","config_flow.py:3919"),
       "Fallback when D-Bus is unavailable or the automatic pairing keeps failing. Retry re-runs the probe (with the D-Bus pre-check on the discovery path); if the connection rides a proxy this time, the proxy dead-end (S9) is rendered instead."),
     opts: [
       ["main","Retry — pairing worked, probe succeeds","probing"],
@@ -451,7 +487,7 @@ const SCREENS = {
        <p>1. Set the shaver up via a <b>local Bluetooth adapter</b> on the Home Assistant host.<br>
        2. Use the dedicated <b>ESP32 bridge</b> (see the integration documentation).</p>
        <p>If a local adapter is also in range, move the shaver closer to it and click <b>Retry</b> — Home Assistant connects through the strongest signal.</p>`,
-      ["Retry"], meta("not_paired_proxy","config_flow.py:2587"),
+      ["Retry"], meta("not_paired_proxy","config_flow.py:3964"),
       "Hard dead-end, unlike the Sonicare sibling dialog: shavers demand authenticated LESC (numeric comparison), which a stock proxy's <code>io_capability: none</code> can never satisfy — verified at the protocol level (status=5 on every read, no proxy-side SMP attempt). The dedicated ESP32 bridge pairs fine because its firmware ships DisplayYesNo + auto-confirm. Retry re-probes; if a local adapter carries the connect now, the normal pairing machinery applies again."),
     opts: [
       ["main","Retry — local adapter carries the connect now → probe","probing"],
@@ -468,7 +504,7 @@ const SCREENS = {
          <div class="fhelp">🔗 paired slot · 🟢 empty slot · ⚪ ESP offline</div>
        </div>
        ${s.error ? errline(s.error, ERRORS[s.error]) : ""}`,
-      ["Submit"], meta("esp_bridge","config_flow.py:1560"),
+      ["Submit"], meta("esp_bridge","config_flow.py:2710"),
       "Candidates are verified with a parallel <code>ble_get_info</code> event probe (3 s per node) — non-Shaver bridges never answer and are filtered out; disabled ESPHome entries are skipped, offline ones stay visible with the ⚪ marker but are not probed. A single reachable ESP skips this dropdown entirely. The probe results are cached for the slot picker."),
     opts: [
       ["main","Submit — bridge hosts several slots","esp_select_device"],
@@ -484,7 +520,7 @@ const SCREENS = {
        <div class="radio sel"><span class="dot"></span><span>🔐 ⚪ Bathroom Shaver — ${MAC}</span></div>
        <div class="radio"><span class="dot"></span><span>🔐 ⚪ Beard Trimmer — ${MAC2}</span></div>
        <div class="field" style="margin-top:6px"><div class="fhelp">Entries without status icons are empty bridges in pair-mode. Switch on the shaver you want to bond before submitting.</div></div>`,
-      ["Submit"], meta("esp_select_device","config_flow.py:1627"),
+      ["Submit"], meta("esp_select_device","config_flow.py:2777"),
       "Label priority: YAML <code>friendly_name</code> → advertised BLE name → slot id. Reuses the dropdown's probe results when they cover this ESP's slots; pairing and unpairing always re-fetch."),
     opts: [
       ["main","Bonded slot WITHOUT an entry selected → action menu","esp_slot_action"],
@@ -501,7 +537,7 @@ const SCREENS = {
        <p>What would you like to do?</p>
        <div class="menuopt"><span class="ic">🪒</span> Set up this shaver <span class="chev">›</span></div>
        <div class="menuopt"><span class="ic">🔓</span> Unpair it from the bridge <span class="chev">›</span></div>`,
-      [], meta("esp_slot_action","config_flow.py:1839"),
+      [], meta("esp_slot_action","config_flow.py:3021"),
       "Appears for a bonded slot WITHOUT a config entry — e.g. an orphaned bond left behind after its entry was deleted while the bridge was offline. Only NVS-held identities qualify: a YAML-pinned slot re-bonds automatically, so unpairing it would be a confusing no-op. Bond ≠ entry: <code>already_configured</code> only triggers when an entry exists."),
     opts: [
       ["main","Set up this shaver (bond already exists → just read capabilities)","esp_bridge_status"],
@@ -513,7 +549,7 @@ const SCREENS = {
     render: (s) => s.phase==="reading"
       ? dlg("Connection via ESP32 Bridge",
           detbar(60, "Reading the shaver over atom_s3r / Bathroom Shaver…"),
-          [], meta("esp_bridge_status · esp_reading","config_flow.py:1903"),
+          [], meta("esp_bridge_status · esp_reading","config_flow.py:3085"),
           "The capabilities read runs as a background task; <code>esp_read_finish</code> handles the result.")
       : dlg("Connection via ESP32 Bridge",
       `<p>Setting up <b>Philips XP9201</b> via <b>ESP32 Bridge</b>.</p>
@@ -526,7 +562,7 @@ const SCREENS = {
          <tr><td><b>Shaver MAC</b></td><td><code>${MAC}</code></td></tr>
        </tbody></table>
        <p>Make sure the shaver is <b>turned on</b> (press the power button or place it on its charging stand) and <b>keep it on</b>, then click <b>Read capabilities</b>.</p>`,
-      ["Read capabilities"], meta("esp_bridge_status","config_flow.py:1903"),
+      ["Read capabilities"], meta("esp_bridge_status","config_flow.py:3085"),
       "A failed read is injected as an <code>&lt;ha-alert&gt;</code> into the status placeholder — <code>errors[]</code> does not render on schema-less forms. A Mode-B slot with no bound shaver routes straight to pair-mode instead of showing this screen."),
     opts: [
       ["main","Read capabilities → progress","esp_bridge_status",{phase:"reading"}],
@@ -548,7 +584,7 @@ const SCREENS = {
          <tr><td><b>Shaver MAC</b></td><td><code>${MAC}</code></td></tr>
        </tbody></table>
        <p>The bridge is already connected to your shaver. <b>Keep it switched on</b> — click <b>Read capabilities</b> to finish setup.</p>`,
-      ["Read capabilities"], meta("esp_bridge_status_connected","config_flow.py:2123"),
+      ["Read capabilities"], meta("esp_bridge_status_connected","config_flow.py:3307"),
       "Alias of <code>esp_bridge_status</code> with its own text. The green success alert appears once, right after <code>wait_pair</code> completed a fresh bond."),
     opts: [
       ["main","Read capabilities → progress","esp_bridge_status",{phase:"reading"}],
@@ -564,7 +600,7 @@ const SCREENS = {
        <p>3. Click <b>Start pairing</b> below — the bridge will scan for <b>60 seconds</b>. Trigger the shaver's BLE-advertise mode (model-specific: hold the power button or place it on the charging stand).</p>
        <p>Once the bond is established you'll return to the bridge status screen — finish setup there with <b>Read capabilities</b>.</p>
        ${s.error ? errline(s.error, ERRORS[s.error]) : ""}`,
-      ["Start pairing"], meta("request_pair","config_flow.py:2134")),
+      ["Start pairing"], meta("request_pair","config_flow.py:3338")),
     opts: [
       ["main","Start pairing","wait_pair"],
     ],
@@ -578,7 +614,7 @@ const SCREENS = {
           ? detbar(45, "Looking for your shaver and bonding — keep it switched on and close to the bridge. This can take up to a minute.")
           : `<div class="progressbar"><div></div></div>
              <p style="color:var(--muted)">Arming pair-mode on atom_s3r / Bathroom Shaver…</p>`,
-        [], meta(scanning ? "wait_pair · pair_scanning" : "wait_pair · pair_arming","config_flow.py:2157"),
+        [], meta(scanning ? "wait_pair · pair_scanning" : "wait_pair · pair_arming","config_flow.py:3360"),
         "Two <code>async_show_progress</code> phases (<code>pair_arming</code> → <code>pair_scanning</code>) instead of one blocking 65-second spinner. The scanning phase ticks a determinate bar along the bridge's 60-second pair window. The outcome lands in <code>_pair_result</code> and <code>async_step_pair_finish</code> renders it — a clean bond returns to the status screen with a success banner; anything else stands the bridge down so a stray shaver in the leftover window isn't auto-bonded.");
     },
     opts: [
@@ -596,14 +632,14 @@ const SCREENS = {
       ? dlg("Reset bridge bond",
           `<div class="progressbar"><div></div></div>
            <p style="color:var(--muted)">Removing the bond on atom_s3r / Bathroom Shaver…</p>`,
-          [], meta("reset_bridge · unpairing","config_flow.py:2368"),
+          [], meta("reset_bridge · unpairing","config_flow.py:3666"),
           "Waits for the bridge's <code>unpaired</code> event (the bridge defers it ~2 s so the BLE stack can settle); <code>reset_finish</code> renders the outcome.")
       : dlg("Reset bridge bond",
       `${s.error ? `<div class="alert error">⚠ <span>${ERRORS[s.error]}</span></div>` : ""}
        <p>Slot <b>atom_s3r / Bathroom Shaver</b> is currently bonded to <b>${MAC}</b>.</p>
        <p>Clicking <b>Unpair and reset</b> will remove the BLE bond on the bridge and clear the saved identity. After that you can pair a different shaver.</p>
        <p>The shaver keeps its own half of the bond. If pairing this same shaver again later fails with repeated auth errors, clear Bluetooth on the shaver first (model-specific: long-press the power button until the Bluetooth LED clears, or unpair it in the GroomTribe / OneBlade app).</p>`,
-      ["Unpair and reset"], meta("reset_bridge","config_flow.py:2368"),
+      ["Unpair and reset"], meta("reset_bridge","config_flow.py:3666"),
       "Reached via the slot menu (S12). Only continues to pair-mode on a confirmed <code>unpaired</code> event — a silent failure surfaces as an alert instead of dropping back onto the still-bonded status screen. The same confirmed-unpair helper runs on config-entry removal. Errors are injected as an <code>&lt;ha-alert&gt;</code> — <code>errors[\"base\"]</code> does not render on this schema-less step."),
     opts: [
       ["main","Unpair and reset → progress","reset_bridge",{phase:"unpairing"}],
@@ -614,7 +650,7 @@ const SCREENS = {
   },
 
   show_capabilities_direct: {
-    render: () => capDialog("Connected via <b>Direct Bluetooth</b> (hci0 (00:0A:CD:46:B2:2D))."),
+    render: () => capDialog("Connected via <b>Direct Bluetooth</b> (hci1 (00:0A:CD:46:B2:2D))."),
     opts: [
       ["main","Set up — entry is created","created"],
     ],
@@ -632,19 +668,94 @@ const SCREENS = {
         <p>“Bathroom Shaver” is set up. The coordinator starts and entities appear; with the ESP transport the bridge manages the connection.</p>
       </div>`,
     opts: [
-      ["main","Open the integration's options (options flow)","options"],
+      ["main","Options of a Direct Bluetooth entry (two or more local adapters)","options_adapter"],
+      ["main","Options of an ESP bridge entry","options"],
       ["cond","Play through a new flow","start"],
     ],
   },
 
   options: {
-    render: () => dlg("Philips Shaver Options",
-      `<div class="switchrow"><div><div class="sl">Notification throttle (ms)</div><div class="sd">Minimum interval between BLE notification events forwarded by the ESP bridge. Lower values give faster updates but may overload the ESP.</div></div><span class="mono" style="color:var(--muted)">500</span></div>
-       <div class="switchrow"><div><div class="sl">Pipelined GATT reads</div><div class="sd">Send poll reads to the ESP bridge as one concurrent batch. Requires bridge firmware 1.10.0+.</div></div><span class="toggle on"></span></div>`,
-      ["Submit"], meta("options · init","config_flow.py:136"),
-      "Second flow class (OptionsFlowWithReload), reachable at any time from the integration page — ESP transport only; a Direct-BLE entry currently has no options and the dialog closes immediately."),
+    render: () => dlg("Philips Shaver Settings",
+      `<div class="switchrow"><div><div class="sl">Notification Throttle</div><div class="sd">Minimum interval between BLE notification events forwarded by the ESP bridge (in milliseconds). Lower values give faster updates but may overload the ESP API buffer.</div></div><span class="mono" style="color:var(--muted)">500</span></div>
+       <div class="switchrow"><div><div class="sl">Pipelined GATT reads</div><div class="sd">Send the poll cycle's GATT reads to the ESP bridge as one batch instead of one at a time (much faster reconnects). Requires bridge firmware 1.10.0 or newer.</div></div><span class="toggle on"></span></div>`,
+      ["Submit"], meta("options · init","config_flow.py:479"),
+      "Second flow class (OptionsFlowWithReload), reachable at any time from the integration page. ESP bridge entries get these settings. Direct Bluetooth entries go to the adapter choice instead (S22); with a single local adapter there is nothing to choose and the dialog closes immediately."),
     opts: [
       ["main","Submit — options saved (entry reload)","created"],
+    ],
+  },
+
+  options_adapter: {
+    render: () => dlg("Bluetooth adapter",
+      `<p>Choose the local Bluetooth adapter the shaver connects through. If the new adapter needs a pairing first, that follows in the next step.</p>
+       <div class="slabel" style="font-size:12.5px;color:var(--muted)">Bluetooth adapter</div>
+       <div class="radio sel"><span class="dot"></span><span>${HCI1}, −66 dBm</span></div>
+       <div class="radio"><span class="dot"></span><span>${HCI0}</span></div>
+       <div class="field" style="margin:4px 0 2px"><div class="fhelp">The local adapter the shaver connects through — only through that one: if it does not receive the shaver, there is no connection. The shaver keeps only one pairing, so it connects through one fixed adapter; there is no automatic switching. Each adapter needs its own pairing; if the chosen one has none yet, pairing follows in the next step. When you switch adapters, the shaver's pairings on the other local adapters are removed. Bluetooth proxies are not listed — they cannot pair with Philips shavers. Signal strength is shown for adapters that receive the shaver right now.</div></div>`,
+      ["Submit"], meta("options · adapter","config_flow.py:579"),
+      "Preselected: the saved adapter; for an entry set up before this option (still on automatic), the adapter BlueZ holds the bond on — one click fixes it. A saved adapter that is offline stays in the list. The choice decides via BlueZ whether a pairing is needed: no bond on the target adapter, or a bond there while the live connection runs through another adapter (that bond is stale) → pairing."),
+    opts: [
+      ["main","Other adapter, not paired there → pairing step","pair_adapter"],
+      ["main","Adapter already paired → old pairings removed, summary","adapter_changed",{variant:"already"}],
+      ["cond","Same adapter, already paired → saved without a summary","created"],
+      ["cond","Same adapter, stale pairings on others → removed, “confirmed” summary","adapter_changed",{variant:"same"}],
+      ["cond","Bonds on several adapters, shaver not connected → kept, yellow summary","adapter_changed",{variant:"unverified"}],
+    ],
+  },
+
+  pair_adapter: {
+    render: (s) => s.phase==="pairing"
+      ? dlg("Pair Bluetooth adapter",
+          `<div class="progressbar"><div></div></div>
+           <p style="color:var(--muted)">Waiting for the shaver on <b>hci0</b>, then pairing — keep it switched on and close to the adapter. This can take up to two minutes…</p>`,
+          [], meta("options · pair_adapter","config_flow.py:744"),
+          "Waits up to 45 s for an advertisement on the new adapter, then pairs there. A stale bond of the target adapter is removed first; a bond that a timed-out earlier attempt completed late is taken over on retry.")
+      : dlg("Pair Bluetooth adapter",
+      `${s.error==="failed" ? `<div class="alert error">⚠ <span>Pairing with <b>hci0</b> failed: BlueZ pairing error: Authentication Canceled<br><br>If the shaver still holds its previous pairing, it rejects the new adapter — reset Bluetooth on the shaver as described in step 1, switch it on and click Submit to try again. Or close this dialog to keep the previous settings.</span></div>` : ""}
+       ${s.error==="noadv" ? `<div class="alert error">⚠ <span><b>hci0</b> did not receive the shaver within 45 seconds. After a disconnect the shaver often stays silent until it is switched on again.<br><br>Place it close to <b>hci0</b>, switch it on, then click Submit right away — or close this dialog to keep the previous settings.</span></div>` : ""}
+       ${s.error==="weak" ? `<div class="alert warn">⚠ <span><b>hci0</b> receives the shaver only weakly (−88 dBm) — pairing may time out. Bring the shaver closer to <b>hci0</b>.</span></div>` : ""}
+       <p>The shaver is not paired with <b>hci0</b> yet. Each Bluetooth adapter needs its own pairing — paired so far with: <b>hci1</b>.</p>
+       <p>The shaver keeps only one pairing at a time and rejects a new adapter while it still holds the old one:</p>
+       <p>1. <b>Reset Bluetooth on the shaver itself</b> — model-specific, see the ${UNPAIR}. Removing it from a phone or app is not enough.<br>
+       2. Place the shaver close to <b>hci0</b> and <b>switch it on</b> (press the power button or place it on its charging stand).<br>
+       3. Click <b>Submit</b> right away. The integration is paused while this dialog is open and resumes when it closes.</p>`,
+      ["Submit"], meta("options · pair_adapter","config_flow.py:744"),
+      "The entry is unloaded as soon as this form is shown, and a BlueZ link nothing of ours owns is dropped — left running, the entry would reconnect the freshly reset shaver through the old adapter and the pairing on the new one would fail. Closing the dialog brings the entry back with the old settings; a dialog left open does so after 10 minutes, and a later Submit pauses it again. After a failure the entry stays paused for the next attempt."),
+    opts: [
+      ["main","Submit → wait for the shaver, then pair","pair_adapter",{phase:"pairing"}],
+      ["main","Paired → old pairing removed, summary","adapter_changed",{variant:"paired"}],
+      {group:"Errors (form stays, Submit retries)"},
+      ["err","Shaver still holds the old pairing → rejected","pair_adapter",{error:"failed"}],
+      ["err","New adapter did not receive the shaver within 45 s","pair_adapter",{error:"noadv"}],
+      ["cond","Weak signal on the new adapter → yellow hint above the steps","pair_adapter",{error:"weak"}],
+      ["cond","Close the dialog → old settings, entry resumes","created"],
+    ],
+  },
+
+  adapter_changed: {
+    render: (s) => {
+      const v = s.variant || "paired";
+      const head = v === "same"
+        ? `<div class="alert good">✅ <span><b>Bluetooth adapter confirmed.</b> The shaver keeps connecting only through <b>hci1</b>.</span></div>`
+        : v === "unverified"
+        ? `<div class="alert warn">⚠ <span><b>Bluetooth adapter changed.</b> From now on the shaver connects only through <b>hci0</b>.</span></div>`
+        : `<div class="alert good">✅ <span><b>Bluetooth adapter changed.</b> From now on the shaver connects only through <b>hci0</b>.</span></div>`;
+      const rows = v === "paired"
+        ? ["✅ <b>hci0</b>: paired", "✅ <b>hci1</b>: old pairing removed"]
+        : v === "same"
+        ? ["🔲 <b>hci1</b>: pairing not needed — already paired", "✅ <b>hci0</b>: old pairing removed"]
+        : v === "unverified"
+        ? ["🔲 <b>hci0</b>: pairing not needed — already paired", "⚠️ <b>Other adapters</b>: pairings kept — the shaver is not connected right now, so it cannot be checked which pairing is valid. Switch the shaver on and choose this adapter again to remove the others."]
+        : ["🔲 <b>hci0</b>: pairing not needed — already paired", "✅ <b>hci1</b>: old pairing removed"];
+      rows.push("✅ <b>Integration</b>: reloading — the shaver reconnects as soon as it is switched on.");
+      return dlg("Philips Shaver",
+        `${head}<p>The following steps were performed:</p>
+         <p>${rows.map((r, i) => `${i + 1}. ${r}`).join("<br>")}</p>`,
+        ["Close"], meta("options · abort adapter_changed","config_flow.py:744"),
+        "The options dialog's own success page cannot carry text, its abort page can: the options are saved here and the flow ends with this checklist. Old pairings on the other local adapters are removed only after the new adapter is paired — never while it is unclear which pairing is valid.");
+    },
+    opts: [
+      ["main","Close — entry reloads with the new adapter","created"],
     ],
   },
 };
@@ -676,7 +787,7 @@ function capDialog(statusLine) {
        <div class="fbox"><span>Bathroom Shaver</span></div>
        <div class="fhelp">How this shaver appears in Home Assistant. Pick something that distinguishes it from any other shavers you have (e.g., "Bathroom", "John's").</div>
      </div>`,
-    ["Set up"], meta("show_capabilities","config_flow.py:2653"),
+    ["Set up"], meta("show_capabilities","config_flow.py:4030"),
     "The connection line renders as a success alert, matching the pairing banner. The tables are runtime HTML in placeholders; the family-aware ❌ footer explains services that are expectedly absent on this model (a OneBlade shows the mirror image: Smart Groomer ✅, Control/Serial ❌). The name prefills from the slot's YAML friendly_name, the model, or a MAC suffix.");
 }
 
@@ -699,6 +810,7 @@ const ORDER = [
   "esp_select_device", "esp_slot_action", "esp_bridge_status",
   "esp_bridge_status_connected", "request_pair", "wait_pair", "reset_bridge",
   "show_capabilities_direct", "show_capabilities_esp", "created", "options",
+  "options_adapter", "pair_adapter", "adapter_changed",
 ];
 const ABORT_ORDER = ["abort_already_configured", "abort_no_devices_found",
   "abort_esp_not_reachable", "abort_not_supported"];
