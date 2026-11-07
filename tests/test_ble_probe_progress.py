@@ -119,6 +119,39 @@ async def test_finish_not_paired_local_routes_to_pairing() -> None:
 
     assert result == {"type": "pairing"}
     assert flow._pair_address == ADDRESS
+    # The confirm dialog already showed the checklist: pair right away.
+    flow._route_to_pairing.assert_awaited_once_with(start=True)
+
+
+async def test_finish_not_paired_manual_shows_pair_form_first() -> None:
+    flow = _flow(discovery=False)
+    flow._ble_probe_origin = "user_bleak"
+    flow._ble_probe_address = ADDRESS
+    flow._ble_probe_result = {"ok": False, "error": "not_paired"}
+    flow._probe_via_proxy = False
+    flow._route_to_pairing = AsyncMock(return_value={"type": "pairing"})
+
+    await flow.async_step_ble_probe_finish()
+
+    # Manual entry never showed the checklist — the pair form does.
+    flow._route_to_pairing.assert_awaited_once_with(start=False)
+
+
+async def test_route_to_pairing_start_skips_the_form(monkeypatch) -> None:
+    from custom_components.philips_shaver import dbus_pairing
+
+    monkeypatch.setattr(dbus_pairing, "is_dbus_available", lambda: True)
+    flow = _flow()
+    flow._pair_address = ADDRESS
+
+    started = await flow._route_to_pairing(start=True)
+    assert started["type"] == FlowResultType.SHOW_PROGRESS
+    assert started["progress_action"] == "pairing"
+
+    flow._ble_probe_task = None
+    form = await flow._route_to_pairing()
+    assert form["type"] == FlowResultType.FORM
+    assert form["step_id"] == "pair"
 
 
 async def test_finish_not_paired_proxy_hits_hard_dead_end() -> None:
@@ -299,3 +332,46 @@ async def test_user_bleak_skips_dbus_precheck_on_proxy_path(monkeypatch) -> None
     # go straight to the probe.
     assert result["type"] == FlowResultType.SHOW_PROGRESS
     precheck.assert_not_called()
+
+
+# --- review fixes 03.11. ----------------------------------------------------
+
+async def test_adapter_error_after_pairing_goes_back_to_confirm() -> None:
+    # The pair form has no adapter field: an "adapter not receiving"
+    # outcome returns to the confirm dialog, where the adapter is chosen.
+    flow = _flow()
+    flow._ble_probe_origin = "pair"
+    flow._ble_probe_address = ADDRESS
+    flow._ble_probe_result = {"ok": False, "error": "adapter"}
+    flow.async_step_bluetooth_confirm = AsyncMock(return_value={"step": "confirm"})
+
+    result = await flow.async_step_ble_probe_finish()
+
+    assert result == {"step": "confirm"}
+    assert flow._confirm_status == "adapter"
+    assert flow._pair_error == ""
+
+
+async def test_adapter_error_after_pairing_manual_goes_back_to_address_form() -> None:
+    flow = _flow(discovery=False)
+    flow._ble_probe_origin = "pair"
+    flow._ble_probe_address = ADDRESS
+    flow._ble_probe_result = {"ok": False, "error": "adapter"}
+    flow.async_step_user_bleak = AsyncMock(return_value={"step": "user_bleak"})
+
+    result = await flow.async_step_ble_probe_finish()
+
+    assert result == {"step": "user_bleak"}
+    assert flow._manual_error == "adapter_not_receiving"
+
+
+async def test_pair_not_found_gets_its_own_error() -> None:
+    flow = _flow()
+    flow._ble_probe_origin = "pair"
+    flow._ble_probe_address = ADDRESS
+    flow._ble_probe_result = {"ok": False, "error": "pair_not_found"}
+    flow.async_step_pair = AsyncMock(return_value={"step": "pair"})
+
+    await flow.async_step_ble_probe_finish()
+
+    assert flow._pair_error == "pair_not_found"

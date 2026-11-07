@@ -18,10 +18,12 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.const import UnitOfTime, PERCENTAGE
 from homeassistant.components.bluetooth import async_last_service_info
 from .coordinator import PhilipsShaverCoordinator
+from .transport import _scanner_name_by_source
 
 from .const import (
     DOMAIN,
     CONF_TRANSPORT_TYPE, TRANSPORT_ESP_BRIDGE, CONF_SERVICES,
+    CONF_BLUETOOTH_ADAPTER, BLUETOOTH_ADAPTER_AUTO,
     SVC_CONTROL, SVC_GROOMER,
     CARTRIDGE_CAPACITY, EVAPORATION_RATE, CLEANING_CONSTANTS, CLEANING_CONSTANT_DEFAULT,
 )
@@ -106,6 +108,7 @@ async def async_setup_entry(
     # RSSI sensor only for direct BLE (not available via ESP bridge)
     if not is_esp:
         entities.append(PhilipsRssiSensor(coordinator, entry))
+        entities.append(PhilipsAdapterSelectionSensor(coordinator, entry))
 
     # Bridge version sensor only on ESP
     if is_esp:
@@ -1440,7 +1443,55 @@ class PhilipsAdapterSensor(PhilipsConnectionEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator, entry)
         self._attr_unique_id = f"{self._device_id}_adapter"
+        self._fixed_source = (
+            BLUETOOTH_ADAPTER_AUTO
+            if entry.data.get(CONF_TRANSPORT_TYPE) == TRANSPORT_ESP_BRIDGE
+            else entry.options.get(CONF_BLUETOOTH_ADAPTER, BLUETOOTH_ADAPTER_AUTO)
+        )
 
     @property
     def native_value(self) -> str | None:
-        return self.coordinator.transport.connection_path
+        path = self.coordinator.transport.connection_path
+        if path or self._fixed_source == BLUETOOTH_ADAPTER_AUTO:
+            return path
+        # A fixed adapter is the only path there can be, so name it even
+        # while the shaver is asleep.
+        return (
+            _scanner_name_by_source(self.hass, self._fixed_source)
+            or self._fixed_source
+        )
+
+
+class PhilipsAdapterSelectionSensor(PhilipsConnectionEntity, SensorEntity):
+    """Whether the integration picks the adapter or the option fixes one.
+
+    Direct BLE only. Changing the option reloads the entry, so reading
+    the options here is always current.
+    """
+
+    _attr_translation_key = "adapter_selection"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["automatic", "fixed"]
+    _attr_icon = "mdi:bluetooth-settings"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._device_id}_adapter_selection"
+        self._source = entry.options.get(
+            CONF_BLUETOOTH_ADAPTER, BLUETOOTH_ADAPTER_AUTO
+        )
+
+    @property
+    def native_value(self) -> str:
+        return "automatic" if self._source == BLUETOOTH_ADAPTER_AUTO else "fixed"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str] | None:
+        if self._source == BLUETOOTH_ADAPTER_AUTO:
+            return None
+        # The name is only known while the scanner is registered.
+        name = _scanner_name_by_source(self.hass, self._source)
+        return {"fixed_adapter": name or self._source, "source": self._source}

@@ -4,6 +4,8 @@ from collections.abc import Callable
 from typing import Any
 
 import asyncio
+import html
+import re
 import time
 import voluptuous as vol
 import logging
@@ -20,7 +22,8 @@ except ImportError:  # pragma: no cover — older cores + the pinned CI
     # test stack (pytest-homeassistant-custom-component ships HA 2025.1).
     # Fallback loses only the automatic entry reload on options save.
     from homeassistant.config_entries import OptionsFlow as OptionsFlowWithReload
-from homeassistant.core import Event, callback
+from homeassistant.core import CALLBACK_TYPE, Event, callback
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers import http as ha_http
 from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import language as language_util
@@ -36,7 +39,7 @@ from homeassistant.components.bluetooth import (
     async_discovered_service_info,
     async_last_service_info,
 )
-from homeassistant.data_entry_flow import AbortFlow
+from homeassistant.data_entry_flow import AbortFlow, section
 from bleak import BleakClient
 from bleak.exc import BleakError
 from bleak_retry_connector import (
@@ -93,6 +96,10 @@ from .const import (
     DEFAULT_PIPELINED_READS,
     MIN_NOTIFY_THROTTLE,
     MAX_NOTIFY_THROTTLE,
+    CONF_BLUETOOTH_ADAPTER,
+    BLUETOOTH_ADAPTER_AUTO,
+    UNPAIR_ON_DEVICE_URL,
+    UNPAIRING_URL,
 )
 from .transport import (
     UNPAIR_FAILED,
@@ -103,12 +110,17 @@ from .transport import (
     async_unpair_bridge_slot,
     describe_available_paths,
     describe_connection_path,
+    describe_local_adapters,
     is_local_bluez_connection,
+    local_adapter_source,
+    scanner_rssi,
+    watch_advertisements,
     local_bluez_client_class,
     local_bluez_device_from_address,
     slot_changed_at,
 )
 from .exceptions import (
+    AdapterNotReceivingException,
     DeviceAsleepException,
     DeviceNotFoundException,
     CannotConnectException,
@@ -303,43 +315,193 @@ _ACTIVE_SCAN_WINDOW = 60.0
 _ACTIVE_SCAN_RETRY_DELAY = 2.0
 
 
+# Before pairing on a new adapter, wait this long for the shaver to show up
+# there. After a disconnect the shaver often stays silent until it is
+# switched on — pairing blindly would only time out.
+PAIR_ADVERTISEMENT_WAIT = 45  # seconds
+# The entry is paused while the pairing instructions are on screen (the
+# user resets Bluetooth on the shaver meanwhile). A browser tab closed
+# without closing the dialog never ends the flow: bring the entry back
+# after this long anyway.
+PAIR_PAUSE_TIMEOUT = 600  # seconds
+# A progress task that fails at once (asleep, adapter not receiving, D-Bus
+# down) finishes before the progress dialog is up; the frontend then never
+# leaves the spinner.
+_PROBE_MIN_SECONDS = 1.0
+
+
+async def _at_least(start, seconds: float = _PROBE_MIN_SECONDS):
+    """Await ``start()``, but take at least ``seconds`` (see _PROBE_MIN_SECONDS).
+
+    Takes a callable, so no coroutine exists before the task runs.
+    """
+    started = time.monotonic()
+    try:
+        result = await start()
+    except asyncio.CancelledError:
+        raise  # the flow is gone — no reason to linger
+    except BaseException:
+        await _sleep_rest(started, seconds)
+        raise
+    await _sleep_rest(started, seconds)
+    return result
+
+
+async def _sleep_rest(started: float, seconds: float) -> None:
+    remaining = seconds - (time.monotonic() - started)
+    if remaining > 0:
+        await asyncio.sleep(remaining)
+# Below this the target adapter receives the shaver too weakly to pair
+# reliably (Sonicare 29./30.10.: -96 dBm timed out, -74 dBm paired in 4 s).
+PAIR_WEAK_RSSI = -90
+# _pair_error value for "no advertisement on the new adapter".
+_PAIR_NO_ADVERTISEMENT = "no_advertisement"
+
+
+def _short_adapter_name(name: object) -> str:
+    # "hci0 (00:0A:CD:46:B2:2D)" → "hci0"; the MAC adds nothing in prose.
+    return str(name).split(" (")[0]
+
+
+_ADAPTER_SECTION = "adapter"
+
+
+def _adapter_from_input(user_input: dict[str, Any], fallback: str) -> str:
+    """Adapter choice from a setup form — nested in its section, or flat."""
+    nested = user_input.get(_ADAPTER_SECTION)
+    if isinstance(nested, dict):
+        return nested.get(CONF_BLUETOOTH_ADAPTER, fallback)
+    return user_input.get(CONF_BLUETOOTH_ADAPTER, fallback)
+
+
+
+def _bluetooth_adapter_options(
+    hass, address: str, current: str
+) -> list[SelectOptionDict]:
+    """Every connectable local adapter — no "Automatic".
+
+    The shaver keeps one pairing only, so "the strongest adapter" cannot
+    work: a stronger adapter without the bond only gets its link dropped.
+    Entries without a choice (single adapter, older entries) still run
+    on automatic, which then follows the bond (transport).
+
+    Only local adapters: a stock Bluetooth proxy cannot complete the
+    shaver's LE Secure Connections pairing. A saved adapter that is
+    offline right now stays in the list, so opening the options does not
+    silently reset the choice.
+    """
+    options: list[SelectOptionDict] = []
+    for adapter in describe_local_adapters(hass, address):
+        label = str(adapter["name"])
+        if isinstance(adapter["rssi"], int):
+            label = f"{label}, {adapter['rssi']} dBm"
+        options.append(
+            SelectOptionDict(value=str(adapter["source"]), label=label)
+        )
+    if current != BLUETOOTH_ADAPTER_AUTO and current.upper() not in {
+        o["value"].upper() for o in options
+    }:
+        options.append(SelectOptionDict(value=current, label=current))
+    return options
+
+
+def _adapter_choice_available(hass, address: str, current: str) -> bool:
+    """Whether there is an adapter to choose at all: two or more.
+
+    A saved adapter that is offline counts, so the entry can be moved to
+    the one that is there.
+    """
+    return len(_bluetooth_adapter_options(hass, address, current)) >= 2
+
+
+def _default_adapter(
+    options: list[SelectOptionDict], current: str, preferred: str | None = None
+) -> str:
+    """Preselected adapter: the saved one, else ``preferred`` (the bonded
+    one), else the first in the list — the strongest receiving the shaver.
+    """
+    values = {o["value"].upper(): o["value"] for o in options}
+    for candidate in (current, preferred):
+        if candidate and candidate != BLUETOOTH_ADAPTER_AUTO:
+            if candidate.upper() in values:
+                return values[candidate.upper()]
+    return options[0]["value"] if options else BLUETOOTH_ADAPTER_AUTO
+
+
 class PhilipsShaverOptionsFlow(OptionsFlowWithReload):
-    """Options flow for Philips Shaver."""
+    """Options flow for Philips Shaver.
+
+    ESP bridge entries edit their bridge settings. Direct BLE entries have
+    one option, the Bluetooth adapter, which is an action with its own
+    steps (pairing on the new adapter, removing the old bonds) rather than
+    a plain field.
+    """
+
+    # Re-pairing on a newly chosen local adapter (bonds are per adapter).
+    _pending_data: dict[str, Any] | None = None
+    _pair_task: asyncio.Task | None = None
+    _pair_error: str = ""
+    _pair_adapter_name: str = ""
+    _paired_on: str = ""
+    # A pairing attempt already ran in this dialog; BlueZ may have
+    # finished it after our timeout.
+    _pair_attempted: bool = False
+    # Set while the entry is unloaded for pairing; whoever ends the flow
+    # must bring it back.
+    _reload_pending: bool = False
+    # Brings a paused entry back when the dialog is left open unattended.
+    _pause_timer: CALLBACK_TYPE | None = None
+    # Bonds on several adapters and no live connection to tell which one
+    # is valid: keep the other bonds instead of removing them.
+    _bonds_unverified: bool = False
+    # Bonds on several adapters, the live connection runs through the
+    # target: the others are proven stale and can go — also when the
+    # target is already the current adapter.
+    _others_stale: bool = False
+    # The target adapter had a (stale) BlueZ bond when pairing was asked
+    # for: a bond found there on retry is that old one, not a late result
+    # of our own Pair().
+    _target_had_bond: bool = False
+
+    def _is_esp(self) -> bool:
+        return (
+            self.config_entry.data.get(CONF_TRANSPORT_TYPE) == TRANSPORT_ESP_BRIDGE
+        )
+
+    def _address(self) -> str:
+        return self.config_entry.data.get(CONF_ADDRESS) or ""
+
+    def _current_adapter(self) -> str:
+        return self.config_entry.options.get(
+            CONF_BLUETOOTH_ADAPTER, BLUETOOTH_ADAPTER_AUTO
+        )
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Manage the options."""
-        errors: dict[str, str] = {}
-        is_esp = (
-            self.config_entry.data.get(CONF_TRANSPORT_TYPE) == TRANSPORT_ESP_BRIDGE
-        )
+        if not self._is_esp():
+            if _adapter_choice_available(
+                self.hass, self._address(), self._current_adapter()
+            ):
+                return await self.async_step_adapter()
+            # Direct BLE with a single local adapter: nothing to configure.
+            return self.async_create_entry(data=dict(self.config_entry.options))
 
         if user_input is not None:
             entry_data = {}
-            if is_esp and CONF_NOTIFY_THROTTLE in user_input:
+            if CONF_NOTIFY_THROTTLE in user_input:
                 entry_data[CONF_NOTIFY_THROTTLE] = int(
                     user_input[CONF_NOTIFY_THROTTLE]
                 )
-            if is_esp and CONF_PIPELINED_READS in user_input:
+            if CONF_PIPELINED_READS in user_input:
                 entry_data[CONF_PIPELINED_READS] = bool(
                     user_input[CONF_PIPELINED_READS]
                 )
-            # Info: which options a device runs with explains a lot of later
-            # behaviour (throttling, pipelining), and nothing here is
-            # sensitive enough to keep out of the log.
-            _LOGGER.info(
-                "Options saved for %s: %s",
-                self.config_entry.title,
-                ", ".join(f"{k}={v}" for k, v in sorted(entry_data.items()))
-                or "no changes",
-            )
-            return self.async_create_entry(data=entry_data)
+            return self._save_options(entry_data)
 
-        schema_fields: dict = {}
-
-        if is_esp:
-            schema_fields[vol.Required(CONF_NOTIFY_THROTTLE)] = NumberSelector(
+        schema_fields: dict = {
+            vol.Required(CONF_NOTIFY_THROTTLE): NumberSelector(
                 NumberSelectorConfig(
                     min=MIN_NOTIFY_THROTTLE,
                     max=MAX_NOTIFY_THROTTLE,
@@ -347,33 +509,548 @@ class PhilipsShaverOptionsFlow(OptionsFlowWithReload):
                     unit_of_measurement="ms",
                     mode=NumberSelectorMode.BOX,
                 )
-            )
-            schema_fields[vol.Required(CONF_PIPELINED_READS)] = BooleanSelector()
-
-        if not schema_fields:
-            # Direct BLE: no configurable options currently
-            return self.async_create_entry(data={})
-
-        data_schema = vol.Schema(schema_fields)
-
-        suggested_values = {}
-        if is_esp:
-            suggested_values[CONF_NOTIFY_THROTTLE] = self.config_entry.options.get(
-                CONF_NOTIFY_THROTTLE,
-                DEFAULT_NOTIFY_THROTTLE,
-            )
-            suggested_values[CONF_PIPELINED_READS] = self.config_entry.options.get(
-                CONF_PIPELINED_READS,
-                DEFAULT_PIPELINED_READS,
-            )
-
+            ),
+            vol.Required(CONF_PIPELINED_READS): BooleanSelector(),
+        }
+        suggested_values = {
+            CONF_NOTIFY_THROTTLE: self.config_entry.options.get(
+                CONF_NOTIFY_THROTTLE, DEFAULT_NOTIFY_THROTTLE
+            ),
+            CONF_PIPELINED_READS: self.config_entry.options.get(
+                CONF_PIPELINED_READS, DEFAULT_PIPELINED_READS
+            ),
+        }
         return self.async_show_form(
             step_id="init",
             data_schema=self.add_suggested_values_to_schema(
-                data_schema, suggested_values
+                vol.Schema(schema_fields), suggested_values
             ),
-            errors=errors,
         )
+
+    def _save_options(self, data: dict[str, Any]) -> ConfigFlowResult:
+        # Info: which options a device runs with explains a lot of later
+        # behaviour (throttling, pipelining, adapter), and nothing here is
+        # sensitive enough to keep out of the log.
+        _LOGGER.info(
+            "Options saved for %s: %s",
+            self.config_entry.title,
+            ", ".join(f"{k}={v}" for k, v in sorted(data.items()))
+            or "no changes",
+        )
+        if (
+            self._reload_pending
+            and getattr(self, "automatic_reload", False)
+            and data != dict(self.config_entry.options)
+        ):
+            # HA reloads by itself once it has stored the changed options.
+            self._reload_pending = False
+        # Otherwise (options unchanged, or a core without
+        # OptionsFlowWithReload) async_remove reloads: HA calls it after
+        # storing the options, so the entry comes back with the new ones.
+        return self.async_create_entry(data=data)
+
+    @callback
+    def async_remove(self) -> None:
+        """Dialog closed: never leave the entry unloaded."""
+        self._cancel_pause_timer()
+        if self._pair_task is not None and not self._pair_task.done():
+            self._pair_task.cancel()
+        if self._reload_pending:
+            self._reload_pending = False
+            self.hass.config_entries.async_schedule_reload(
+                self.config_entry.entry_id
+            )
+
+    # ------------------------------------------------------------------
+    # Bluetooth adapter (direct BLE)
+    # ------------------------------------------------------------------
+    def _adapter_names(self) -> dict[str, str]:
+        """Connectable local adapters by upper-case source: short name."""
+        return {
+            str(a["source"]).upper(): _short_adapter_name(a["name"])
+            for a in describe_local_adapters(self.hass, self._address())
+        }
+
+    def _adapter_name(self, adapter: str) -> str:
+        if adapter == BLUETOOTH_ADAPTER_AUTO:
+            return "Automatic"
+        return self._adapter_names().get(adapter.upper(), adapter)
+
+    async def async_step_adapter(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Move the shaver to another local Bluetooth adapter."""
+        current = self._current_adapter()
+        if user_input is not None:
+            # Only adapters are offered — "auto" cannot be chosen here.
+            adapter = user_input[CONF_BLUETOOTH_ADAPTER]
+            data = {
+                **dict(self.config_entry.options),
+                CONF_BLUETOOTH_ADAPTER: adapter,
+            }
+            state = await self._pairing_state(adapter)
+            # Same adapter again: nothing to change — unless it still has no
+            # bond (an earlier switch saved it while it could not be checked).
+            if adapter == current and state != "needed" and not self._others_stale:
+                return self._save_options(data)
+            self._pending_data = data
+            if state == "needed":
+                self._pair_error = ""
+                self._pair_attempted = False
+                return await self.async_step_pair_adapter()
+            return await self._async_finish_adapter_change(state)
+
+        _LOGGER.debug(
+            "Options flow: showing adapter for %s", self.config_entry.title
+        )
+        options = _bluetooth_adapter_options(self.hass, self._address(), current)
+        preferred = None
+        if current == BLUETOOTH_ADAPTER_AUTO:
+            # Older entry on automatic: preselect the adapter holding the
+            # bond, so one click makes it the fixed choice.
+            preferred = await self._bonded_adapter()
+        return self.async_show_form(
+            step_id="adapter",
+            data_schema=vol.Schema({
+                vol.Required(
+                    CONF_BLUETOOTH_ADAPTER,
+                    default=_default_adapter(options, current, preferred),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=options,
+                    )
+                ),
+            }),
+        )
+
+    async def _bonded_adapter(self) -> str | None:
+        from .dbus_pairing import async_paired_adapters, is_dbus_available
+
+        if not is_dbus_available():
+            return None
+        paired = await async_paired_adapters(self._address())
+        return paired[0] if paired and len(paired) == 1 else None
+
+    async def _pairing_state(self, adapter: str) -> str:
+        """What switching to ``adapter`` means for pairing.
+
+        Shavers are always bonded, so a local adapter without a bond needs
+        a pairing: ``needed``. Otherwise the reason there is nothing to do:
+        ``already`` or ``unknown`` (adapter offline, or BlueZ cannot be
+        asked).
+        """
+        self._bonds_unverified = False
+        self._others_stale = False
+        self._target_had_bond = False
+        names = self._adapter_names()
+        name = names.get(adapter.upper())
+        if name is None:
+            return "unknown"
+
+        from .dbus_pairing import async_paired_adapters, is_dbus_available
+
+        if not is_dbus_available():
+            return "unknown"
+        paired = await async_paired_adapters(self._address())
+        if paired is None:
+            return "unknown"
+        if adapter.upper() in paired:
+            # The shaver holds one bond only. With bonds on several adapters
+            # BlueZ cannot tell which one is still valid — only a live
+            # connection can. Through the target: valid. Through another
+            # adapter: that one is valid, the target's is stale.
+            if len(paired) > 1:
+                live = self._live_adapter()
+                if live is not None and live != adapter.upper():
+                    self._pair_adapter_name = name
+                    self._paired_on = names.get(live, live)
+                    self._target_had_bond = True
+                    return "needed"
+                if live is None:
+                    self._bonds_unverified = True
+                else:
+                    self._others_stale = True
+            return "already"
+        self._pair_adapter_name = name
+        self._paired_on = ", ".join(names.get(a, a) for a in paired) or "—"
+        return "needed"
+
+    def _live_adapter(self) -> str | None:
+        """Upper-case MAC of the adapter the running entry is connected through."""
+        data = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
+        coordinator = data.get("coordinator") if isinstance(data, dict) else None
+        transport = getattr(coordinator, "transport", None)
+        if transport is None or not getattr(transport, "is_connected", False):
+            return None
+        path = str(getattr(transport, "connection_path", None) or "")
+        match = re.search(r"([0-9A-F]{2}(?::[0-9A-F]{2}){5})", path.upper())
+        return match.group(1) if match else None
+
+    async def _async_pause_entry(self) -> None:
+        """Stop the running entry before the user resets the shaver.
+
+        Left running, it reconnects through the old adapter the moment the
+        freshly reset shaver advertises — and that connect attempt (or the
+        link it leaves behind) keeps the shaver busy, so the pairing on the
+        new adapter fails. Also drops a BlueZ link nothing of ours owns.
+        """
+        if not self._reload_pending:
+            self._reload_pending = True
+            await self.hass.config_entries.async_unload(self.config_entry.entry_id)
+        from .dbus_pairing import async_disconnect_device, is_dbus_available
+
+        if is_dbus_available():
+            await async_disconnect_device(self._address())
+        self._cancel_pause_timer()
+        self._pause_timer = async_call_later(
+            self.hass, PAIR_PAUSE_TIMEOUT, self._async_pause_expired
+        )
+
+    @callback
+    def _cancel_pause_timer(self) -> None:
+        if self._pause_timer is not None:
+            self._pause_timer()
+            self._pause_timer = None
+
+    @callback
+    def _async_pause_expired(self, _now: Any) -> None:
+        """Dialog left open: run the entry again with the old settings.
+
+        A later Submit pauses it again before pairing.
+        """
+        self._pause_timer = None
+        if self._pair_task is not None and not self._pair_task.done():
+            return
+        if self._reload_pending:
+            _LOGGER.info(
+                "%s: pairing dialog left open for %ss — resuming the "
+                "integration with the previous settings",
+                self._address(), PAIR_PAUSE_TIMEOUT,
+            )
+            self._reload_pending = False
+            self.hass.config_entries.async_schedule_reload(
+                self.config_entry.entry_id
+            )
+
+    def _pair_placeholders(self) -> dict[str, str]:
+        return {
+            "adapter": self._pair_adapter_name,
+            "paired_on": self._paired_on,
+            # The shaver holds one pairing only: the dialog asks for a
+            # Bluetooth reset on the device before pairing the new adapter.
+            "unpairing_url": UNPAIR_ON_DEVICE_URL,
+        }
+
+    async def async_step_pair_adapter(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Pair the shaver on the newly chosen adapter before saving."""
+        task = self._pair_task
+        if task is not None:
+            if not task.done():
+                return self.async_show_progress(
+                    step_id="pair_adapter",
+                    progress_action="pair_adapter",
+                    progress_task=task,
+                    description_placeholders=self._pair_placeholders(),
+                )
+            self._pair_error = task.result()
+            self._pair_task = None
+            return self.async_show_progress_done(
+                next_step_id="pair_adapter_finish"
+            )
+
+        if user_input is not None:
+            self._cancel_pause_timer()
+            self._pair_task = self.hass.async_create_task(
+                _at_least(self._async_pair_on_adapter)
+            )
+            return self.async_show_progress(
+                step_id="pair_adapter",
+                progress_action="pair_adapter",
+                progress_task=self._pair_task,
+                description_placeholders=self._pair_placeholders(),
+            )
+
+        # A form without fields cannot show errors[] — the failure goes into
+        # the description as a notice instead.
+        text = await _async_text_blocks(self.hass, "options")
+        # Markdown is not parsed inside the alert's HTML block.
+        adapter_html = f"<b>{html.escape(self._pair_adapter_name)}</b>"
+        alert = ""
+        if self._pair_error == _PAIR_NO_ADVERTISEMENT:
+            alert = _alert(
+                "error",
+                text.get("error.pair_adapter_no_advertisement", "")
+                .replace("{adapter}", adapter_html)
+                .replace("{seconds}", str(PAIR_ADVERTISEMENT_WAIT)),
+            )
+        elif self._pair_error:
+            alert = _alert(
+                "error",
+                text.get("error.pair_adapter_failed", "")
+                .replace("{adapter}", adapter_html)
+                .replace("{error}", html.escape(self._pair_error)),
+            )
+        assert self._pending_data is not None
+        await self._async_pause_entry()
+        rssi = scanner_rssi(
+            self.hass,
+            self._address(),
+            self._pending_data[CONF_BLUETOOTH_ADAPTER],
+        )
+        if rssi is not None and rssi < PAIR_WEAK_RSSI:
+            alert += _alert(
+                "warning",
+                text.get("error.pair_adapter_weak", "")
+                .replace("{adapter}", adapter_html)
+                .replace("{rssi}", str(rssi)),
+            )
+        return self.async_show_form(
+            step_id="pair_adapter",
+            data_schema=vol.Schema({}),
+            description_placeholders={**self._pair_placeholders(), "alert": alert},
+        )
+
+    async def _async_pair_on_adapter(self) -> str:
+        """Pause the entry and pair on the chosen adapter; '' on success.
+
+        The running entry would otherwise keep (re)connecting — over the
+        old adapter, or failing over the new one — and race BlueZ's
+        Pair(). Unloading reuses the normal teardown.
+        """
+        from .dbus_pairing import PairingError, async_pair_and_trust
+
+        assert self._pending_data is not None
+        entry = self.config_entry
+        address = self._address()
+        adapter = self._pending_data[CONF_BLUETOOTH_ADAPTER]
+        retry = self._pair_attempted
+        self._pair_attempted = True
+        # Watch from before a (late) unload, so the first advertisement
+        # after it is not missed.
+        try:
+            heard, stop_watching = watch_advertisements(address, adapter)
+        except LookupError as err:
+            _LOGGER.debug(
+                "%s: cannot watch advertisements per adapter (%s); pairing "
+                "without waiting", address, err,
+            )
+            heard, stop_watching = None, None
+        try:
+            if not self._reload_pending:
+                # Paused when the instructions were shown — unless the
+                # dialog stayed open so long that the entry came back.
+                self._reload_pending = True
+                await self.hass.config_entries.async_unload(entry.entry_id)
+            if self._target_had_bond:
+                # Remove the target's stale bond ourselves first: from then
+                # on any bond found there is the result of our own Pair(),
+                # and a late success is taken over on retry below.
+                from .dbus_pairing import async_remove_device
+
+                if await async_remove_device(address, adapter):
+                    self._target_had_bond = False
+            if (
+                retry
+                and not self._target_had_bond
+                and await self._async_bonded_on(address, adapter)
+            ):
+                # The earlier attempt timed out on our side, but BlueZ
+                # finished it later. The bond is the one we asked for —
+                # removing it as "stale" would throw away a good pairing.
+                _LOGGER.info(
+                    "%s: already paired on %s by the previous attempt",
+                    address, self._pair_adapter_name,
+                )
+                return ""
+            if heard is not None and not await self._async_wait_for_advertisement(
+                address, heard
+            ):
+                _LOGGER.warning(
+                    "%s: %s did not receive the shaver within %ss",
+                    address, self._pair_adapter_name, PAIR_ADVERTISEMENT_WAIT,
+                )
+                return _PAIR_NO_ADVERTISEMENT
+            _LOGGER.info(
+                "%s: pairing on Bluetooth adapter %s (%s, %s dBm)",
+                address, self._pair_adapter_name, adapter,
+                scanner_rssi(self.hass, address, adapter),
+            )
+            await async_pair_and_trust(address, adapter)
+            await asyncio.sleep(2)  # let BlueZ key distribution settle
+            return ""
+        except PairingError as err:
+            _LOGGER.warning(
+                "%s: pairing on %s failed: %s",
+                address, self._pair_adapter_name, err,
+            )
+            return str(err)
+        except Exception as err:  # noqa: BLE001 — shown in the dialog
+            _LOGGER.exception("%s: pairing on %s failed", address, adapter)
+            return str(err) or type(err).__name__
+        finally:
+            if stop_watching is not None:
+                stop_watching()
+
+    @staticmethod
+    async def _async_bonded_on(address: str, adapter: str) -> bool:
+        from .dbus_pairing import async_paired_adapters
+
+        paired = await async_paired_adapters(address)
+        return bool(paired) and adapter.upper() in paired
+
+    async def _async_wait_for_advertisement(
+        self, address: str, heard: asyncio.Event
+    ) -> bool:
+        """Wait until the new adapter receives an advertisement of the shaver."""
+        if heard.is_set():
+            return True
+        _LOGGER.debug(
+            "%s: waiting up to %ss for an advertisement on %s",
+            address, PAIR_ADVERTISEMENT_WAIT, self._pair_adapter_name,
+        )
+        try:
+            await asyncio.wait_for(heard.wait(), PAIR_ADVERTISEMENT_WAIT)
+        except TimeoutError:
+            return False
+        _LOGGER.debug(
+            "%s: advertisement received on %s", address, self._pair_adapter_name
+        )
+        return True
+
+    async def async_step_pair_adapter_finish(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if self._pair_error:
+            # Back to the form: Submit retries, closing keeps the old options.
+            # The entry stays paused meanwhile — running, it would grab the
+            # shaver over the old adapter while the user resets it again.
+            # Closing the dialog, or PAIR_PAUSE_TIMEOUT, brings it back.
+            return await self.async_step_pair_adapter()
+        return await self._async_finish_adapter_change("paired")
+
+    async def _async_finish_adapter_change(self, pairing: str) -> ConfigFlowResult:
+        """Drop the other bonds, save, and end with what was done."""
+        assert self._pending_data is not None
+        adapter = self._pending_data[CONF_BLUETOOTH_ADAPTER]
+        dropped, failed, kept = await self._async_drop_other_bonds(adapter)
+        name = self._adapter_name(adapter)
+        rows: list[tuple[str, dict[str, str]]] = [
+            (f"pair_{pairing}", {"adapter": name}),
+        ]
+        # One row per adapter: each line starts with what it is about.
+        rows += [("drop_done", {"adapter": other}) for other in dropped]
+        rows += [("drop_failed", {"adapter": other}) for other in failed]
+        if not dropped and not failed:
+            rows.append((f"drop_{kept}", {}))
+        rows.append(("reload", {}))
+
+        text = await _async_text_blocks(self.hass, "options")
+        lines = []
+        for key, values in rows:
+            line = text.get(f"error.summary_{key}", "")
+            for placeholder, value in values.items():
+                line = line.replace("{" + placeholder + "}", value)
+            if line:
+                # Numbered: the steps ran in this order.
+                lines.append(f"{len(lines) + 1}. {line}")
+        # The outcome goes on top as a coloured box; the list below says
+        # what was done for it. Yellow when an old pairing stayed behind.
+        if adapter == self._current_adapter():
+            # Same adapter again (only tidying up old bonds): not "changed".
+            headline_key = "error.headline_adapter_same"
+        else:
+            headline_key = "error.headline_adapter"
+        headline = text.get(headline_key, "").replace("{adapter}", name)
+        headline = _alert(
+            "warning" if failed or kept == "unverified" else "success", headline
+        )
+
+        # The options dialog's own success page cannot carry text of ours,
+        # but its abort page can: save here and end with the checklist.
+        data = self._pending_data
+        self._pending_data = None
+        _LOGGER.info(
+            "Options saved for %s: %s",
+            self.config_entry.title,
+            ", ".join(f"{k}={v}" for k, v in sorted(data.items())),
+        )
+        self.hass.config_entries.async_update_entry(
+            self.config_entry, options=data
+        )
+        # No create_entry, so no automatic reload either.
+        self._reload_pending = False
+        self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
+        return self.async_abort(
+            reason="adapter_changed",
+            description_placeholders={
+                "headline": headline,
+                "summary": "\n".join(lines),
+            },
+        )
+
+    async def _async_drop_other_bonds(
+        self, adapter: str
+    ) -> tuple[list[str], list[str], str]:
+        """Switching to a fixed local adapter removes the other local bonds.
+
+        A fixed adapter means one bond. A bond left behind on an adapter
+        the entry no longer uses can go stale on the shaver's side while
+        BlueZ still reports it — switching back would then skip the
+        pairing step and fail. Removing it makes the way back pair again.
+
+        Runs only after the new adapter is paired (or already was).
+
+        Returns (removed, failed, reason) — adapter names, and when nothing
+        was removed why: ``unknown``, ``unverified`` or ``none``.
+        """
+        address = self._address()
+        names = self._adapter_names()
+        if adapter.upper() not in names:
+            return [], [], "unknown"
+
+        from .dbus_pairing import (
+            async_paired_adapters,
+            async_remove_device,
+            is_dbus_available,
+        )
+
+        if not is_dbus_available():
+            return [], [], "unknown"
+        paired = await async_paired_adapters(address)
+        if paired is None:
+            return [], [], "unknown"
+        others = [a for a in paired if a != adapter.upper()]
+        if not others:
+            return [], [], "none"
+        if self._bonds_unverified:
+            # Not connected right now, so it is unknown which bond is the
+            # valid one: removing the others could throw away the only
+            # good pairing. Keep them; the summary says so.
+            return [], [], "unverified"
+        if not self._reload_pending:
+            # The running entry may be connected through one of them.
+            self._reload_pending = True
+            await self.hass.config_entries.async_unload(
+                self.config_entry.entry_id
+            )
+        removed: list[str] = []
+        failed: list[str] = []
+        for other in others:
+            other_name = names.get(other, other)
+            if await async_remove_device(address, other):
+                _LOGGER.info(
+                    "%s: removed the bond on adapter %s (now fixed to %s)",
+                    address, other, adapter,
+                )
+                removed.append(other_name)
+            else:
+                _LOGGER.warning(
+                    "%s: could not remove the bond on adapter %s", address, other
+                )
+                failed.append(other_name)
+        return removed, failed, "none"
 
 
 class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -393,6 +1070,11 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     fetched_esp_bridge_id: str = ""
     fetched_bridge_info: dict[str, str] | None = None
     _pair_address: str | None = None  # MAC for D-Bus pairing step
+    # Direct BLE: the Bluetooth adapter option, chosen before the first
+    # connect so the probe and its pairing already run through it.
+    _bluetooth_adapter: str = BLUETOOTH_ADAPTER_AUTO
+    # Local adapter (MAC) that carried the last successful probe.
+    _probe_adapter: str | None = None
 
     # Transport of the last probe that actually connected. None until a
     # probe establishes a connection; deliberately NOT reset on failed
@@ -441,6 +1123,10 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     _confirm_status: str = ""
     # One-shot errors["base"] for the next user_bleak / pair render.
     _manual_error: str = ""
+    # Set right after a successful D-Bus Pair(): skip the advertisement-age
+    # gate of the follow-up probe once (see _async_ensure_awake). Not the
+    # ESP bridge's _just_paired.
+    _ble_just_paired: bool = False
     _pair_error: str = ""
     # user_bleak: user picked the "enter manually" sentinel — render the
     # free-text field instead of the discovered-device picker.
@@ -583,6 +1269,100 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 client.read_gatt_char(char_uuid), timeout=timeout
             )
 
+    def _stale_advertisement(self, address: str) -> str | None:
+        """Why the last connectable advertisement is too old; None if fresh."""
+        last = async_last_service_info(self.hass, address, connectable=True)
+        # A BlueZ RSSI-invalidation event (RSSI -127) also bumps the history
+        # timestamp without a packet on the air — treat it as "not seen", or
+        # the sentinel keeps the entry fresh and a stale BLEDevice slips past
+        # the gate (seen after an adapter power-cycle, where the doomed
+        # connects were then misread as a stale bond).
+        if last is None:
+            return "never seen"
+        if last.rssi is not None and last.rssi <= -127:
+            return "stale RSSI -127"
+        age = time.monotonic() - last.time
+        if age > _STALE_ADV_MAX_SECONDS:
+            return f"{age:.0f}s ago"
+        return None
+
+    async def _async_ensure_awake(self, address: str) -> str:
+        """``awake`` once the shaver advertises; waits for it to be switched on.
+
+        Asleep is its normal state: rather than failing at once, wait for
+        the next advertisement (the progress text asks to switch it on).
+        A Pair() or connect to a silent shaver only runs into its timeout.
+        Returns ``awake``, ``asleep``, or ``adapter`` when the fixed adapter
+        stayed silent while another scanner does receive the shaver.
+        """
+        if self._ble_just_paired:
+            # Pair() just talked to it; while connected for pairing it sent
+            # no advertisements, so the age check would misread it as
+            # asleep and wait for nothing.
+            self._ble_just_paired = False
+            return "awake"
+        seen = self._stale_advertisement(address)
+        if seen is None:
+            return "awake"
+        woke = await self._async_wait_for_wake(address, seen)
+        if woke == "awake":
+            return "awake"
+        if woke == "other":
+            _LOGGER.info(
+                "%s: fixed Bluetooth adapter %s did not receive the shaver "
+                "within %ss, other scanners do",
+                address, self._bluetooth_adapter, PAIR_ADVERTISEMENT_WAIT,
+            )
+            return "adapter"
+        _LOGGER.info(
+            "%s: no connectable advertisement (%s, none within %ss) "
+            "— device asleep",
+            address, seen, PAIR_ADVERTISEMENT_WAIT,
+        )
+        return "asleep"
+
+    async def _async_wait_for_wake(self, address: str, seen: str) -> str:
+        """Wait for the next advertisement on the chosen adapter (or any).
+
+        ``awake`` when it arrived; ``other`` when a fixed adapter stayed
+        silent but another scanner heard the shaver *during the wait* (old
+        entries of other scanners prove nothing — the shaver may just be
+        asleep); ``none`` otherwise.
+        """
+        fixed = self._bluetooth_adapter != BLUETOOTH_ADAPTER_AUTO
+        try:
+            heard, stop_watching = watch_advertisements(
+                address, self._bluetooth_adapter if fixed else None
+            )
+        except LookupError:
+            return "none"
+        heard_any, stop_any = None, None
+        if fixed:
+            try:
+                heard_any, stop_any = watch_advertisements(address, None)
+            except LookupError:
+                pass
+        _LOGGER.info(
+            "%s: last advertisement %s — waiting up to %ss for the shaver "
+            "to be switched on",
+            address, seen, PAIR_ADVERTISEMENT_WAIT,
+        )
+        try:
+            await asyncio.wait_for(heard.wait(), PAIR_ADVERTISEMENT_WAIT)
+        except TimeoutError:
+            # An advertisement right at the timeout may have set both.
+            if heard.is_set():
+                return "awake"
+            if heard_any is not None and heard_any.is_set():
+                return "other"
+            return "none"
+        finally:
+            stop_watching()
+            if stop_any is not None:
+                stop_any()
+        _LOGGER.debug("%s: advertisement received — shaver awake", address)
+        return "awake"
+
     def _bump_progress(self, value: float) -> None:
         """Advance the determinate progress bar, if this core supports it.
 
@@ -629,30 +1409,27 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         # The history timestamp is updated on every received advertisement
         # (including deduplicated identical ones — dedup only suppresses callback
         # dispatch, not the history write), so an awake shaver is never misread.
-        last = async_last_service_info(self.hass, address, connectable=True)
-        # A BlueZ RSSI-invalidation event (RSSI -127) also bumps the history
-        # timestamp without a packet on the air — treat it as "not seen", or
-        # the sentinel keeps the entry fresh and a stale BLEDevice slips past
-        # the gate (seen after an adapter power-cycle, where the doomed
-        # connects were then misread as a stale bond).
-        stale_rssi = (
-            last is not None and last.rssi is not None and last.rssi <= -127
-        )
-        age = None if last is None else (time.monotonic() - last.time)
-        if last is None or stale_rssi or age > _STALE_ADV_MAX_SECONDS:
-            _LOGGER.info(
-                "%s: no recent connectable advertisement (%s) — device asleep",
-                address,
-                "never seen" if last is None
-                else "stale RSSI -127" if stale_rssi
-                else f"{age:.0f}s ago",
-            )
+        awake = await self._async_ensure_awake(address)
+        if awake == "adapter":
+            raise AdapterNotReceivingException
+        if awake != "awake":
             raise DeviceAsleepException
 
         # "Direct Bluetooth" means the Home Assistant host adapter.
         # Do not let HA's normal RSSI-based connection ranking escape to a
         # stronger stock ESPHome proxy, whose bond is unrelated to BlueZ.
-        device = local_bluez_device_from_address(self.hass, address)
+        device = local_bluez_device_from_address(
+            self.hass, address, self._bluetooth_adapter
+        )
+        if not device and self._bluetooth_adapter != BLUETOOTH_ADAPTER_AUTO:
+            if describe_available_paths(self.hass, address):
+                # Fail fast with a readable reason instead of letting the
+                # pinned client run establish_connection into its retries.
+                _LOGGER.info(
+                    "%s: fixed Bluetooth adapter %s does not receive the shaver",
+                    address, self._bluetooth_adapter,
+                )
+                raise AdapterNotReceivingException
         if not device:
             paths = describe_available_paths(self.hass, address)
             proxy = next((p for p in paths if not p["is_local"]), None)
@@ -686,7 +1463,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             )
             try:
                 client = await establish_connection(
-                    local_bluez_client_class(), device, "philips_shaver",
+                    local_bluez_client_class(self._bluetooth_adapter),
+                    device, "philips_shaver",
                     use_services_cache=True, timeout=30.0,
                 )
             finally:
@@ -708,6 +1486,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             capabilities["connection_path"] = connection_path
             self._probe_via_proxy = False
             self._probe_proxy_name = None
+            self._probe_adapter = local_adapter_source(client)
             _LOGGER.info(
                 "%s: capabilities probe connected via %s",
                 address,
@@ -999,7 +1778,21 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         self._abort_if_already_configured()
 
         self.discovery_info = discovery_info
+        # Discovery card: '<name> · <MAC> · via hci1', like Sonicare.
+        self.context["title_placeholders"] = {"name": self._discovery_title()}
         return await self.async_step_bluetooth_confirm()
+
+    def _discovery_title(self) -> str:
+        """'Philips QP4530 · D2:EC:… · via hci1' for the discovery card."""
+        assert self.discovery_info is not None
+        info = self.discovery_info
+        parts = [info.name or "Philips Shaver", info.address]
+        paths = describe_available_paths(self.hass, info.address)
+        if paths:
+            best = paths[0]
+            via = f"via {self._short_scanner(best)}"
+            parts.append(via if best["is_local"] else f"{via} (proxy)")
+        return " · ".join(parts)
 
     async def async_step_bluetooth_confirm(
         self, user_input: dict[str, Any] | None = None
@@ -1043,6 +1836,11 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             address = self.discovery_info.address
+            # Retries from the pairing dialogs re-enter with an empty
+            # user_input — keep the adapter chosen before.
+            self._bluetooth_adapter = _adapter_from_input(
+                user_input, self._bluetooth_adapter
+            )
             # Quick D-Bus pre-check: if the device is known to BlueZ but
             # not paired, skip the slow bleak connection attempts (~80s)
             # and go straight to the pairing step. Skipped when a remote
@@ -1055,7 +1853,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 from .dbus_pairing import is_dbus_available, async_is_device_paired
 
                 if is_dbus_available():
-                    paired = await async_is_device_paired(address)
+                    paired = await async_is_device_paired(
+                        address, self._pair_target_adapter(address)
+                    )
                     if paired is False:
                         _LOGGER.info(
                             "D-Bus pre-check: %s is not paired — "
@@ -1063,7 +1863,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                             address,
                         )
                         self._pair_address = address
-                        return await self.async_step_pair()
+                        # The confirm dialog already showed the checklist —
+                        # pair right away instead of repeating it.
+                        return await self.async_step_pair({})
 
             return self._start_ble_probe("bluetooth_confirm", address)
 
@@ -1075,7 +1877,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         self._confirm_status = ""
 
         self.context["title_placeholders"] = {
-            "name": f"Bluetooth ({self.discovery_info.address})"
+            "name": self._discovery_title()
         }
 
         via, warning_variant, warning_values = self._transport_lines()
@@ -1088,8 +1890,12 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             caveat = text.get(f"error.confirm_warn_{warning_variant}", "")
             warning = _alert("warning", caveat.format(**warning_values))
 
+        adapter_field = self._bluetooth_adapter_field(
+            self.discovery_info.address
+        )
         return self.async_show_form(
             step_id="bluetooth_confirm",
+            data_schema=vol.Schema(adapter_field) if adapter_field else None,
             description_placeholders={
                 "name": self.discovery_info.name or self.discovery_info.address,
                 "address": self.discovery_info.address,
@@ -1098,6 +1904,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 ),
                 "via": via,
                 "transport": warning,
+                "unpairing_url": UNPAIRING_URL,
             },
         )
 
@@ -1207,7 +2014,11 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def _async_ble_probe(self, address: str) -> dict[str, Any]:
-        """Run the capabilities probe (progress task) and box the outcome."""
+        """Run the capabilities probe (progress task), at least briefly."""
+        return await _at_least(lambda: self._async_ble_probe_run(address))
+
+    async def _async_ble_probe_run(self, address: str) -> dict[str, Any]:
+        """Run the capabilities probe and box the outcome."""
         try:
             data = await self._async_fetch_capabilities(address)
             # Label BLE security for the capabilities dialog. On a proxy
@@ -1220,7 +2031,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 from .dbus_pairing import is_dbus_available, async_is_device_paired
 
                 if is_dbus_available():
-                    paired = await async_is_device_paired(address)
+                    paired = await async_is_device_paired(
+                        address, self._pair_target_adapter(address)
+                    )
                     # None = indeterminate (device not in the BlueZ tree,
                     # D-Bus hiccup) — better no row than a wrong one.
                     if paired is not None:
@@ -1228,6 +2041,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             return {"ok": True, "data": data}
         except DeviceAsleepException:
             return {"ok": False, "error": "asleep"}
+        except AdapterNotReceivingException:
+            return {"ok": False, "error": "adapter"}
         except NotPairedException:
             _LOGGER.error("Device %s is not paired", address)
             return {"ok": False, "error": "not_paired"}
@@ -1317,13 +2132,25 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                     address,
                 )
                 return await self.async_step_not_paired()
-            return await self._route_to_pairing()
+            # From the confirm dialog the checklist was already shown.
+            return await self._route_to_pairing(
+                start=origin == "bluetooth_confirm"
+            )
+
+        if origin == "pair" and error == "adapter":
+            # The pair form has no adapter field — go back to where the
+            # adapter is chosen, with the same notice.
+            if self.discovery_info is not None:
+                self._confirm_status = "adapter"
+                return await self.async_step_bluetooth_confirm()
+            self._manual_error = "adapter_not_receiving"
+            return await self.async_step_user_bleak()
 
         if origin == "pair":
             if error == "asleep":
                 self._pair_error = "device_asleep"
-            elif error == "pairing_failed":
-                self._pair_error = "pairing_failed"
+            elif error in ("pairing_failed", "pair_not_found"):
+                self._pair_error = error
             elif error == "unknown":
                 self._pair_error = "pairing_failed"
             else:
@@ -1332,7 +2159,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if origin == "user_bleak":
             self._manual_error = (
-                "device_asleep" if error == "asleep" else error
+                "device_asleep" if error == "asleep"
+                else "adapter_not_receiving" if error == "adapter"
+                else error
             )
             return await self.async_step_user_bleak()
 
@@ -1343,6 +2172,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         # it follows the language the dialog is rendered in.
         if error == "asleep":
             self._confirm_status = "asleep"
+        elif error == "adapter":
+            self._confirm_status = "adapter"
         elif error == "connection_aborted":
             self._confirm_status = "aborted"
         else:
@@ -1445,14 +2276,21 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             raw = user_input["address"]
             if raw == _MANUAL_ADDRESS:
                 # User picked the "enter manually" sentinel — re-render the
-                # step as a free-text field, keep prior errors empty.
+                # step as a free-text field, keep prior errors empty, and
+                # keep the adapter chosen alongside.
                 self._manual_address_entry = True
+                self._bluetooth_adapter = _adapter_from_input(
+                    user_input, self._bluetooth_adapter
+                )
             else:
                 address = raw.upper()
                 await self.async_set_unique_id(
                     address, raise_on_progress=False
                 )
                 self._abort_if_already_configured()
+                self._bluetooth_adapter = _adapter_from_input(
+                    user_input, self._bluetooth_adapter
+                )
 
                 # Quick D-Bus pre-check (same as bluetooth_confirm path);
                 # skipped when a remote scanner is the likely carrier.
@@ -1463,7 +2301,9 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                     from .dbus_pairing import is_dbus_available, async_is_device_paired
 
                     if is_dbus_available():
-                        paired = await async_is_device_paired(address)
+                        paired = await async_is_device_paired(
+                            address, self._pair_target_adapter(address)
+                        )
                         if paired is False:
                             _LOGGER.info(
                                 "D-Bus pre-check: %s is not paired — "
@@ -1475,7 +2315,10 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
                 return self._start_ble_probe("user_bleak", address)
 
-        free_text_schema = vol.Schema({vol.Required("address"): str})
+        free_text_schema = vol.Schema({
+            vol.Required("address"): str,
+            **self._bluetooth_adapter_field(),
+        })
 
         # Free-text entry path: nothing discovered, or user asked for it.
         if self._manual_address_entry:
@@ -1532,7 +2375,8 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                 data_schema=vol.Schema({
                     vol.Required("address"): SelectSelector(
                         SelectSelectorConfig(options=options)
-                    )
+                    ),
+                    **self._bluetooth_adapter_field(),
                 }),
                 errors=errors,
             )
@@ -2919,12 +3763,75 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
         )
         return placeholders
 
-    async def _route_to_pairing(self) -> ConfigFlowResult:
-        """Route to D-Bus pairing if available, otherwise show script instructions."""
+    def _bluetooth_adapter_field(self, address: str = "") -> dict[Any, Any]:
+        """Adapter field for direct BLE setup, or nothing.
+
+        Asked before the first connect, so the probe and its pairing run
+        through the chosen adapter. Without an address (manual entry) the
+        list has no signal strengths. With a single local adapter there is
+        nothing to choose.
+        """
+        # The current choice stays in the list even when it does not hear
+        # the shaver right now — that is exactly the "adapter" error case,
+        # and a default missing from the options fails schema validation.
+        if not _adapter_choice_available(
+            self.hass, address, self._bluetooth_adapter
+        ):
+            return {}
+        options = _bluetooth_adapter_options(
+            self.hass, address, self._bluetooth_adapter
+        )
+        # Wrapped in a section: a plain field label cannot be formatted, a
+        # section header stands out with its own title and icon.
+        return {
+            vol.Required(_ADAPTER_SECTION): section(
+                vol.Schema({
+                    vol.Required(
+                        CONF_BLUETOOTH_ADAPTER,
+                        default=_default_adapter(options, self._bluetooth_adapter),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=options,
+                            )
+                    )
+                }),
+                {"collapsed": False},
+            )
+        }
+
+    def _pair_target_adapter(self, address: str) -> str | None:
+        """Local adapter whose bond a pairing step should check and create.
+
+        A fixed adapter is the only one the entry will ever connect
+        through. On Automatic, the adapter that carried the probe; when
+        the probe never connected, the strongest local adapter hearing
+        the shaver — the one the automatic pin would pick. None when no
+        local adapter is known — then BlueZ picks.
+        """
+        if self._bluetooth_adapter != BLUETOOTH_ADAPTER_AUTO:
+            return self._bluetooth_adapter
+        if self._probe_adapter:
+            return self._probe_adapter
+        local = next(
+            (
+                p for p in describe_available_paths(self.hass, address)
+                if p.get("is_local") and p.get("source")
+            ),
+            None,
+        )
+        return str(local["source"]) if local else None
+
+    async def _route_to_pairing(self, start: bool = False) -> ConfigFlowResult:
+        """Route to D-Bus pairing if available, otherwise show script instructions.
+
+        ``start``: begin pairing at once instead of showing the pair form
+        first — for when the user just confirmed the same checklist. The
+        form still comes back with the reason if pairing fails.
+        """
         from .dbus_pairing import is_dbus_available
 
         if is_dbus_available():
-            return await self.async_step_pair()
+            return await self.async_step_pair({} if start else None)
         return await self.async_step_not_paired()
 
     async def async_step_pair(
@@ -2951,7 +3858,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             self._ble_probe_origin = "pair"
             self._ble_probe_address = address
             self._ble_probe_task = self.hass.async_create_task(
-                self._async_pair_and_probe(address)
+                _at_least(lambda: self._async_pair_and_probe(address))
             )
             return self.async_show_progress(
                 step_id="pair",
@@ -2976,6 +3883,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             description_placeholders={
                 "name": name,
                 "alert": _alert("error", notice),
+                "unpairing_url": UNPAIRING_URL,
             },
         )
 
@@ -2985,12 +3893,22 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
 
         try:
             self._bump_progress(0.02)
-            await async_pair_and_trust(address)
+            awake = await self._async_ensure_awake(address)
+            if awake != "awake":
+                return {"ok": False, "error": awake}
+            await async_pair_and_trust(
+                address, self._pair_target_adapter(address)
+            )
+            self._ble_just_paired = True
             _LOGGER.info("D-Bus pairing successful for %s", address)
             # Brief settle time for BlueZ key distribution
             await asyncio.sleep(2)
         except PairingError as err:
             _LOGGER.error("D-Bus pairing failed for %s: %s", address, err)
+            # The adapter never saw it during the pairing window: a range
+            # problem, not an old bond — say so.
+            if "not found" in str(err):
+                return {"ok": False, "error": "pair_not_found"}
             return {"ok": False, "error": "pairing_failed"}
         except Exception:  # noqa: BLE001
             _LOGGER.exception("Unexpected error during pairing")
@@ -3156,9 +4074,17 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             else:
                 entry_data[CONF_ADDRESS] = self.fetched_address
 
+            entry_options: dict[str, Any] = {}
+            if (
+                self.fetched_transport_type != TRANSPORT_ESP_BRIDGE
+                and self._bluetooth_adapter != BLUETOOTH_ADAPTER_AUTO
+            ):
+                entry_options[CONF_BLUETOOTH_ADAPTER] = self._bluetooth_adapter
+
             return self.async_create_entry(
                 title=f"Philips Shaver ({device_name})",
                 data=entry_data,
+                options=entry_options,
             )
 
         device_type = self.fetched_data.get("device_type", "")

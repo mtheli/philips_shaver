@@ -26,6 +26,7 @@ TRANSLATIONS = sorted((COMPONENT_DIR / "translations").glob("*.json"))
 # name — so the dead-block check cannot see them.
 ERROR_KEYS = {
     "abort_if_unique_id_configured",
+    "adapter_not_receiving",
     "cannot_connect",
     "connection_aborted",
     "device_asleep",
@@ -34,6 +35,7 @@ ERROR_KEYS = {
     "not_paired",
     "out_of_slots",
     "pair_failed_stale_bond",
+    "pair_not_found",
     "pair_timeout",
     "pair_timeout_passive_scanner",
     "pairing_failed",
@@ -43,6 +45,7 @@ ERROR_KEYS = {
 
 # Blocks the flow selects by interpolating an outcome into the name.
 DYNAMIC_BLOCKS = {
+    "confirm_alert_adapter",
     "confirm_alert_asleep",
     "confirm_alert_aborted",
     "confirm_alert_failed",

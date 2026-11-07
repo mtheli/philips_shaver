@@ -112,3 +112,20 @@ def unpatched_text_blocks():
     import custom_components.philips_shaver.config_flow as cf
 
     return cf._async_text_blocks.unpatched
+
+
+@pytest.fixture(autouse=True)
+def no_bluez_bond_lookup(monkeypatch):
+    """Automatic adapter choice asks BlueZ for bonds on every connect.
+
+    Tests must never reach the host's system bus: without a test's own
+    stub, no bonds are known, so the strongest local adapter is used.
+    """
+    from custom_components.philips_shaver import transport
+
+    async def _no_bond(self):
+        return None
+
+    monkeypatch.setattr(
+        transport.BleakTransport, "_async_paired_adapter", _no_bond
+    )

@@ -25,7 +25,43 @@
           "notify_throttle_ms": "Minimum interval between BLE notification events forwarded by the ESP bridge (in milliseconds). Lower values give faster updates but may overload the ESP API buffer. Only applies to ESP32 bridge connections.",
           "pipelined_reads": "Send the poll cycle's GATT reads to the ESP bridge as one batch instead of one at a time (much faster reconnects). Requires bridge firmware 1.10.0 or newer — on older firmware reads always stay sequential, regardless of this setting. Disable only if you see repeated read timeouts or ATT watchdog messages in the bridge logs. Only applies to ESP32 bridge connections."
         }
+      },
+      "adapter": {
+        "title": "Bluetooth adapter",
+        "description": "Choose the local Bluetooth adapter the shaver connects through. If the new adapter needs a pairing first, that follows in the next step.",
+        "data": {
+          "bluetooth_adapter": "Bluetooth adapter"
+        },
+        "data_description": {
+          "bluetooth_adapter": "The local adapter the shaver connects through — only through that one: if it does not receive the shaver, there is no connection. The shaver keeps only one pairing, so it connects through one fixed adapter; there is no automatic switching. Each adapter needs its own pairing; if the chosen one has none yet, pairing follows in the next step. When you switch adapters, the shaver's pairings on the other local adapters are removed. Bluetooth proxies are not listed — they cannot pair with Philips shavers. Signal strength is shown for adapters that receive the shaver right now."
+        }
+      },
+      "pair_adapter": {
+        "title": "Pair Bluetooth adapter",
+        "description": "{alert}The shaver is not paired with **{adapter}** yet. Each Bluetooth adapter needs its own pairing — paired so far with: **{paired_on}**.\n\nThe shaver keeps only one pairing at a time and rejects a new adapter while it still holds the old one:\n\n1. **Reset Bluetooth on the shaver itself** — model-specific, see the [unpairing guide]({unpairing_url}). Removing it from a phone or app is not enough.\n2. Place the shaver close to **{adapter}** and **switch it on** (press the power button or place it on its charging stand).\n3. Click **Submit** right away. The integration is paused while this dialog is open and resumes when it closes."
       }
+    },
+    "progress": {
+      "pair_adapter": "Waiting for the shaver on **{adapter}**, then pairing — keep it switched on and close to the adapter. This can take up to two minutes…"
+    },
+    "error": {
+      "pair_adapter_failed": "Pairing with {adapter} failed: {error}\n\nIf the shaver still holds its previous pairing, it rejects the new adapter — reset Bluetooth on the shaver as described in step 1, switch it on and click Submit to try again. Or close this dialog to keep the previous settings.",
+      "pair_adapter_no_advertisement": "{adapter} did not receive the shaver within {seconds} seconds. After a disconnect the shaver often stays silent until it is switched on again.\n\nPlace it close to {adapter}, switch it on, then click Submit right away — or close this dialog to keep the previous settings.",
+      "pair_adapter_weak": "{adapter} receives the shaver only weakly ({rssi} dBm) — pairing may time out. Bring the shaver closer to {adapter}.",
+      "headline_adapter": "**Bluetooth adapter changed.** From now on the shaver connects only through **{adapter}**.",
+      "headline_adapter_same": "**Bluetooth adapter confirmed.** The shaver keeps connecting only through **{adapter}**.",
+      "summary_pair_paired": "✅ **{adapter}**: paired",
+      "summary_pair_already": "🔲 **{adapter}**: pairing not needed — already paired",
+      "summary_pair_unknown": "🔲 **{adapter}**: pairing not checked — adapter or Bluetooth service not available right now",
+      "summary_drop_done": "✅ **{adapter}**: old pairing removed",
+      "summary_drop_failed": "❌ **{adapter}**: old pairing could not be removed — see the log",
+      "summary_drop_none": "🔲 **Other adapters**: no old pairings to remove",
+      "summary_drop_unknown": "🔲 **Other adapters**: not checked — Bluetooth service not available right now",
+      "summary_reload": "✅ **Integration**: reloading — the shaver reconnects as soon as it is switched on.",
+      "summary_drop_unverified": "⚠️ **Other adapters**: pairings kept — the shaver is not connected right now, so it cannot be checked which pairing is valid. Switch the shaver on and choose this adapter again to remove the others."
+    },
+    "abort": {
+      "adapter_changed": "{headline}The following steps were performed:\n\n{summary}"
     }
   },
   "config": {
@@ -44,6 +80,17 @@
         "description": "Select your shaver from the list of discovered devices, or choose “Other” to enter its Bluetooth MAC address manually.\n\n**Important:** switch the shaver on (press the power button or place it on its charging stand) before clicking Submit — it must stay on so its services can be read.",
         "data": {
           "address": "MAC Address"
+        },
+        "sections": {
+          "adapter": {
+            "name": "Bluetooth adapter",
+            "data": {
+              "bluetooth_adapter": "Connect through"
+            },
+            "data_description": {
+              "bluetooth_adapter": "Local Bluetooth adapter the shaver connects through, starting with this first connection — only through that one: if it does not receive the shaver, there is no connection. The shaver keeps only one pairing, so it stays with one adapter; preselected is the one that receives it best right now. You can change this later in the options."
+            }
+          }
         }
       },
       "esp_bridge": {
@@ -58,8 +105,19 @@
       },
       "bluetooth_confirm": {
         "title": "Confirm detected device",
-        "description": "{status}**{name}** discovered at `{address}`{via}.\n\n{transport}ℹ️ **Before continuing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **unpaired** from your phone\n   — Remove from Bluetooth settings **and** GroomTribe / OneBlade app\n\nPairing will be handled automatically during setup. The integration will then connect to the device to read hardware capabilities. This may take a few seconds.",
-        "submit": "Read capabilities"
+        "description": "{status}**{name}** discovered at `{address}`{via}.\n\n{transport}ℹ️ **Before continuing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **unpaired** from your phone and other devices\n   — Remove it from Bluetooth settings **and** the GroomTribe / OneBlade app; if it still holds an old pairing, reset Bluetooth on the shaver itself — see the [unpairing guide]({unpairing_url})\n\nPairing will be handled automatically during setup. The integration will then connect to the device to read hardware capabilities. This may take a few seconds.",
+        "submit": "Read capabilities",
+        "sections": {
+          "adapter": {
+            "name": "Bluetooth adapter",
+            "data": {
+              "bluetooth_adapter": "Connect through"
+            },
+            "data_description": {
+              "bluetooth_adapter": "Local Bluetooth adapter the shaver connects through, starting with this first connection — only through that one: if it does not receive the shaver, there is no connection. The shaver keeps only one pairing, so it stays with one adapter; preselected is the one that receives it best right now. You can change this later in the options."
+            }
+          }
+        }
       },
       "esp_select_device": {
         "title": "Select BLE Device",
@@ -96,12 +154,12 @@
       },
       "reset_bridge": {
         "title": "Reset bridge bond",
-        "description": "{error}Slot **{target}** is currently bonded to **{identity_address}**.\n\nClicking **Unpair and reset** will remove the BLE bond on the bridge and clear the saved identity. After that you can pair a different shaver.\n\nThe shaver keeps its own half of the bond. If pairing this same shaver again later fails with repeated auth errors, clear Bluetooth on the shaver first (model-specific: long-press the power button until the Bluetooth LED clears, or unpair it in the GroomTribe / OneBlade app).",
+        "description": "{error}Slot **{target}** is currently bonded to **{identity_address}**.\n\nClicking **Unpair and reset** will remove the BLE bond on the bridge and clear the saved identity. After that you can pair a different shaver.\n\nThe shaver keeps its own half of the bond. If pairing this same shaver again later fails with repeated auth errors, reset Bluetooth on the shaver itself first (model-specific, see the unpairing guide; unpairing in the GroomTribe / OneBlade app is not enough).",
         "submit": "Unpair and reset"
       },
       "pair": {
         "title": "Pair Device",
-        "description": "{alert}**{name}** needs to be paired with this system.\n\nℹ️ **Before pairing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **not connected** to your phone\n   — Remove from Bluetooth settings **and** GroomTribe / OneBlade app",
+        "description": "{alert}**{name}** needs to be paired with this system.\n\nℹ️ **Before pairing, please verify:**\n1. ⬜ Shaver is **turned on** or on its **charging stand**\n2. ⬜ Shaver is **unpaired** from your phone and other devices\n   — Remove it from Bluetooth settings **and** the GroomTribe / OneBlade app; if it still holds an old pairing, reset Bluetooth on the shaver itself — see the [unpairing guide]({unpairing_url})",
         "submit": "Start pairing"
       },
       "not_paired": {
@@ -111,7 +169,7 @@
       },
       "not_paired_proxy": {
         "title": "Pairing Required",
-        "description": "{alert}**{address}** requires **BLE bonding** before it can be read — and on this connection the pairing cannot succeed.\n\nWorking alternatives:\n\n1. Set the shaver up via a **local Bluetooth adapter** on the Home Assistant host.\n2. Use the dedicated **ESP32 bridge** (see the integration documentation).\n\nIf a local adapter is also in range, move the shaver closer to it and click **Retry** — Home Assistant connects through the strongest signal.",
+        "description": "{alert}**{address}** requires **BLE bonding** before it can be read — and on this connection the pairing cannot succeed.\n\nWorking alternatives:\n\n1. Set the shaver up via a **local Bluetooth adapter** on the Home Assistant host.\n2. Use the dedicated **ESP32 bridge** (see the integration documentation).\n\nIf a local adapter is also in range, move the shaver closer to it and click **Retry** — with “Automatic”, Home Assistant connects through the local adapter that receives the shaver best; with a fixed adapter, only through that one.",
         "submit": "Retry"
       },
       "show_capabilities": {
@@ -147,19 +205,22 @@
       "not_paired": "The shaver is not paired with this system.",
       "not_paired_proxy_dead_end": "This connection runs through the standard Bluetooth proxy {proxy_name}. Philips shavers pair via LE Secure Connections, which a standard Bluetooth proxy cannot complete — pairing over this path will not succeed, and pairing tools on the Home Assistant host have no effect on it.",
       "out_of_slots": "No Bluetooth adapter could reach the device. Either all connection slots are in use, or the device is out of range. Ensure the shaver is powered on and close to the Bluetooth adapter, and try removing unused Bluetooth devices if needed.",
-      "pair_failed_stale_bond": "Pairing failed with repeated auth errors. The shaver still holds the previous bond on its side and is rejecting fresh pairing. Clear Bluetooth on the shaver (model-specific: long-press the power button until the BT LED clears, or unpair via the GroomTribe / OneBlade app), then retry.",
+      "pair_failed_stale_bond": "Pairing failed with repeated auth errors. The shaver still holds the previous pairing on its side and rejects a new one. Reset Bluetooth on the shaver itself (model-specific, see the unpairing guide; unpairing in the GroomTribe / OneBlade app is not enough), then retry.",
       "pair_status_unpaired": "Bond removed — the slot is free. Switch on the shaver you want to bond, then start pairing.",
       "pair_timeout": "No shaver appeared during the 60-second pair-mode window. Make sure the shaver is on and advertising, and try again.",
       "pair_timeout_passive_scanner": "**No shaver appeared during the 60-second pair-mode window.** The bridge **scanned passively** the whole time, so it could not see the shaver at all — a passive scan never asks for the scan response that carries the shaver's service UUID.\n\n**What to do:** set this ESPHome device's Bluetooth scanning mode to **Active** under `Settings > Devices & Services > ESPHome > Configure`, then try again.",
-      "pairing_failed": "Bluetooth pairing failed. Make sure the shaver is switched on and not connected to another device (phone / GroomTribe / OneBlade app). If it keeps failing, the shaver may still hold an old bond on its side — clear Bluetooth on the shaver (model-specific: long-press the power button until the Bluetooth LED clears, or unpair it in the app), then retry.",
+      "pairing_failed": "Bluetooth pairing failed. Make sure the shaver is switched on and not connected to another device (phone / GroomTribe / OneBlade app). If it keeps failing, the shaver still holds an old pairing on its side — reset Bluetooth on the shaver itself (model-specific, see the unpairing guide; unpairing in the app is not enough), then retry.",
       "reset_alert_offline": "Couldn't reach the ESP bridge to clear the bond. Make sure it's online and powered, then try again.",
       "reset_alert_unconfirmed": "Couldn't confirm the bridge cleared the bond — it may need a reboot. Make sure it's online, then try again.",
       "service_call_failed": "Could not arm pair-mode on the ESP bridge. The bridge may be offline or a too-old firmware version. Update the bridge to v1.8.0 or newer and retry.",
-      "unknown": "Unexpected error. Check the logs (Settings → System → Logs) for details."
+      "unknown": "Unexpected error. Check the logs (Settings → System → Logs) for details.",
+      "adapter_not_receiving": "The selected Bluetooth adapter does not receive the shaver right now. Switch the shaver on and bring it within range of that adapter, or choose another adapter.",
+      "confirm_alert_adapter": "The selected Bluetooth adapter does not receive the shaver right now. Switch the shaver on and bring it within range of that adapter, or choose another adapter.",
+      "pair_not_found": "The Bluetooth adapter did not find the shaver for pairing. Switch the shaver on, bring it close to the adapter and try again."
     },
     "progress": {
-      "ble_probing": "Connecting to {name} and reading its data — usually a few seconds; if several connection attempts are needed (weak signal, first contact after a pairing problem) this can take up to two minutes…",
-      "pairing": "Pairing with {name} and reading its data — this can take up to a minute…",
+      "ble_probing": "💡 **Tip:** if the shaver is off, switch it on now — press the power button or place it on its charging stand.\n\nConnecting to {name} and reading its data — usually a few seconds; if the shaver has to be switched on first or several connection attempts are needed (weak signal), this can take up to three minutes…",
+      "pairing": "💡 **Tip:** if the shaver is off, switch it on now — press the power button or place it on its charging stand.\n\nPairing with {name} and reading its data — usually under a minute; if the shaver has to be switched on first or the signal is weak, a few minutes…",
       "pair_arming": "Arming pair-mode on {target}…",
       "pair_scanning": "Looking for your shaver and bonding — keep it switched on and close to the bridge. This can take up to a minute.",
       "unpairing": "Removing the bond on {target}…",
@@ -292,6 +353,13 @@
           "esp_bridge": "ESP Bridge",
           "stock_proxy": "Bluetooth Proxy",
           "unknown": "Unknown"
+        }
+      },
+      "adapter_selection": {
+        "name": "Adapter Selection",
+        "state": {
+          "automatic": "Automatic",
+          "fixed": "Fixed"
         }
       },
       "cleaning_progress": {

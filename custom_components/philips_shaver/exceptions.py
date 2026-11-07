@@ -23,3 +23,7 @@ class DeviceAsleepException(PhilipsShaverException):
 
 class TransportError(PhilipsShaverException):
     """Transport-level communication error."""
+
+
+class AdapterNotReceivingException(PhilipsShaverException):
+    """The fixed Bluetooth adapter does not receive the shaver."""

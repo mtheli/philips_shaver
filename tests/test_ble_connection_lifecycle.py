@@ -23,7 +23,7 @@ def _transport(monkeypatch) -> tr.BleakTransport:
     monkeypatch.setattr(
         tr,
         "local_bluez_scanner_device_from_address",
-        lambda hass, address: SimpleNamespace(
+        lambda hass, address, source=None: SimpleNamespace(
             scanner=scanner, ble_device=device
         ),
     )

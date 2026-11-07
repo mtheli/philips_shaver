@@ -601,6 +601,18 @@ MAX_NOTIFY_THROTTLE = 5000
 CONF_PIPELINED_READS = "pipelined_reads"
 DEFAULT_PIPELINED_READS = True
 
+# Direct BLE only: source (MAC) of the one local adapter connects go
+# through; the connect fails when it does not receive the shaver. "auto"
+# lets the integration pick the strongest local adapter.
+CONF_BLUETOOTH_ADAPTER = "bluetooth_adapter"
+BLUETOOTH_ADAPTER_AUTO = "auto"
+# The shaver keeps one pairing at a time: moving it to another adapter
+# needs a Bluetooth reset on the shaver itself, described here per model.
+UNPAIRING_URL = (
+    "https://github.com/mtheli/philips_shaver/blob/main/docs/UNPAIRING.md"
+)
+UNPAIR_ON_DEVICE_URL = f"{UNPAIRING_URL}#step-2-unpair-on-the-device-itself"
+
 # Service UUID for each BLE service
 SVC_BATTERY = "0000180f-0000-1000-8000-00805f9b34fb"
 SVC_DEVICE_INFO = "0000180a-0000-1000-8000-00805f9b34fb"

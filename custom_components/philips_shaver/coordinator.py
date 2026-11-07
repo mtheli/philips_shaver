@@ -29,9 +29,16 @@ except ImportError:
     HAS_DBUS_FAST = False
 
 from . import const as _const
-from .transport import BleakTransport, EspBridgeTransport, ShaverTransport
+from .transport import (
+    BleakTransport,
+    EspBridgeTransport,
+    ShaverTransport,
+    register_advertisements,
+)
 from .exceptions import TransportError
 from .const import (
+    BLUETOOTH_ADAPTER_AUTO,
+    CONF_BLUETOOTH_ADAPTER,
     DOMAIN,
     MIN_BRIDGE_VERSION,
     IDF_BOND_LOSS_VERSIONS,
@@ -460,7 +467,12 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         Note: habluetooth filters identical advertisements, so this only fires
         when advertisement DATA changes. For devices that send static data,
         the D-Bus RSSI listener provides the fallback.
+
+        With a fixed adapter, the wake comes from that adapter's packets
+        only — see _start_fixed_adapter_callback.
         """
+        if self._start_fixed_adapter_callback():
+            return
 
         @callback
         def _advertisement_callback(service_info, change):
@@ -498,6 +510,54 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             BluetoothScanningMode.ACTIVE,
         )
 
+    def _fixed_adapter(self) -> str | None:
+        """Source of the fixed Bluetooth adapter, or None for automatic."""
+        fixed = self.entry.options.get(CONF_BLUETOOTH_ADAPTER)
+        if not fixed or fixed == BLUETOOTH_ADAPTER_AUTO:
+            return None
+        return fixed
+
+    def _start_fixed_adapter_callback(self) -> bool:
+        """Wake only on packets the fixed adapter itself receives.
+
+        HA's callback delivers one advertisement per change, from whichever
+        scanner the manager prefers — with hci1 fixed, a packet heard by a
+        stronger hci0 would start a connect through an adapter that does
+        not hear the shaver. habluetooth's per-packet callback reports every
+        scanner, so the wake can be limited to the fixed one. It is not
+        deduplicated either, so no history clearing is needed. Returns
+        False (fall back to HA's callback) without a fixed adapter or on a
+        core without the per-packet callback.
+        """
+        fixed = self._fixed_adapter()
+        if fixed is None:
+            return False
+
+        @callback
+        def _on_fixed_adapter_packet(service_info) -> None:
+            if service_info.rssi is not None and service_info.rssi <= -127:
+                return
+            if self._wake_event.is_set() and self._adv_wake:
+                return  # wake already pending; packets come several a second
+            if not self.transport.is_connected:
+                _LOGGER.info(
+                    "Wake via ADV on %s: %s | RSSI: %s dBm",
+                    fixed, service_info.address, service_info.rssi,
+                )
+            self._handle_wake()
+
+        try:
+            self._unsub_advertisement = register_advertisements(
+                self.address, fixed, _on_fixed_adapter_packet
+            )
+        except LookupError as err:
+            _LOGGER.debug(
+                "%s: no per-packet advertisement callback (%s) — waking on "
+                "any adapter", self.address, err,
+            )
+            return False
+        return True
+
     async def _start_dbus_rssi_listener(self) -> None:
         """Listen for BlueZ D-Bus RSSI changes to detect device advertisements.
 
@@ -515,19 +575,43 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.warning("D-Bus not available for RSSI wake detection: %s", err)
             return
 
-        from .dbus_pairing import _find_device_path
-        device_path = await _find_device_path(self._dbus_bus, self.address)
-        if not device_path:
+        # One device object per adapter: listen on all of them, or only on
+        # the fixed adapter's — an RSSI wake from an adapter the entry
+        # never connects through would only start a doomed connect.
+        from .dbus_pairing import _device_paths_on_adapters, _find_device_paths
+        fixed = self._fixed_adapter()
+        try:
+            # Constructed paths cover adapters that have not heard the
+            # shaver yet; the ones found by Address cover the rest.
+            device_paths = set(await _device_paths_on_adapters(
+                self._dbus_bus, self.address, fixed
+            )) | set(await _find_device_paths(
+                self._dbus_bus, self.address, fixed
+            ))
+        except Exception as err:  # noqa: BLE001 — wake signal is optional
+            _LOGGER.debug("D-Bus RSSI listener: adapter lookup failed: %s", err)
+            device_paths = set()
+        if not device_paths and fixed is None:
+            # No adapter registered yet (e.g. during adapter recovery):
+            # listen where the default adapter will put the device.
             mac_path = self.address.upper().replace(":", "_")
-            device_path = f"/org/bluez/hci0/dev_{mac_path}"
-            _LOGGER.debug("Device not in BlueZ ObjectManager, using default path: %s", device_path)
+            device_paths = {f"/org/bluez/hci0/dev_{mac_path}"}
+            _LOGGER.debug(
+                "No BlueZ adapter found, using default path: %s", device_paths
+            )
+        if not device_paths:
+            _LOGGER.debug(
+                "Fixed adapter %s not registered — D-Bus RSSI listener disabled",
+                fixed,
+            )
+            return
 
         def _on_message(msg: Message) -> None:
             if msg.message_type != MessageType.SIGNAL:
                 return
             if msg.member != "PropertiesChanged":
                 return
-            if msg.path != device_path:
+            if msg.path not in device_paths:
                 return
             body = msg.body
             if len(body) >= 2 and "RSSI" in body[1]:
@@ -540,23 +624,24 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         self._dbus_bus.add_message_handler(_on_message)
 
-        await self._dbus_bus.call(Message(
-            destination="org.freedesktop.DBus",
-            path="/org/freedesktop/DBus",
-            interface="org.freedesktop.DBus",
-            member="AddMatch",
-            signature="s",
-            body=[
-                f"type='signal',"
-                f"interface='org.freedesktop.DBus.Properties',"
-                f"member='PropertiesChanged',"
-                f"path='{device_path}'"
-            ],
-        ))
+        for device_path in sorted(device_paths):
+            await self._dbus_bus.call(Message(
+                destination="org.freedesktop.DBus",
+                path="/org/freedesktop/DBus",
+                interface="org.freedesktop.DBus",
+                member="AddMatch",
+                signature="s",
+                body=[
+                    f"type='signal',"
+                    f"interface='org.freedesktop.DBus.Properties',"
+                    f"member='PropertiesChanged',"
+                    f"path='{device_path}'"
+                ],
+            ))
 
         _LOGGER.info(
             "D-Bus RSSI listener active for %s (%s)",
-            self.address, device_path,
+            self.address, ", ".join(sorted(device_paths)),
         )
 
     # ------------------------------------------------------------------

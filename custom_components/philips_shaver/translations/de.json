@@ -25,7 +25,43 @@
           "notify_throttle_ms": "Mindestabstand zwischen BLE-Benachrichtigungen, die von der ESP-Bridge weitergeleitet werden (in Millisekunden). Niedrigere Werte liefern schnellere Updates, können aber den ESP-API-Buffer überlasten. Gilt nur für ESP32-Bridge-Verbindungen.",
           "pipelined_reads": "Sendet die Lesevorgänge des Abfragezyklus gebündelt an die ESP-Bridge statt einzeln (deutlich schnellere Reconnects). Erfordert Bridge-Firmware 1.10.0 oder neuer — bei älterer Firmware wird unabhängig von dieser Einstellung immer sequenziell gelesen. Nur deaktivieren, falls wiederholt Lese-Timeouts oder ATT-Watchdog-Meldungen in den Bridge-Logs auftreten. Gilt nur für ESP32-Bridge-Verbindungen."
         }
+      },
+      "adapter": {
+        "title": "Bluetooth-Adapter",
+        "description": "Wähle den lokalen Bluetooth-Adapter, über den sich der Rasierer verbindet. Braucht der neue Adapter zuerst eine Kopplung, folgt sie im nächsten Schritt.",
+        "data": {
+          "bluetooth_adapter": "Bluetooth-Adapter"
+        },
+        "data_description": {
+          "bluetooth_adapter": "Der lokale Adapter, über den sich der Rasierer verbindet — nur über diesen: Empfängt er den Rasierer nicht, gibt es keine Verbindung. Der Rasierer hält nur eine Kopplung, deshalb verbindet er sich über einen festen Adapter; automatisches Umschalten gibt es nicht. Jeder Adapter braucht eine eigene Kopplung; hat der gewählte noch keine, folgt die Kopplung im nächsten Schritt. Beim Wechsel werden die Kopplungen des Rasierers auf den anderen lokalen Adaptern entfernt. Bluetooth-Proxys stehen nicht in der Liste — sie können sich nicht mit Philips-Rasierern koppeln. Die Signalstärke steht bei Adaptern, die den Rasierer gerade empfangen."
+        }
+      },
+      "pair_adapter": {
+        "title": "Bluetooth-Adapter koppeln",
+        "description": "{alert}Der Rasierer ist mit **{adapter}** noch nicht gekoppelt. Jeder Bluetooth-Adapter braucht eine eigene Kopplung — bisher gekoppelt mit: **{paired_on}**.\n\nDer Rasierer hält immer nur eine Kopplung und lehnt einen neuen Adapter ab, solange er die alte noch hat:\n\n1. **Setze Bluetooth am Rasierer selbst zurück** — je nach Modell, siehe [Anleitung zum Entkoppeln]({unpairing_url}). Entfernen am Handy oder in der App reicht nicht.\n2. Lege den Rasierer nahe an **{adapter}** und **schalte ihn ein** (Power-Knopf drücken oder auf die Ladestation stellen).\n3. Klicke dann sofort auf **Senden**. Die Integration ist pausiert, solange dieser Dialog offen ist, und läuft danach weiter."
       }
+    },
+    "progress": {
+      "pair_adapter": "Warte auf den Rasierer über **{adapter}**, danach wird gekoppelt — lass ihn eingeschaltet und nahe am Adapter. Das kann bis zu zwei Minuten dauern…"
+    },
+    "error": {
+      "pair_adapter_failed": "Kopplung mit {adapter} fehlgeschlagen: {error}\n\nHat der Rasierer seine bisherige Kopplung noch, lehnt er den neuen Adapter ab — setze Bluetooth am Rasierer wie in Schritt 1 beschrieben zurück, schalte ihn ein und klicke auf Senden für einen neuen Versuch. Oder schließe den Dialog, um die bisherigen Einstellungen zu behalten.",
+      "pair_adapter_no_advertisement": "{adapter} hat den Rasierer innerhalb von {seconds} Sekunden nicht empfangen. Nach einer Trennung bleibt der Rasierer oft stumm, bis er wieder eingeschaltet wird.\n\nLege ihn nahe an {adapter}, schalte ihn ein und klicke dann sofort auf Senden — oder schließe den Dialog, um die bisherigen Einstellungen zu behalten.",
+      "pair_adapter_weak": "{adapter} empfängt den Rasierer nur schwach ({rssi} dBm) — die Kopplung kann daran scheitern. Bring den Rasierer näher an {adapter}.",
+      "headline_adapter": "**Bluetooth-Adapter geändert.** Der Rasierer verbindet sich ab jetzt nur noch über **{adapter}**.",
+      "headline_adapter_same": "**Bluetooth-Adapter bestätigt.** Der Rasierer verbindet sich weiterhin nur über **{adapter}**.",
+      "summary_pair_paired": "✅ **{adapter}**: gekoppelt",
+      "summary_pair_already": "🔲 **{adapter}**: Kopplung nicht nötig — bereits gekoppelt",
+      "summary_pair_unknown": "🔲 **{adapter}**: Kopplung nicht geprüft — Adapter oder Bluetooth-Dienst gerade nicht verfügbar",
+      "summary_drop_done": "✅ **{adapter}**: alte Kopplung entfernt",
+      "summary_drop_failed": "❌ **{adapter}**: alte Kopplung konnte nicht entfernt werden — siehe Protokoll",
+      "summary_drop_none": "🔲 **Andere Adapter**: keine alten Kopplungen vorhanden",
+      "summary_drop_unknown": "🔲 **Andere Adapter**: nicht geprüft — Bluetooth-Dienst gerade nicht verfügbar",
+      "summary_reload": "✅ **Integration**: wird neu geladen — der Rasierer verbindet sich, sobald er eingeschaltet ist.",
+      "summary_drop_unverified": "⚠️ **Andere Adapter**: Kopplungen behalten — der Rasierer ist gerade nicht verbunden, daher lässt sich nicht prüfen, welche Kopplung gilt. Schalte den Rasierer ein und wähle diesen Adapter erneut, um die anderen zu entfernen."
+    },
+    "abort": {
+      "adapter_changed": "{headline}Folgende Schritte wurden ausgeführt:\n\n{summary}"
     }
   },
   "config": {
@@ -44,6 +80,17 @@
         "description": "Wähle deinen Rasierer aus der Liste der gefundenen Geräte, oder wähle „Other“, um die Bluetooth-MAC-Adresse manuell einzugeben.\n\n**Wichtig:** Schalte den Rasierer vor dem Klick auf Senden ein (Power-Knopf drücken oder auf die Ladestation stellen) — er muss eingeschaltet bleiben, damit die Dienste gelesen werden können.",
         "data": {
           "address": "MAC-Adresse"
+        },
+        "sections": {
+          "adapter": {
+            "name": "Bluetooth-Adapter",
+            "data": {
+              "bluetooth_adapter": "Verbinden über"
+            },
+            "data_description": {
+              "bluetooth_adapter": "Lokaler Bluetooth-Adapter, über den sich der Rasierer verbindet, schon bei dieser ersten Verbindung — nur über diesen: Empfängt er den Rasierer nicht, gibt es keine Verbindung. Der Rasierer hält nur eine Kopplung, deshalb bleibt er bei einem Adapter; vorausgewählt ist der, der ihn gerade am besten empfängt. Du kannst das später in den Optionen ändern."
+            }
+          }
         }
       },
       "esp_bridge": {
@@ -58,8 +105,19 @@
       },
       "bluetooth_confirm": {
         "title": "Erkanntes Gerät bestätigen",
-        "description": "{status}**{name}** erkannt unter `{address}`{via}.\n\n{transport}ℹ️ **Bitte vor dem Fortfahren prüfen:**\n1. ⬜ Rasierer ist **eingeschaltet** oder auf der **Ladestation**\n2. ⬜ Rasierer ist **entkoppelt** vom Handy\n   — Aus Bluetooth-Einstellungen **und** GroomTribe / OneBlade App entfernen\n\nDas Pairing wird automatisch während der Einrichtung durchgeführt. Anschließend verbindet sich die Integration mit dem Gerät, um die Hardware-Fähigkeiten zu lesen. Dies kann einige Sekunden dauern.",
-        "submit": "Fähigkeiten auslesen"
+        "description": "{status}**{name}** erkannt unter `{address}`{via}.\n\n{transport}ℹ️ **Bitte vor dem Fortfahren prüfen:**\n1. ⬜ Rasierer ist **eingeschaltet** oder auf der **Ladestation**\n2. ⬜ Rasierer ist **entkoppelt** von Handy und anderen Geräten\n   — Aus Bluetooth-Einstellungen **und** GroomTribe / OneBlade App entfernen; hält er noch eine alte Kopplung, Bluetooth am Rasierer selbst zurücksetzen — siehe [Anleitung zum Entkoppeln]({unpairing_url})\n\nDas Pairing wird automatisch während der Einrichtung durchgeführt. Anschließend verbindet sich die Integration mit dem Gerät, um die Hardware-Fähigkeiten zu lesen. Dies kann einige Sekunden dauern.",
+        "submit": "Fähigkeiten auslesen",
+        "sections": {
+          "adapter": {
+            "name": "Bluetooth-Adapter",
+            "data": {
+              "bluetooth_adapter": "Verbinden über"
+            },
+            "data_description": {
+              "bluetooth_adapter": "Lokaler Bluetooth-Adapter, über den sich der Rasierer verbindet, schon bei dieser ersten Verbindung — nur über diesen: Empfängt er den Rasierer nicht, gibt es keine Verbindung. Der Rasierer hält nur eine Kopplung, deshalb bleibt er bei einem Adapter; vorausgewählt ist der, der ihn gerade am besten empfängt. Du kannst das später in den Optionen ändern."
+            }
+          }
+        }
       },
       "esp_select_device": {
         "title": "BLE-Gerät auswählen",
@@ -96,12 +154,12 @@
       },
       "reset_bridge": {
         "title": "Bridge-Bond zurücksetzen",
-        "description": "{error}Slot **{target}** ist aktuell mit **{identity_address}** gekoppelt.\n\nMit **Entkoppeln und zurücksetzen** wird der BLE-Bond auf der Bridge entfernt und die gespeicherte Identität gelöscht. Danach kann ein anderer Rasierer gekoppelt werden.\n\nDer Rasierer behält seine Hälfte des Bonds. Falls ein späteres erneutes Pairing dieses Rasierers mit wiederholten Auth-Fehlern scheitert, zuerst Bluetooth am Rasierer zurücksetzen (modellabhängig: Power-Knopf lange gedrückt halten, bis die Bluetooth-LED erlischt, oder in der GroomTribe / OneBlade App entkoppeln).",
+        "description": "{error}Slot **{target}** ist aktuell mit **{identity_address}** gekoppelt.\n\nMit **Entkoppeln und zurücksetzen** wird der BLE-Bond auf der Bridge entfernt und die gespeicherte Identität gelöscht. Danach kann ein anderer Rasierer gekoppelt werden.\n\nDer Rasierer behält seine Hälfte des Bonds. Falls ein späteres erneutes Pairing dieses Rasierers mit wiederholten Auth-Fehlern scheitert, zuerst Bluetooth am Rasierer selbst zurücksetzen (modellabhängig, siehe Anleitung zum Entkoppeln; Entkoppeln in der GroomTribe / OneBlade App reicht nicht).",
         "submit": "Entkoppeln und zurücksetzen"
       },
       "pair": {
         "title": "Gerät koppeln",
-        "description": "{alert}**{name}** muss mit diesem System gekoppelt werden.\n\nℹ️ **Bitte vor der Kopplung prüfen:**\n1. ⬜ Rasierer ist **eingeschaltet** oder auf der **Ladestation**\n2. ⬜ Rasierer ist **nicht** mit dem Handy verbunden\n   — Aus Bluetooth-Einstellungen **und** GroomTribe / OneBlade App entfernen",
+        "description": "{alert}**{name}** muss mit diesem System gekoppelt werden.\n\nℹ️ **Bitte vor der Kopplung prüfen:**\n1. ⬜ Rasierer ist **eingeschaltet** oder auf der **Ladestation**\n2. ⬜ Rasierer ist **entkoppelt** von Handy und anderen Geräten\n   — Aus Bluetooth-Einstellungen **und** GroomTribe / OneBlade App entfernen; hält er noch eine alte Kopplung, Bluetooth am Rasierer selbst zurücksetzen — siehe [Anleitung zum Entkoppeln]({unpairing_url})",
         "submit": "Pairing starten"
       },
       "not_paired": {
@@ -111,7 +169,7 @@
       },
       "not_paired_proxy": {
         "title": "Pairing erforderlich",
-        "description": "{alert}**{address}** benötigt **BLE-Bonding**, bevor Daten gelesen werden können — und über diese Verbindung kann das Pairing nicht gelingen.\n\nFunktionierende Alternativen:\n\n1. Rasierer über einen **lokalen Bluetooth-Adapter** am Home-Assistant-Host einrichten.\n2. Die dedizierte **ESP32-Bridge** verwenden (siehe Dokumentation der Integration).\n\nFalls zusätzlich ein lokaler Adapter in Reichweite ist: Rasierer näher an den Adapter legen und **Erneut versuchen** klicken — Home Assistant verbindet über das stärkste Signal.",
+        "description": "{alert}**{address}** benötigt **BLE-Bonding**, bevor Daten gelesen werden können — und über diese Verbindung kann das Pairing nicht gelingen.\n\nFunktionierende Alternativen:\n\n1. Rasierer über einen **lokalen Bluetooth-Adapter** am Home-Assistant-Host einrichten.\n2. Die dedizierte **ESP32-Bridge** verwenden (siehe Dokumentation der Integration).\n\nFalls zusätzlich ein lokaler Adapter in Reichweite ist: Rasierer näher an den Adapter legen und **Erneut versuchen** klicken — bei „Automatisch“ verbindet Home Assistant über den lokalen Adapter, der den Rasierer am besten empfängt; bei einem festen Adapter nur über diesen.",
         "submit": "Erneut versuchen"
       },
       "show_capabilities": {
@@ -147,19 +205,22 @@
       "not_paired": "Der Rasierer ist nicht mit diesem System gepairt.",
       "not_paired_proxy_dead_end": "Diese Verbindung läuft über den gewöhnlichen Bluetooth-Proxy {proxy_name}. Philips-Rasierer koppeln über LE Secure Connections, die ein gewöhnlicher Bluetooth-Proxy nicht abschließen kann — ein Pairing über diesen Weg gelingt nicht, und Pairing-Werkzeuge auf dem Home-Assistant-Host haben darauf keinen Einfluss.",
       "out_of_slots": "Kein Bluetooth-Adapter konnte das Gerät erreichen. Entweder sind alle Verbindungsslots belegt oder das Gerät ist außer Reichweite. Stelle sicher, dass der Rasierer eingeschaltet und in der Nähe des Bluetooth-Adapters ist, und entferne ggf. ungenutzte Bluetooth-Geräte.",
-      "pair_failed_stale_bond": "Pairing schlug mit wiederholten Auth-Fehlern fehl. Der Rasierer hält das vorherige Pairing auf seiner Seite und lehnt neues Pairing ab. Lösche Bluetooth am Rasierer (modellabhängig: Power-Knopf lange gedrückt halten bis Bluetooth-LED erlischt, oder über die GroomTribe / OneBlade App entkoppeln), dann erneut versuchen.",
+      "pair_failed_stale_bond": "Pairing schlug mit wiederholten Auth-Fehlern fehl. Der Rasierer hält die vorherige Kopplung auf seiner Seite und lehnt eine neue ab. Setze Bluetooth am Rasierer selbst zurück (modellabhängig, siehe Anleitung zum Entkoppeln; Entkoppeln in der GroomTribe / OneBlade App reicht nicht), dann erneut versuchen.",
       "pair_status_unpaired": "Bond entfernt — der Slot ist frei. Schalte den Rasierer ein, den du koppeln möchtest, und starte dann das Pairing.",
       "pair_timeout": "Im 60-Sekunden-Pair-Fenster wurde kein Rasierer erkannt. Stelle sicher, dass der Rasierer eingeschaltet ist und advertised, und versuche es erneut.",
       "pair_timeout_passive_scanner": "**Im 60-Sekunden-Pair-Fenster wurde kein Rasierer erkannt.** Die Bridge hat die ganze Zeit **passiv gescannt** und konnte den Rasierer deshalb gar nicht sehen — ein passiver Scan fordert die Scan-Antwort mit der Service-UUID des Rasierers nie an.\n\n**Zu tun:** Stelle den Bluetooth-Scan-Modus dieses ESPHome-Geräts auf **Aktiv** unter `Einstellungen > Geräte & Dienste > ESPHome > Konfigurieren` und versuche es erneut.",
-      "pairing_failed": "Bluetooth-Pairing fehlgeschlagen. Stelle sicher, dass der Rasierer eingeschaltet und nicht mit einem anderen Gerät verbunden ist (Handy / GroomTribe / OneBlade App). Schlägt es wiederholt fehl, hält der Rasierer eventuell noch einen alten Bond auf seiner Seite — Bluetooth am Rasierer zurücksetzen (modellabhängig: Power-Knopf lange gedrückt halten, bis die Bluetooth-LED erlischt, oder in der App entkoppeln), dann erneut versuchen.",
+      "pairing_failed": "Bluetooth-Pairing fehlgeschlagen. Stelle sicher, dass der Rasierer eingeschaltet und nicht mit einem anderen Gerät verbunden ist (Handy / GroomTribe / OneBlade App). Schlägt es wiederholt fehl, hält der Rasierer noch eine alte Kopplung auf seiner Seite — Bluetooth am Rasierer selbst zurücksetzen (modellabhängig, siehe Anleitung zum Entkoppeln; Entkoppeln in der App reicht nicht), dann erneut versuchen.",
       "reset_alert_offline": "Die ESP-Bridge konnte zum Lösen des Bonds nicht erreicht werden. Stelle sicher, dass sie online und mit Strom versorgt ist, und versuche es erneut.",
       "reset_alert_unconfirmed": "Es konnte nicht bestätigt werden, dass die Bridge den Bond gelöst hat — sie braucht möglicherweise einen Neustart. Stelle sicher, dass sie online ist, und versuche es erneut.",
       "service_call_failed": "Pair-Modus konnte nicht auf der ESP-Bridge aktiviert werden. Die Bridge ist möglicherweise offline oder läuft auf einer zu alten Firmware. Aktualisiere die Bridge auf v1.8.0 oder neuer und versuche es erneut.",
-      "unknown": "Unerwarteter Fehler. Details stehen im Log (Einstellungen → System → Protokolle)."
+      "unknown": "Unerwarteter Fehler. Details stehen im Log (Einstellungen → System → Protokolle).",
+      "adapter_not_receiving": "Der gewählte Bluetooth-Adapter empfängt den Rasierer gerade nicht. Schalte den Rasierer ein und bring ihn in Reichweite dieses Adapters, oder wähle einen anderen Adapter.",
+      "confirm_alert_adapter": "Der gewählte Bluetooth-Adapter empfängt den Rasierer gerade nicht. Schalte den Rasierer ein und bring ihn in Reichweite dieses Adapters, oder wähle einen anderen Adapter.",
+      "pair_not_found": "Der Bluetooth-Adapter hat den Rasierer zum Koppeln nicht gefunden. Schalte den Rasierer ein, bring ihn nahe an den Adapter und versuche es erneut."
     },
     "progress": {
-      "ble_probing": "Verbinde mit {name} und lese die Daten — meist wenige Sekunden; sind mehrere Verbindungsversuche nötig (schwaches Signal, Erstkontakt nach einem Pairing-Problem), kann es bis zu zwei Minuten dauern…",
-      "pairing": "Kopple {name} und lese die Daten — das kann bis zu einer Minute dauern…",
+      "ble_probing": "💡 **Tipp:** Ist der Rasierer aus, schalte ihn jetzt ein — Power-Knopf drücken oder auf die Ladestation stellen.\n\nVerbinde mit {name} und lese die Daten — meist wenige Sekunden; muss der Rasierer erst eingeschaltet werden oder sind mehrere Verbindungsversuche nötig (schwaches Signal), kann es bis zu drei Minuten dauern…",
+      "pairing": "💡 **Tipp:** Ist der Rasierer aus, schalte ihn jetzt ein — Power-Knopf drücken oder auf die Ladestation stellen.\n\nKopple {name} und lese die Daten — meist unter einer Minute; muss der Rasierer erst eingeschaltet werden oder ist das Signal schwach, einige Minuten…",
       "pair_arming": "Aktiviere Pair-Modus auf {target}…",
       "pair_scanning": "Suche deinen Rasierer und kopple — eingeschaltet lassen und nah an der Bridge halten. Das kann bis zu einer Minute dauern.",
       "unpairing": "Entferne den Bond auf {target}…",
@@ -292,6 +353,13 @@
           "esp_bridge": "ESP Bridge",
           "stock_proxy": "Bluetooth Proxy",
           "unknown": "Unbekannt"
+        }
+      },
+      "adapter_selection": {
+        "name": "Adapterauswahl",
+        "state": {
+          "automatic": "Automatisch",
+          "fixed": "Fest"
         }
       },
       "cleaning_progress": {

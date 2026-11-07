@@ -11,7 +11,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Callable
+from typing import Any, Callable
 
 from bleak import BleakClient
 from bleak.exc import BleakError
@@ -24,13 +24,22 @@ from homeassistant.components.bluetooth import (
     async_scanner_by_source,
     async_scanner_devices_by_address,
 )
+
+try:
+    from homeassistant.components.bluetooth import async_current_scanners
+except ImportError:  # pragma: no cover — older cores + the pinned CI
+    async_current_scanners = None
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.event import async_track_time_interval
 
 from packaging.version import Version
 
-from .const import BRIDGE_PIPELINED_READS_VERSION, CHAR_SERVICE_MAP
+from .const import (
+    BLUETOOTH_ADAPTER_AUTO,
+    BRIDGE_PIPELINED_READS_VERSION,
+    CHAR_SERVICE_MAP,
+)
 from .exceptions import TransportError
 
 _LOGGER = logging.getLogger(__name__)
@@ -76,21 +85,35 @@ def _host_scanner_name_by_adapter(
     return None
 
 
+def _fixed(source: str | None) -> str | None:
+    """Upper-case adapter source, or None for automatic choice."""
+    if not source or source == BLUETOOTH_ADAPTER_AUTO:
+        return None
+    return source.upper()
+
+
 def local_bluez_scanner_device_from_address(
-    hass: HomeAssistant, address: str
+    hass: HomeAssistant, address: str, source: str | None = None
 ):
     """Return the strongest usable local HA Host scanner entry for address.
 
     Philips shaver bonds are controller-local. A stock ESPHome Bluetooth
     proxy may advertise the same device into Home Assistant, but it cannot
     complete the LE Secure Connections pairing required by the shaver.
+    With ``source`` (a fixed adapter) only that adapter's entry counts.
     """
+    wanted = _fixed(source)
     candidates = []
     try:
         for scanner_device in async_scanner_devices_by_address(
             hass, address, connectable=True
         ):
             if not isinstance(scanner_device.scanner, HaScanner):
+                continue
+            if wanted is not None and (
+                str(getattr(scanner_device.scanner, "source", "")).upper()
+                != wanted
+            ):
                 continue
             rssi = getattr(scanner_device.advertisement, "rssi", None)
             if rssi is not None and rssi <= -127:
@@ -105,9 +128,13 @@ def local_bluez_scanner_device_from_address(
     return max(candidates, key=lambda item: item[0])[1]
 
 
-def local_bluez_device_from_address(hass: HomeAssistant, address: str):
+def local_bluez_device_from_address(
+    hass: HomeAssistant, address: str, source: str | None = None
+):
     """Return a BLEDevice seen by a local HA Host/BlueZ scanner."""
-    scanner_device = local_bluez_scanner_device_from_address(hass, address)
+    scanner_device = local_bluez_scanner_device_from_address(
+        hass, address, source
+    )
     return scanner_device.ble_device if scanner_device is not None else None
 
 
@@ -191,7 +218,8 @@ def describe_available_paths(
     Predicts habluetooth's backend choice before a connect exists:
     connects are ranked by an RSSI-based score, so the strongest entry
     here is the likely carrier. Each entry:
-    ``{"name": str, "rssi": int | None, "is_local": bool}`` where
+    ``{"name": str, "source": str | None, "rssi": int | None,
+    "is_local": bool}`` where
     ``is_local`` means the local BlueZ stack (``HaScanner``) as opposed
     to a remote scanner such as an ESPHome bluetooth_proxy.
     """
@@ -214,6 +242,7 @@ def describe_available_paths(
             )
             paths.append({
                 "name": name,
+                "source": getattr(scanner, "source", None),
                 "rssi": rssi,
                 "is_local": isinstance(scanner, HaScanner),
             })
@@ -224,6 +253,123 @@ def describe_available_paths(
         reverse=True,
     )
     return paths
+
+
+def register_advertisements(
+    address: str, source: str | None, cb: Callable[[Any], None]
+) -> Callable[[], None]:
+    """Call ``cb`` for every packet of ``address`` received via ``source``.
+
+    ``source`` None: via any scanner.
+
+    Returns the cancel callable. Uses habluetooth's per-address callback,
+    which fires for every packet and every scanner — local adapters
+    included, which keep no per-device timestamps of their own, and
+    packets the manager discards in favour of a stronger scanner. Raises
+    LookupError when this core has no such callback.
+    """
+    try:
+        from habluetooth import get_manager
+
+        register = get_manager().async_register_advertisement_callback
+    except Exception as err:  # noqa: BLE001 — older habluetooth
+        raise LookupError(str(err) or type(err).__name__) from err
+    wanted = source.upper() if source else None
+
+    def _on_advertisement(service_info) -> None:
+        if wanted is None or str(getattr(service_info, "source", "")).upper() == wanted:
+            cb(service_info)
+
+    return register(_on_advertisement, address.upper())
+
+
+def watch_advertisements(
+    address: str, source: str | None
+) -> tuple[asyncio.Event, Callable[[], None]]:
+    """Set an event on the next advertisement of ``address`` via ``source``.
+
+    Returns (event, cancel). Raises LookupError like
+    ``register_advertisements``; callers then go ahead without waiting.
+    """
+    event = asyncio.Event()
+    return event, register_advertisements(
+        address, source, lambda _service_info: event.set()
+    )
+
+
+def scanner_rssi(hass: HomeAssistant, address: str, source: str) -> int | None:
+    """RSSI at which scanner ``source`` receives ``address`` now, if at all."""
+    for path in describe_available_paths(hass, address):
+        if str(path["source"] or "").upper() == source.upper():
+            rssi = path["rssi"]
+            return rssi if isinstance(rssi, int) else None
+    return None
+
+
+def describe_local_adapters(
+    hass: HomeAssistant, address: str
+) -> list[dict[str, object]]:
+    """Every connectable local adapter, for picking a fixed one.
+
+    Only local adapters: a stock Bluetooth proxy cannot complete the
+    shaver's LE Secure Connections pairing, so it is never a choice. The
+    shaver sleeps most of the time, so a list of only the adapters
+    hearing it right now would usually be empty. Adapters that do hear
+    it come first, strongest first, with their RSSI; the rest follow by
+    name with ``rssi`` None. Each entry: ``{"name", "source", "rssi"}``.
+    """
+    heard = {
+        str(p["source"]).upper(): p["rssi"]
+        for p in describe_available_paths(hass, address)
+        if p["source"] and p["is_local"]
+    }
+    if async_current_scanners is None:
+        # Cores without the scanner list: offer what hears the shaver now.
+        return [
+            {"name": p["name"], "source": p["source"], "rssi": p["rssi"]}
+            for p in describe_available_paths(hass, address)
+            if p["source"] and p["is_local"]
+        ]
+    adapters: list[dict[str, object]] = []
+    try:
+        for scanner in async_current_scanners(hass):
+            source = getattr(scanner, "source", None)
+            if (
+                not source
+                or not getattr(scanner, "connectable", False)
+                or not isinstance(scanner, HaScanner)
+            ):
+                continue
+            adapters.append({
+                "name": getattr(scanner, "name", None) or source,
+                "source": source,
+                "rssi": heard.get(str(source).upper()),
+            })
+    except Exception:  # noqa: BLE001 — options list only, never break the flow
+        return []
+    adapters.sort(
+        key=lambda s: (
+            s["rssi"] is None,
+            -s["rssi"] if isinstance(s["rssi"], int) else 0,
+            str(s["name"]).lower(),
+        )
+    )
+    return adapters
+
+
+def local_adapter_source(client: BleakClient) -> str | None:
+    """MAC of the local adapter that carries ``client``, or None.
+
+    None for a proxy-carried connection or when habluetooth does not say
+    which scanner connected. The adapter MAC is what BlueZ keys a bond
+    on (via the adapter object) and what the Bluetooth adapter option
+    stores.
+    """
+    if not is_local_bluez_connection(client):
+        return None
+    scanner = getattr(client, "_connected_scanner", None)
+    source = getattr(scanner, "source", None)
+    return str(source).upper() if source else None
 
 
 def is_local_bluez_connection(client: BleakClient) -> bool:
@@ -252,8 +398,23 @@ def _scanner_device_label(item) -> str:
     return f"{name} ({rssi} dBm)"
 
 
+def _is_invalid_rssi(item) -> bool:
+    """True for the -127 sentinel BlueZ leaves after invalidating RSSI."""
+    rssi = getattr(getattr(item, "advertisement", None), "rssi", None)
+    return isinstance(rssi, (int, float)) and rssi <= -127
+
+
 class _LocalBluezHaBleakClient(HaBleakClientWithServiceCache):
-    """HA BLE client that only considers local BlueZ scanners."""
+    """HA BLE client that only considers local BlueZ scanners.
+
+    With ``_fixed_source`` set (subclasses from local_bluez_client_class)
+    it considers exactly one local adapter: when that adapter does not
+    receive the shaver or has no free slot, the connect fails rather than
+    moving to another adapter — the message names the ones that do
+    receive it, so the log says why.
+    """
+
+    _fixed_source: str = ""
 
     def _async_get_best_available_backend_and_device(self, manager):
         """Select a HA-managed backend from local adapters only.
@@ -268,6 +429,10 @@ class _LocalBluezHaBleakClient(HaBleakClientWithServiceCache):
                 self, "_async_get_backend_for_ble_device"
             )
             all_devices = manager.async_scanner_devices_by_address(address, True)
+            if self._fixed_source:
+                return self._fixed_backend(
+                    manager, address, all_devices, backend_for_device
+                )
             local_devices = [
                 item for item in all_devices if isinstance(item.scanner, HaScanner)
             ]
@@ -327,16 +492,77 @@ class _LocalBluezHaBleakClient(HaBleakClientWithServiceCache):
                 )
             return fallback(manager)
 
+    def _fixed_backend(self, manager, address, all_devices, backend_for_device):
+        """Backend of the fixed local adapter, or BleakError."""
+        wanted = self._fixed_source.upper()
+        fixed = next(
+            (
+                item for item in all_devices
+                if isinstance(item.scanner, HaScanner)
+                and str(getattr(item.scanner, "source", "")).upper() == wanted
+                # A -127 entry is a BlueZ RSSI-invalidation leftover,
+                # not a packet: the adapter does not receive the shaver.
+                and not _is_invalid_rssi(item)
+            ),
+            None,
+        )
+        others = ", ".join(
+            _scanner_device_label(item)
+            for item in all_devices
+            if item is not fixed and not _is_invalid_rssi(item)
+        ) or "none"
+        if fixed is not None:
+            backend = backend_for_device(manager, fixed.scanner, fixed.ble_device)
+            if backend is not None:
+                _LOGGER.debug(
+                    "%s: connecting through fixed adapter %s; other paths: %s",
+                    address, _scanner_device_label(fixed), others,
+                )
+                return backend
+            raise BleakError(
+                f"Bluetooth adapter {_scanner_device_label(fixed)} has no "
+                f"free connection slot for {address}"
+            )
+        lookup = getattr(manager, "async_scanner_by_source", None)
+        fixed_scanner = lookup(self._fixed_source) if lookup else None
+        raise BleakError(
+            f"Bluetooth adapter "
+            f"{getattr(fixed_scanner, 'name', None) or self._fixed_source}"
+            f" does not receive {address}; received by: {others}"
+        )
 
-def local_bluez_client_class():
-    """Return the pinned HA client, or normal HA client if hooks disappeared."""
+
+_FIXED_CLIENT_CLASSES: dict[str, type] = {}
+
+
+def local_bluez_client_class(source: str | None = None):
+    """Return the pinned HA client, or normal HA client if hooks disappeared.
+
+    ``source`` (a local adapter MAC from the Bluetooth adapter option)
+    pins the connect to that one adapter; None/"auto" picks the strongest
+    local adapter as before. One subclass per source is cached so
+    repeated connects reuse it.
+    """
     required_hooks = (
         "_async_get_best_available_backend_and_device",
         "_async_get_backend_for_ble_device",
     )
-    if all(hasattr(HaBleakClientWithServiceCache, hook) for hook in required_hooks):
+    if not all(
+        hasattr(HaBleakClientWithServiceCache, hook) for hook in required_hooks
+    ):
+        return HaBleakClientWithServiceCache
+    wanted = _fixed(source)
+    if wanted is None:
         return _LocalBluezHaBleakClient
-    return HaBleakClientWithServiceCache
+    cls = _FIXED_CLIENT_CLASSES.get(wanted)
+    if cls is None:
+        cls = type(
+            "FixedLocalBluezHaBleakClient",
+            (_LocalBluezHaBleakClient,),
+            {"_fixed_source": wanted},
+        )
+        _FIXED_CLIENT_CLASSES[wanted] = cls
+    return cls
 
 
 # Return values of async_unpair_bridge_slot.
@@ -553,9 +779,16 @@ async def _cleanup_disconnected_client(client: BleakClient) -> None:
 class BleakTransport(ShaverTransport):
     """Direct BLE transport using bleak."""
 
-    def __init__(self, hass: HomeAssistant, address: str) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        address: str,
+        bluetooth_adapter: Callable[[], str | None] | None = None,
+    ) -> None:
         self._hass = hass
         self._address = address
+        # Read on every connect, like the bridge's pipelined-reads switch.
+        self._bluetooth_adapter = bluetooth_adapter or (lambda: None)
         self._client: BleakClient | None = None
         self._disconnect_cb: Callable[[], None] | None = None
         self._last_read_errors: dict[str, str] = {}
@@ -606,10 +839,28 @@ class BleakTransport(ShaverTransport):
             self._connection_path = None
             self._connected_scanner = None
 
+            fixed = _fixed(self._bluetooth_adapter())
+            kind = "fixed"
+            if fixed is None:
+                fixed = await self._async_paired_adapter()
+                kind = "paired"
             scanner_device = local_bluez_scanner_device_from_address(
-                self._hass, self._address
+                self._hass, self._address, fixed
             )
             if not scanner_device:
+                if fixed is not None:
+                    others = ", ".join(
+                        f"{p['name']} ({p['rssi']} dBm)"
+                        for p in describe_available_paths(
+                            self._hass, self._address
+                        )
+                    ) or "none"
+                    raise TransportError(
+                        f"Device {self._address} is not received by the "
+                        f"{kind} Bluetooth adapter "
+                        f"{_scanner_name_by_source(self._hass, fixed) or fixed}"
+                        f"; received by: {others}"
+                    )
                 raise TransportError(
                     f"Device {self._address} is not reachable via a local "
                     "Bluetooth adapter"
@@ -660,7 +911,7 @@ class BleakTransport(ShaverTransport):
                     self._disconnect_cb()
 
             client = await bleak_establish(
-                local_bluez_client_class(),
+                local_bluez_client_class(fixed),
                 device,
                 "philips_shaver",
                 disconnected_callback=_on_disconnect,
@@ -691,6 +942,43 @@ class BleakTransport(ShaverTransport):
             _LOGGER.info(
                 "%s: connected via %s", self._address, self._connection_path
             )
+
+    async def _async_paired_adapter(self) -> str | None:
+        """On Automatic: the local adapter holding the shaver's bond.
+
+        The shaver keeps one pairing only, so a stronger adapter without
+        a bond is useless: the shaver accepts the link and drops it again,
+        every couple of seconds. Of several bonded adapters (one of them
+        stale) the strongest that receives the shaver; a bonded adapter
+        that does not receive it still wins over an unbonded one — the
+        connect then fails with a readable reason instead of looping.
+        None without any bond (first pairing) or when BlueZ cannot be
+        asked: then the strongest local adapter, as before.
+        """
+        from .dbus_pairing import async_paired_adapters, is_dbus_available
+
+        if not is_dbus_available():
+            return None
+        paired = await async_paired_adapters(self._address)
+        if not paired:
+            return None
+        best: tuple[float, str] | None = None
+        for source in paired:
+            device = local_bluez_scanner_device_from_address(
+                self._hass, self._address, source
+            )
+            if device is None:
+                continue
+            rssi = getattr(device.advertisement, "rssi", None)
+            rank = rssi if isinstance(rssi, (int, float)) else -999
+            if best is None or rank > best[0]:
+                best = (rank, source)
+        chosen = best[1] if best is not None else paired[0]
+        _LOGGER.debug(
+            "%s: automatic adapter choice limited to paired adapters %s: %s",
+            self._address, ", ".join(paired), chosen,
+        )
+        return chosen
 
     async def disconnect(self) -> None:
         # Detach before awaiting BlueZ. Late callbacks should not clear a

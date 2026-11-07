@@ -234,7 +234,7 @@ async def test_runtime_connect_keeps_local_scanner_for_rssi(monkeypatch) -> None
 
     monkeypatch.setattr(
         tr, "local_bluez_scanner_device_from_address",
-        lambda hass, address: scanner_device,
+        lambda hass, address, source=None: scanner_device,
     )
     monkeypatch.setattr(tr, "bleak_establish", establish)
     monkeypatch.setattr(tr, "is_local_bluez_connection", lambda client: True)
@@ -262,7 +262,7 @@ async def test_runtime_connect_rejects_nonlocal_fallback(monkeypatch) -> None:
 
     monkeypatch.setattr(
         tr, "local_bluez_scanner_device_from_address",
-        lambda hass, address: scanner_device,
+        lambda hass, address, source=None: scanner_device,
     )
     monkeypatch.setattr(tr, "bleak_establish", establish)
     monkeypatch.setattr(tr, "is_local_bluez_connection", lambda client: False)

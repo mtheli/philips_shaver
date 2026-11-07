@@ -34,6 +34,7 @@ See [Configuration](#configuration) for setup instructions.
 - [Configuration](#configuration)
   - [Option A: Direct Bluetooth](#option-a-direct-bluetooth-pairing)
   - [Option B: ESP32 BLE Bridge](#option-b-esp32-ble-bridge)
+  - [Bluetooth adapter](#bluetooth-adapter)
 - [Example Automations](#example-automations)
 - [Troubleshooting & Caveats](#troubleshooting--caveats)
 - [BLE Protocol](#ble-protocol)
@@ -162,7 +163,8 @@ This integration creates a new device for your shaver and provides the following
 | :--- | :--- | :--- |
 | **Last Seen** | Sensor | Time in minutes since the device was last reachable. |
 | **BLE RSSI** | Sensor | Bluetooth signal strength (`dBm`, direct BLE only). |
-| **Adapter** | Sensor | Bluetooth adapter currently carrying the connection (e.g. `hci0`, `<esp_name>`). |
+| **Adapter** | Sensor | Bluetooth adapter currently carrying the connection (e.g. `hci0`, `<esp_name>`). With a fixed adapter it names that adapter even while the shaver is asleep. |
+| **Adapter Selection** | Sensor | `automatic` or `fixed` (direct BLE only), see [Bluetooth adapter](#bluetooth-adapter). |
 | **Adapter Type** | Sensor | Classification of the active transport: `direct_ble` / `esp_bridge` / `stock_proxy` / `unknown`. |
 | **BLE Connected** | Binary Sensor | BLE connection status to the shaver. |
 | **ESP Connected** | Binary Sensor | ESP32 bridge online status (ESP bridge only). |
@@ -305,6 +307,18 @@ The bridge supports two pairing modes per `philips_shaver:` entry:
 - **Mode B — Auto-Discovery** (no `ble_client_id:`, no `mac_address:`). The bridge scans for the universal Philips Shaver Platform Service UUID, bonds to the first match via the HA setup dialog's pair-mode flow, and persists the bonded MAC in NVS. No terminal access needed; ideal for Bluetooth-Proxy-only setups or when you want to swap shavers without re-flashing.
 
 For the complete setup guide and Mode A vs Mode B comparison, see **[ESP Bridge Setup Guide](esphome/SETUP.md)** and [`esphome/README.md`](esphome/README.md).
+
+### Bluetooth adapter
+
+For direct Bluetooth entries only. When the Home Assistant host has more than one local Bluetooth adapter, the setup dialog and the options let you choose which one the shaver uses. The shaver connects only through that adapter: if it does not receive the shaver, there is no connection, and the log names the adapters that do. Preselected is the adapter that receives the shaver best (setup) or the one it is paired with (options).
+
+There is no "automatic" choice: the shaver keeps only one pairing, so a stronger adapter without that pairing cannot connect. Entries without a choice — a single adapter, or set up before this option existed — connect through the adapter the shaver is paired with, and only without any pairing through the strongest one.
+
+Bluetooth proxies are never offered: they cannot complete the shaver's pairing.
+
+To move a shaver to another adapter, open the entry's options. If the new adapter needs a pairing first, that follows in the next step. The shaver keeps only one pairing at a time, so that step asks you to reset Bluetooth on the shaver itself first (see the [Unpairing Guide](docs/UNPAIRING.md#step-2-unpair-on-the-device-itself)); pairings on the other local adapters are removed afterwards. With a single adapter there is nothing to choose, and the options close right away.
+
+The diagnostic sensors **Adapter Selection** and **Adapter** show the current setting and the adapter carrying the link.
 
 ---
 
