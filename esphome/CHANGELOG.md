@@ -8,6 +8,10 @@
      an Unreleased block placed between two releases would be served as part of
      the release above it. -->
 
+## Unreleased
+
+- **Builds with ESPHome 2026.11.** ESPHome 2026.5 moved `format_hex` and the other heap-allocating helpers to `alloc_helpers.h`; from 2026.11 on `helpers.h` no longer brings them along, and the build failed with `'format_hex' was not declared in this scope`. The bridge includes the new header where it exists, so older ESPHome versions keep building as well.
+
 ## v1.14.2 — 2026-10-26
 
 - **The bridge reports its chip and how it resolves rotating addresses.** `ble_get_info` now carries `chip` (e.g. `esp32s3`) and `addr_res`: `host` on the original ESP32 or with `-DCONFIG_BT_BLE_RPA_SUPPORTED=0` under `esphome: build_flags`, `ctrl` on newer chips, `ctrl_priv` when local privacy is on. The integration shows both on the new ESP Chip sensor; `MIN_BRIDGE_VERSION` does not move, older firmware leaves the sensor unknown.
