@@ -22,9 +22,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
+        id: py
         with:
           python-version: "3.12"
       - name: Install ESPHome
+        id: esphome
         run: |
           if [ "${{ matrix.esphome }}" = "latest" ]; then
             pip install esphome
@@ -32,13 +34,16 @@ jobs:
             pip install "esphome==${{ matrix.esphome }}"
           fi
           esphome version
+          echo "version=$(pip show esphome | sed -n 's/^Version: //p')" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v4
         with:
           path: |
             ~/.platformio
             esphome/tests/.esphome
-          key: esphome-${{ matrix.esphome }}-${{ matrix.board }}-${{ hashFiles('esphome/components/**') }}
-          restore-keys: esphome-${{ matrix.esphome }}-${{ matrix.board }}-
+          # Python patch version in the key: the cached build dir stores the
+          # absolute path of the pip-installed ninja, which changes with it.
+          key: esphome-${{ steps.esphome.outputs.version }}-py${{ steps.py.outputs.python-version }}-${{ matrix.board }}-${{ hashFiles('esphome/components/**') }}
+          restore-keys: esphome-${{ steps.esphome.outputs.version }}-py${{ steps.py.outputs.python-version }}-${{ matrix.board }}-
       - name: Compile
         working-directory: esphome/tests
         run: |
