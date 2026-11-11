@@ -245,7 +245,7 @@ Connections pairing succeeded. The `mode` value depends on your shaver model
 ## Step 4: Add the Integration in Home Assistant
 
 1. Install the **Philips Shaver** integration in Home Assistant
-   (via [HACS](../README.md#installation) or manually)
+   (via the [Marketplace](../README.md#installation) or manually)
 2. Go to **Settings > Devices & Services > + Add Integration** and search for
    **Philips Shaver**
 3. Select **"ESP32 Bridge (ESPHome)"** → pick your ESP from the list. The

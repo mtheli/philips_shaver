@@ -1,6 +1,6 @@
 # Philips Shaver Integration for Home Assistant
 
-[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/default)
+[![Home Assistant Marketplace](https://img.shields.io/badge/Marketplace-listed-41BDF5.svg)](https://www.home-assistant.io/integrations/marketplace/)
 [![GitHub Release](https://img.shields.io/github/v/release/mtheli/philips_shaver)](https://github.com/mtheli/philips_shaver/releases)
 [![License: MIT](https://img.shields.io/github/license/mtheli/philips_shaver)](LICENSE)
 
@@ -86,7 +86,7 @@ show_model: true   # optional, show model number as subtitle (default: true)
 The card automatically switches between standby, shaving, charging, and cleaning modes with live pressure gauge, battery status, and session stats.
 
 > [!NOTE]
-> **Upgrading from the standalone card?** The card was previously distributed separately as [philips_shaver_card](https://github.com/mtheli/philips_shaver_card). If that copy is still installed, remove it — in HACS uninstall *Philips Shaver Card* (this also removes the dashboard resource), or delete the manually added resource under *Settings → Dashboards → Resources*. A leftover standalone copy can shadow the bundled, up-to-date card; the integration raises a repair issue if it detects one. Your dashboards keep working unchanged — the card type stays `custom:philips-shaver-card`. Card development continues in that repository; releases ship here.
+> **Upgrading from the standalone card?** The card was previously distributed separately as [philips_shaver_card](https://github.com/mtheli/philips_shaver_card). If that copy is still installed, remove it — uninstall *Philips Shaver Card* in the Marketplace (in HACS before Home Assistant 2026.11; this also removes the dashboard resource), or delete the manually added resource under *Settings → Dashboards → Resources*. A leftover standalone copy can shadow the bundled, up-to-date card; the integration raises a repair issue if it detects one. Your dashboards keep working unchanged — the card type stays `custom:philips-shaver-card`. Card development continues in that repository; releases ship here.
 
 ---
 
@@ -189,15 +189,13 @@ This integration creates a new device for your shaver and provides the following
 
 ## Installation
 
-### HACS (Recommended)
+### Marketplace (recommended)
 
-This integration is available in the **default HACS store** — just click the button below, or search HACS for "Philips Shaver".
+This integration is listed in the Home Assistant **Marketplace**. Click the button below, or go to **Settings → Marketplace** and search for "Philips Shaver". Select **Install** and the setup starts right away, no restart needed.
 
-[![Open in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=mtheli&repository=philips_shaver&category=integration)
+[![Open in the Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=mtheli&repository=philips_shaver&category=integration)
 
-Then restart Home Assistant.
-
-> Don't have HACS yet? Follow the [HACS installation guide](https://hacs.xyz/docs/use/) first.
+Requires Home Assistant 2025.1 or newer. On Home Assistant before 2026.11, the button opens the repository in [HACS](https://hacs.xyz/docs/use/) instead. Download it there and restart Home Assistant.
 
 <details>
 <summary>Manual installation</summary>
