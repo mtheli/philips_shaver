@@ -18,6 +18,7 @@
       "service_uuid": "8d560600-3cb9-4387-a7e8-b79d826a7025"
     }
   ],
+  "categories": ["health_wellbeing"],
   "codeowners": [
     "@mtheli"
   ],
