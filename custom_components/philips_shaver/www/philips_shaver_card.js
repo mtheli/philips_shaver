@@ -627,26 +627,31 @@ $43a89528e95f706e$exports = "ha-card {\n  min-height: 500px;\n  font-family: var
 
 
 var $76eee68ef692a3c3$exports = {};
-$76eee68ef692a3c3$exports = JSON.parse('{"chip_battery":"Battery","chip_head":"Head","chip_clean":"Clean","gauge_session":"SESSION","gauge_battery":"Battery","gauge_standby":"Standby","gauge_initializing":"Connecting\u2026","gauge_charging":"Charging","gauge_cleaning":"Cleaning","gauge_in_progress":"In Progress","gauge_low":"Low","gauge_high":"High","gauge_slow":"Slow","gauge_fast":"Fast","pressure_no_contact":"No Contact","pressure_too_low":"Too Low","pressure_optimal":"Optimal","pressure_too_high":"Too High","speed_none":"No Movement","speed_optimal":"Optimal","speed_too_fast":"Too Fast","motion_small_circle":"Circles","motion_large_stroke":"Strokes","stat_charge_cycles":"Charge Cycles","stat_last_session":"Last Session","stat_last_used":"Last Used","stat_total_time":"Total Time","stat_total_uses":"Total Uses","stat_cycles_remaining":"Cycles Remaining","shave_rpm":"RPM","shave_ma":"mA","shave_speed":"Speed","shave_motion":"Motion","time_today":"Today","time_yesterday":"Yesterday","time_days_ago":"{n}d ago","notif_notification_motor_blocked":"Motor Blocked","notif_notification_clean_reminder":"Cleaning Required","notif_notification_head_replacement":"Replace Shaving Head","notif_notification_battery_overheated":"Battery Overheated","notif_notification_unplug_required":"Unplug Before Use","config_title":"Title (Optional)","config_show_model":"Show model number as subtitle","config_select_device":"Please select a Philips Shaver device in the card configuration.","config_no_device":"Please select a device.","default_title":"Philips Shaver","outdated_standalone_active":"An outdated standalone copy of this card is active. Remove the standalone Philips Shaver Card (see Settings \u2192 Repairs) to use the up-to-date version bundled with the integration."}');
+$76eee68ef692a3c3$exports = JSON.parse('{"chip_battery":"Battery","chip_head":"Head","chip_clean":"Clean","gauge_session":"SESSION","gauge_battery":"Battery","gauge_standby":"Standby","gauge_locked":"Locked","gauge_initializing":"Connecting\u2026","gauge_charging":"Charging","gauge_cleaning":"Cleaning","gauge_in_progress":"In Progress","gauge_low":"Low","gauge_high":"High","gauge_slow":"Slow","gauge_fast":"Fast","pressure_no_contact":"No Contact","pressure_too_low":"Too Low","pressure_optimal":"Optimal","pressure_too_high":"Too High","speed_none":"No Movement","speed_optimal":"Optimal","speed_too_fast":"Too Fast","motion_small_circle":"Circles","motion_large_stroke":"Strokes","stat_charge_cycles":"Charge Cycles","stat_last_session":"Last Session","stat_last_used":"Last Used","stat_total_time":"Total Time","stat_total_uses":"Total Uses","stat_cycles_remaining":"Cycles Remaining","shave_rpm":"RPM","shave_ma":"mA","shave_speed":"Speed","shave_motion":"Motion","time_today":"Today","time_yesterday":"Yesterday","time_days_ago":"{n}d ago","notif_notification_motor_blocked":"Motor Blocked","notif_notification_clean_reminder":"Cleaning Required","notif_notification_head_replacement":"Replace Shaving Head","notif_notification_battery_overheated":"Battery Overheated","notif_notification_unplug_required":"Unplug Before Use","config_title":"Title (Optional)","config_show_model":"Show model number as subtitle","config_select_device":"Please select a Philips Shaver device in the card configuration.","config_no_device":"Please select a device.","default_title":"Philips Shaver","outdated_standalone_active":"An outdated standalone copy of this card is active. Remove the standalone Philips Shaver Card (see Settings \u2192 Repairs) to use the up-to-date version bundled with the integration."}');
 
 
 var $238d401f28c1db46$exports = {};
-$238d401f28c1db46$exports = JSON.parse('{"chip_battery":"Akku","chip_head":"Scherkopf","chip_clean":"Reinigung","gauge_session":"SITZUNG","gauge_battery":"Akku","gauge_standby":"Bereit","gauge_initializing":"Verbinde\u2026","gauge_charging":"Laden","gauge_cleaning":"Reinigung","gauge_in_progress":"L\xe4uft","gauge_low":"Niedrig","gauge_high":"Hoch","gauge_slow":"Langsam","gauge_fast":"Schnell","pressure_no_contact":"Kein Kontakt","pressure_too_low":"Zu niedrig","pressure_optimal":"Optimal","pressure_too_high":"Zu hoch","speed_none":"Keine Bewegung","speed_optimal":"Optimal","speed_too_fast":"Zu schnell","motion_small_circle":"Kreise","motion_large_stroke":"Z\xfcge","stat_charge_cycles":"Ladezyklen","stat_last_session":"Letzte Sitzung","stat_last_used":"Zuletzt benutzt","stat_total_time":"Gesamtzeit","stat_total_uses":"Nutzungen","stat_cycles_remaining":"Zyklen \xfcbrig","shave_rpm":"U/min","shave_ma":"mA","shave_speed":"Tempo","shave_motion":"Bewegung","time_today":"Heute","time_yesterday":"Gestern","time_days_ago":"vor {n} T.","notif_notification_motor_blocked":"Motor blockiert","notif_notification_clean_reminder":"Reinigung f\xe4llig","notif_notification_head_replacement":"Scherkopf wechseln","notif_notification_battery_overheated":"Akku \xfcberhitzt","notif_notification_unplug_required":"Ausstecken erforderlich","config_title":"Titel (Optional)","config_show_model":"Modellnummer als Untertitel anzeigen","config_select_device":"Bitte w\xe4hle einen Philips Shaver in der Kartenkonfiguration.","config_no_device":"Bitte w\xe4hle ein Ger\xe4t.","default_title":"Philips Shaver","outdated_standalone_active":"Eine veraltete separate Kopie dieser Karte ist aktiv. Entferne die separate Philips Shaver Card (siehe Einstellungen \u2192 Reparaturen), um die aktuelle, mit der Integration gelieferte Version zu nutzen."}');
+$238d401f28c1db46$exports = JSON.parse('{"chip_battery":"Akku","chip_head":"Scherkopf","chip_clean":"Reinigung","gauge_session":"SITZUNG","gauge_battery":"Akku","gauge_standby":"Bereit","gauge_locked":"Gesperrt","gauge_initializing":"Verbinde\u2026","gauge_charging":"Laden","gauge_cleaning":"Reinigung","gauge_in_progress":"L\xe4uft","gauge_low":"Niedrig","gauge_high":"Hoch","gauge_slow":"Langsam","gauge_fast":"Schnell","pressure_no_contact":"Kein Kontakt","pressure_too_low":"Zu niedrig","pressure_optimal":"Optimal","pressure_too_high":"Zu hoch","speed_none":"Keine Bewegung","speed_optimal":"Optimal","speed_too_fast":"Zu schnell","motion_small_circle":"Kreise","motion_large_stroke":"Z\xfcge","stat_charge_cycles":"Ladezyklen","stat_last_session":"Letzte Sitzung","stat_last_used":"Zuletzt benutzt","stat_total_time":"Gesamtzeit","stat_total_uses":"Nutzungen","stat_cycles_remaining":"Zyklen \xfcbrig","shave_rpm":"U/min","shave_ma":"mA","shave_speed":"Tempo","shave_motion":"Bewegung","time_today":"Heute","time_yesterday":"Gestern","time_days_ago":"vor {n} T.","notif_notification_motor_blocked":"Motor blockiert","notif_notification_clean_reminder":"Reinigung f\xe4llig","notif_notification_head_replacement":"Scherkopf wechseln","notif_notification_battery_overheated":"Akku \xfcberhitzt","notif_notification_unplug_required":"Ausstecken erforderlich","config_title":"Titel (Optional)","config_show_model":"Modellnummer als Untertitel anzeigen","config_select_device":"Bitte w\xe4hle einen Philips Shaver in der Kartenkonfiguration.","config_no_device":"Bitte w\xe4hle ein Ger\xe4t.","default_title":"Philips Shaver","outdated_standalone_active":"Eine veraltete separate Kopie dieser Karte ist aktiv. Entferne die separate Philips Shaver Card (siehe Einstellungen \u2192 Reparaturen), um die aktuelle, mit der Integration gelieferte Version zu nutzen."}');
 
 
 const $d8078e452c66bdbe$var$LOCALES = {
     en: (/*@__PURE__*/$parcel$interopDefault($76eee68ef692a3c3$exports)),
     de: (/*@__PURE__*/$parcel$interopDefault($238d401f28c1db46$exports))
 };
+// Static contexts (setConfig before hass is set, the config form callbacks)
+// have no hass of their own; fall back to the one of the HA frontend.
+function $d8078e452c66bdbe$var$resolveLanguage(hass) {
+    const h = hass || document.querySelector('home-assistant')?.hass;
+    return h?.locale?.language || h?.language || 'en';
+}
 function $d8078e452c66bdbe$export$625550452a3fa3ec(hass, key) {
-    const lang = hass?.language || 'en';
-    const locale = $d8078e452c66bdbe$var$LOCALES[lang] || $d8078e452c66bdbe$var$LOCALES.en;
+    const locale = $d8078e452c66bdbe$var$LOCALES[$d8078e452c66bdbe$var$resolveLanguage(hass)] || $d8078e452c66bdbe$var$LOCALES.en;
     return locale[key] || $d8078e452c66bdbe$var$LOCALES.en[key] || key;
 }
 
 
 // Written by the release sync script (philips_shaver scripts/sync_card.sh).
-const $8ee5ce714273e53b$export$d5e7ce6d07daf10f = "0.32.0";
+const $8ee5ce714273e53b$export$d5e7ce6d07daf10f = "0.32.1";
 const $8ee5ce714273e53b$export$9b657414b7dffe40 = "bundled";
 
 
@@ -711,6 +716,11 @@ const $8b62e546fdd14731$var$NOTIFICATIONS = [
         icon: "plug_off"
     }
 ];
+// ---------- Editor labels: config field → translation key ----------
+const $8b62e546fdd14731$var$CONFIG_LABEL_KEYS = {
+    title: "config_title",
+    show_model: "config_show_model"
+};
 // ---------- Gauge constants ----------
 const $8b62e546fdd14731$var$GAUGE = {
     CX: 140,
@@ -866,7 +876,7 @@ class $8b62e546fdd14731$export$4778d74453ecc150 extends (0, $528e4332d1e3099e$ex
         this._stopTimer();
     }
     setConfig(config) {
-        if (!config.device_id) throw new Error((0, $d8078e452c66bdbe$export$625550452a3fa3ec)(null, "config_select_device"));
+        if (!config.device_id) throw new Error((0, $d8078e452c66bdbe$export$625550452a3fa3ec)(this._hass, "config_select_device"));
         this.config = config;
         this._entities = null;
         if (this._hass) this._entities = this._findEntities(this._hass, config.device_id);
@@ -1128,6 +1138,7 @@ class $8b62e546fdd14731$export$4778d74453ecc150 extends (0, $528e4332d1e3099e$ex
         if (activity === "shaving") return this._isOneBlade ? this._renderSpeedGauge() : this._renderPressureGauge();
         if (activity === "cleaning") return this._renderCleaningGauge();
         if (activity === "charging") return this._renderChargingBattery();
+        if (activity === "locked") return this._renderBatteryGauge("gauge_locked");
         return this._renderBatteryGauge();
     }
     _renderInitializing() {
@@ -1243,7 +1254,7 @@ class $8b62e546fdd14731$export$4778d74453ecc150 extends (0, $528e4332d1e3099e$ex
       </div>
     `;
     }
-    _renderBatteryGauge() {
+    _renderBatteryGauge(statusKey = "gauge_standby") {
         const { CX: cx, CY: cy, STROKE: st } = $8b62e546fdd14731$var$GAUGE;
         const bat = this._numState("battery", 0);
         const bc = $8b62e546fdd14731$var$batteryColor(bat);
@@ -1255,7 +1266,7 @@ class $8b62e546fdd14731$export$4778d74453ecc150 extends (0, $528e4332d1e3099e$ex
           <text x="${cx}" y="${cy - 20}" text-anchor="middle" font-size="52" font-weight="700" fill="var(--primary-text-color, #fff)" font-family="inherit" letter-spacing="-2">${bat}%</text>
           <text x="${cx}" y="${cy + 8}" text-anchor="middle" font-size="13" fill="var(--ps-text-dim)" font-family="inherit">${this._t("gauge_battery")}</text>
         </svg>
-        <div class="gauge-status" style="color:var(--ps-text-dimmest)">${this._t("gauge_standby")}</div>
+        <div class="gauge-status" style="color:var(--ps-text-dimmest)">${this._t(statusKey)}</div>
       </div>
     `;
     }
@@ -1497,14 +1508,12 @@ class $8b62e546fdd14731$export$4778d74453ecc150 extends (0, $528e4332d1e3099e$ex
             schema: [
                 {
                     name: "title",
-                    label: (0, $d8078e452c66bdbe$export$625550452a3fa3ec)(null, "config_title"),
                     selector: {
                         text: {}
                     }
                 },
                 {
                     name: "show_model",
-                    label: (0, $d8078e452c66bdbe$export$625550452a3fa3ec)(null, "config_show_model"),
                     selector: {
                         boolean: {}
                     },
@@ -1530,7 +1539,14 @@ class $8b62e546fdd14731$export$4778d74453ecc150 extends (0, $528e4332d1e3099e$ex
                         }
                     }
                 }
-            ]
+            ],
+            // HA ignores schema `label` and passes only `localize` here. It calls
+            // this as a method of its form editor element, so `this.hass` is the
+            // editor's hass (t() falls back to the global hass otherwise).
+            computeLabel (schema) {
+                const key = $8b62e546fdd14731$var$CONFIG_LABEL_KEYS[schema.name];
+                return key ? (0, $d8078e452c66bdbe$export$625550452a3fa3ec)(this?.hass, key) : undefined;
+            }
         };
     }
     static getStubConfig(hass) {
