@@ -355,11 +355,11 @@ For debug service actions (reading arbitrary BLE characteristics via Developer T
 
 | While Shaving | Card: Too Much Pressure | Card: Dark Theme |
 | :---: | :---: | :---: |
-| [![Device page while shaving](./images/device_shaving.png)](./images/device_shaving.png) | [![Pressure too high](./images/card_pressure_high.png)](./images/card_pressure_high.png) | [![Dark theme](./images/card_dark.png)](./images/card_dark.png) |
+| <a href="./images/device_shaving.png"><img src="./images/device_shaving.png" alt="Device page while shaving" width="270"></a> | <a href="./images/card_pressure_high.png"><img src="./images/card_pressure_high.png" alt="Pressure too high" width="270"></a> | <a href="./images/card_dark.png"><img src="./images/card_dark.png" alt="Dark theme" width="270"></a> |
 
 | Card: Charging | Card: Cleaning |
 | :---: | :---: |
-| [![Charging](./images/card_charging.png)](./images/card_charging.png) | [![Cleaning](./images/card_cleaning.png)](./images/card_cleaning.png) |
+| <a href="./images/card_charging.png"><img src="./images/card_charging.png" alt="Charging" width="414"></a> | <a href="./images/card_cleaning.png"><img src="./images/card_cleaning.png" alt="Cleaning" width="414"></a> |
 
 ## Disclaimer
 
