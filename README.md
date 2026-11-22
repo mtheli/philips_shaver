@@ -8,7 +8,7 @@ This is a custom component for Home Assistant to integrate **Philips Bluetooth-e
 
 The integration connects to your shaver via **Bluetooth Low Energy (BLE)** to provide status, usage, and advanced telemetry data. It automatically detects the capabilities of your specific model during setup to only show relevant entities.
 
-![Device overview in Home Assistant](./images/device.png)
+[![Device overview in Home Assistant](./images/device.png)](./images/device.png)
 
 Two connection methods are supported:
 
@@ -81,7 +81,7 @@ title: My Shaver   # optional, defaults to the device's name
 show_model: true   # optional, show model number as subtitle (default: true)
 ```
 
-![Philips Shaver Card](./images/card_shaving.png)
+[![Philips Shaver Card](./images/card_shaving.png)](./images/card_shaving.png)
 
 The card automatically switches between standby, shaving, charging, and cleaning modes with live pressure gauge, battery status, and session stats.
 
@@ -351,15 +351,15 @@ For debug service actions (reading arbitrary BLE characteristics via Developer T
 
 | Discovery | Capabilities | Device | Diagnostics | Connection |
 | :---: | :---: | :---: | :---: | :---: |
-| ![Discovery](./images/discovery.png) | ![Capabilities](./images/setup_capabilities.png) | ![Device](./images/device.png) | ![Diagnostics](./images/diagnostic.png) | ![Connection](./images/device_connection.png) |
+| [![Discovery](./images/discovery.png)](./images/discovery.png) | [![Capabilities](./images/setup_capabilities.png)](./images/setup_capabilities.png) | [![Device](./images/device.png)](./images/device.png) | [![Diagnostics](./images/diagnostic.png)](./images/diagnostic.png) | [![Connection](./images/device_connection.png)](./images/device_connection.png) |
 
 | While Shaving | Card: Too Much Pressure | Card: Dark Theme |
 | :---: | :---: | :---: |
-| ![Device page while shaving](./images/device_shaving.png) | ![Pressure too high](./images/card_pressure_high.png) | ![Dark theme](./images/card_dark.png) |
+| [![Device page while shaving](./images/device_shaving.png)](./images/device_shaving.png) | [![Pressure too high](./images/card_pressure_high.png)](./images/card_pressure_high.png) | [![Dark theme](./images/card_dark.png)](./images/card_dark.png) |
 
 | Card: Charging | Card: Cleaning |
 | :---: | :---: |
-| ![Charging](./images/card_charging.png) | ![Cleaning](./images/card_cleaning.png) |
+| [![Charging](./images/card_charging.png)](./images/card_charging.png) | [![Cleaning](./images/card_cleaning.png)](./images/card_cleaning.png) |
 
 ## Disclaimer
 
