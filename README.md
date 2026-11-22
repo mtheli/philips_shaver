@@ -8,7 +8,7 @@ This is a custom component for Home Assistant to integrate **Philips Bluetooth-e
 
 The integration connects to your shaver via **Bluetooth Low Energy (BLE)** to provide status, usage, and advanced telemetry data. It automatically detects the capabilities of your specific model during setup to only show relevant entities.
 
-[![Device overview in Home Assistant](./images/device.png)](./images/device.png)
+<a href="./images/device.png"><img src="./images/device.png" alt="Device overview in Home Assistant" width="880"></a>
 
 Two connection methods are supported:
 
@@ -81,7 +81,7 @@ title: My Shaver   # optional, defaults to the device's name
 show_model: true   # optional, show model number as subtitle (default: true)
 ```
 
-[![Philips Shaver Card](./images/card_shaving.png)](./images/card_shaving.png)
+<a href="./images/card_shaving.png"><img src="./images/card_shaving.png" alt="Philips Shaver Card" width="500"></a>
 
 The card automatically switches between standby, shaving, charging, and cleaning modes with live pressure gauge, battery status, and session stats.
 
@@ -351,7 +351,7 @@ For debug service actions (reading arbitrary BLE characteristics via Developer T
 
 | Discovery | Capabilities | Device | Diagnostics | Connection |
 | :---: | :---: | :---: | :---: | :---: |
-| [![Discovery](./images/discovery.png)](./images/discovery.png) | [![Capabilities](./images/setup_capabilities.png)](./images/setup_capabilities.png) | [![Device](./images/device.png)](./images/device.png) | [![Diagnostics](./images/diagnostic.png)](./images/diagnostic.png) | [![Connection](./images/device_connection.png)](./images/device_connection.png) |
+| <a href="./images/discovery.png"><img src="./images/discovery.png" alt="Discovery" width="156"></a> | <a href="./images/setup_capabilities.png"><img src="./images/setup_capabilities.png" alt="Capabilities" width="156"></a> | <a href="./images/device.png"><img src="./images/device.png" alt="Device" width="156"></a> | <a href="./images/diagnostic.png"><img src="./images/diagnostic.png" alt="Diagnostics" width="156"></a> | <a href="./images/device_connection.png"><img src="./images/device_connection.png" alt="Connection" width="156"></a> |
 
 | While Shaving | Card: Too Much Pressure | Card: Dark Theme |
 | :---: | :---: | :---: |
