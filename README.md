@@ -353,6 +353,14 @@ For debug service actions (reading arbitrary BLE characteristics via Developer T
 | :---: | :---: | :---: | :---: | :---: |
 | ![Discovery](./images/discovery.png) | ![Capabilities](./images/setup_capabilities.png) | ![Device](./images/device.png) | ![Diagnostics](./images/diagnostic.png) | ![Connection](./images/device_connection.png) |
 
+| While Shaving | Card: Too Much Pressure | Card: Dark Theme |
+| :---: | :---: | :---: |
+| ![Device page while shaving](./images/device_shaving.png) | ![Pressure too high](./images/card_pressure_high.png) | ![Dark theme](./images/card_dark.png) |
+
+| Card: Charging | Card: Cleaning |
+| :---: | :---: |
+| ![Charging](./images/card_charging.png) | ![Cleaning](./images/card_cleaning.png) |
+
 ## Disclaimer
 
 This is an independent community project and is not affiliated with, endorsed by, or sponsored by Philips. All product names, trademarks, and registered trademarks are property of their respective owners.
