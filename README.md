@@ -92,9 +92,17 @@ The card automatically switches between standby, shaving, charging, and cleaning
 
 ## Community
 
+### Videos
+
 [<img src="https://img.youtube.com/vi/ROI91x2Swv8/maxresdefault.jpg" alt="Smartes Badezimmer? So hilft dir ein Shelly Wall Display beim Zähneputzen & Rasieren!" width="480">](https://www.youtube.com/watch?v=ROI91x2Swv8)
 
 [Smartes Badezimmer? So hilft dir ein Shelly Wall Display beim Zähneputzen & Rasieren!](https://www.youtube.com/watch?v=ROI91x2Swv8) — Video by [@smartmatic](https://github.com/smartmatic) showing the integration and card on a Shelly Wall Display with XP9405 and ESP32 Bridge (German)
+
+[Philips Rasierer in Home Assistant integrieren und per Philips Shaver Karte ins Dashboard](https://www.youtube.com/shorts/ILX4mZ7Vg58) — YouTube Short by [@smartmatic](https://github.com/smartmatic) showing the setup and the card (German)
+
+### Maintenance reminders
+
+[Maintenance Supporter](https://github.com/iluebbe/maintenance_supporter) by [@iluebbe](https://github.com/iluebbe) and [Home Keeper](https://github.com/prestomation/ha-home-keeper) by [@prestomation](https://github.com/prestomation) detect this integration and offer tasks to replace the shaver head and the cleaning cartridge, based on the **Shaver Head Remaining** and **Cleaning Cartridge Remaining** sensors.
 
 ---
 
