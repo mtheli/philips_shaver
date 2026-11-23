@@ -53,6 +53,8 @@ void ShaverBridge::setup() {
                           {"throttle_ms"});
   this->register_service(&ShaverBridge::on_get_info,
                           this->svc_name_("ble_get_info"), {});
+  this->register_service(&ShaverBridge::on_list_services,
+                          this->svc_name_("ble_list_services"), {});
   this->register_service(&ShaverBridge::on_pair_mode,
                           this->svc_name_("ble_pair_mode"),
                           {"enabled", "timeout_s"});
@@ -124,14 +126,17 @@ void ShaverBridge::loop() {
 void ShaverBridge::dump_config() {
   ESP_LOGCONFIG(this->log_tag_.c_str(), "Philips Shaver BLE Bridge v%s",
                 PHILIPS_SHAVER_VERSION);
-  if (!this->bridge_id_.empty())
+  if (!this->bridge_id_.empty()) {
     ESP_LOGCONFIG(this->log_tag_.c_str(), "  Bridge ID: %s",
                   this->bridge_id_.c_str());
-  if (!this->friendly_name_.empty())
+  }
+  if (!this->friendly_name_.empty()) {
     ESP_LOGCONFIG(this->log_tag_.c_str(), "  Friendly Name: %s",
                   this->friendly_name_.c_str());
-  if (!this->area_.empty())
+  }
+  if (!this->area_.empty()) {
     ESP_LOGCONFIG(this->log_tag_.c_str(), "  Area: %s", this->area_.c_str());
+  }
 }
 
 void ShaverBridge::fire_event(const std::string &event_type,
@@ -212,6 +217,11 @@ void ShaverBridge::on_pair_mac(std::string mac, std::string timeout_s) {
     return;
   this->coord_->set_pair_mac(mac,
                               parse_timeout_s(timeout_s, 60, "timeout_s"));
+}
+
+void ShaverBridge::on_list_services() {
+  if (this->coord_ != nullptr)
+    this->coord_->list_services();
 }
 
 void ShaverBridge::on_get_info() {

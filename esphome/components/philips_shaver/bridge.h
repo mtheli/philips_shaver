@@ -56,6 +56,7 @@ class ShaverBridge : public Component, public api::CustomAPIDevice {
                                 std::string char_uuid, std::string hex_data);
   void on_set_throttle(std::string throttle_ms);
   void on_get_info();
+  void on_list_services();
   // Mode B services — guarded inside the Coordinator (no-ops in Mode A).
   void on_pair_mode(bool enabled, std::string timeout_s);
   void on_unpair();

@@ -1728,11 +1728,134 @@ void ShaverCoordinator::emit_scan_result(const std::string &mac,
 }
 
 void ShaverCoordinator::list_services() {
-  // Stub — Sonicare exposes this via `ble_list_services`; Shaver doesn't
-  // need it for the current HA flow (HA reads everything via `ble_get_info`
-  // and known service UUIDs). Leaving a no-op so the Bridge service
-  // registration compiles; revisit if a use-case appears.
-  ESP_LOGD(this->log_tag_.c_str(), "list_services: not implemented");
+  // Enumerate the connected shaver's GATT table from the controller's
+  // attribute cache (filled by service discovery — no extra radio traffic).
+  // One event per service keeps each payload below the API frame limit;
+  // HA collects them until service_index == service_count - 1. Each entry
+  // in service_chars is "<char uuid>/<props>/<handle hex>", props from
+  // R(ead) W(rite) w(rite without response) N(otify) I(ndicate).
+  // Every failure answers with an "error" event so HA stops waiting
+  // instead of running into its timeout.
+  std::string mac = this->get_remote_mac();
+  auto fail = [this, &mac](const char *error) {
+    this->emit_(EVENT_SERVICES, {{"mac", mac}, {"error", error}});
+  };
+  if (this->parent_ == nullptr || !this->services_discovered_) {
+    ESP_LOGW(this->log_tag_.c_str(),
+             "list_services: not connected or service discovery incomplete");
+    fail("not_connected");
+    return;
+  }
+
+  esp_gatt_if_t gattc_if = this->parent_->get_gattc_if();
+  uint16_t conn_id = this->parent_->get_conn_id();
+
+  uint16_t svc_count = 0;
+  esp_ble_gattc_get_attr_count(gattc_if, conn_id, ESP_GATT_DB_PRIMARY_SERVICE,
+                               0, 0xFFFF, ESP_GATT_ILLEGAL_HANDLE, &svc_count);
+  ESP_LOGI(this->log_tag_.c_str(), "Listing %u service(s) on %s",
+           (unsigned) svc_count, mac.c_str());
+
+  char count_buf[8];
+  snprintf(count_buf, sizeof(count_buf), "%u", (unsigned) svc_count);
+  if (svc_count == 0) {
+    this->emit_(EVENT_SERVICES, {{"mac", mac},
+                                 {"service_count", count_buf},
+                                 {"service_index", "0"},
+                                 {"service_uuid", ""},
+                                 {"service_chars", ""}});
+    return;
+  }
+
+  auto *services = (esp_gattc_service_elem_t *) malloc(
+      svc_count * sizeof(esp_gattc_service_elem_t));
+  if (services == nullptr) {
+    ESP_LOGE(this->log_tag_.c_str(), "list_services: malloc failed");
+    fail("no_memory");
+    return;
+  }
+  uint16_t actual = svc_count;
+  esp_err_t err =
+      esp_ble_gattc_get_service(gattc_if, conn_id, nullptr, services, &actual, 0);
+  if (err != ESP_OK) {
+    ESP_LOGW(this->log_tag_.c_str(), "esp_ble_gattc_get_service failed: %d", err);
+    free(services);
+    fail("gattc_error");
+    return;
+  }
+  snprintf(count_buf, sizeof(count_buf), "%u", (unsigned) actual);
+  if (actual == 0) {
+    free(services);
+    this->emit_(EVENT_SERVICES, {{"mac", mac},
+                                 {"service_count", "0"},
+                                 {"service_index", "0"},
+                                 {"service_uuid", ""},
+                                 {"service_chars", ""}});
+    return;
+  }
+
+  for (uint16_t i = 0; i < actual; i++) {
+    char svc_uuid_buf[esp32_ble::UUID_STR_LEN];
+    std::string svc_uuid_str(
+        espbt::ESPBTUUID::from_uuid(services[i].uuid).to_str(svc_uuid_buf));
+
+    uint16_t char_count = 0;
+    esp_ble_gattc_get_attr_count(gattc_if, conn_id, ESP_GATT_DB_CHARACTERISTIC,
+                                 services[i].start_handle,
+                                 services[i].end_handle, ESP_GATT_ILLEGAL_HANDLE,
+                                 &char_count);
+    std::string chars_str;
+    if (char_count > 0) {
+      auto *chars = (esp_gattc_char_elem_t *) malloc(
+          char_count * sizeof(esp_gattc_char_elem_t));
+      if (chars != nullptr) {
+        uint16_t actual_chars = char_count;
+        esp_err_t cerr = esp_ble_gattc_get_all_char(
+            gattc_if, conn_id, services[i].start_handle, services[i].end_handle,
+            chars, &actual_chars, 0);
+        if (cerr == ESP_OK) {
+          for (uint16_t j = 0; j < actual_chars; j++) {
+            if (!chars_str.empty())
+              chars_str += ",";
+            char chr_uuid_buf[esp32_ble::UUID_STR_LEN];
+            chars_str +=
+                espbt::ESPBTUUID::from_uuid(chars[j].uuid).to_str(chr_uuid_buf);
+            uint8_t props = chars[j].properties;
+            std::string p;
+            if (props & ESP_GATT_CHAR_PROP_BIT_READ) p += "R";
+            if (props & ESP_GATT_CHAR_PROP_BIT_WRITE) p += "W";
+            if (props & ESP_GATT_CHAR_PROP_BIT_WRITE_NR) p += "w";
+            if (props & ESP_GATT_CHAR_PROP_BIT_NOTIFY) p += "N";
+            if (props & ESP_GATT_CHAR_PROP_BIT_INDICATE) p += "I";
+            char handle_buf[8];
+            snprintf(handle_buf, sizeof(handle_buf), "%04x",
+                     (unsigned) chars[j].char_handle);
+            chars_str += "/" + p + "/" + handle_buf;
+          }
+        } else {
+          ESP_LOGW(this->log_tag_.c_str(), "esp_ble_gattc_get_all_char failed: %d",
+                   cerr);
+        }
+        free(chars);
+      } else {
+        ESP_LOGE(this->log_tag_.c_str(),
+                 "list_services: malloc failed for %u characteristic(s)",
+                 (unsigned) char_count);
+      }
+    }
+
+    char idx_buf[8];
+    snprintf(idx_buf, sizeof(idx_buf), "%u", (unsigned) i);
+    ESP_LOGI(this->log_tag_.c_str(), "  [%u] %s -> %s", (unsigned) i,
+             svc_uuid_str.c_str(),
+             chars_str.empty() ? "(no chars)" : chars_str.c_str());
+    this->emit_(EVENT_SERVICES, {{"mac", mac},
+                                 {"service_count", count_buf},
+                                 {"service_index", idx_buf},
+                                 {"service_uuid", svc_uuid_str},
+                                 {"service_chars", chars_str}});
+  }
+  free(services);
 }
 
 }  // namespace philips_shaver

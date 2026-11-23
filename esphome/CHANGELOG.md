@@ -8,6 +8,10 @@
      an Unreleased block placed between two releases would be served as part of
      the release above it. -->
 
+## Unreleased (v1.15.0)
+
+- **New service `ble_list_services`.** Lists the connected shaver's services and characteristics with their properties and handles, one `esphome.philips_shaver_ble_services` event per service. The integration uses it for the new `philips_shaver.capture_gatt` action, which saves an anonymized GATT capture for bug reports without needing a PC. Older integrations ignore the service.
+
 ## v1.14.3 — 2026-11-08
 
 - **Builds with ESPHome 2026.11.** ESPHome 2026.5 moved `format_hex` and the other heap-allocating helpers to `alloc_helpers.h`; from 2026.11 on `helpers.h` no longer brings them along, and the build failed with `'format_hex' was not declared in this scope`. The bridge includes the new header where it exists, so older ESPHome versions keep building as well.

@@ -169,6 +169,7 @@ philips_shaver:
 | 8 | [`ble_unpair`](#ble_unpair) | — | 1.8.0 |
 | 9 | [`ble_scan`](#ble_scan) | `timeout_s` | 1.8.0 |
 | 10 | [`ble_pair_mac`](#ble_pair_mac) | `mac`, `timeout_s` | 1.8.0 |
+| 11 | [`ble_list_services`](#ble_list_services) | — | 1.15.0 |
 
 Services 7–10 are meaningful only in `standalone` mode. Calling them on an
 `external` bridge emits a warning to the log and is otherwise a no-op.
@@ -320,6 +321,29 @@ State transitions during runtime:
 - `"yaml"` never transitions — the YAML config is the source of truth and
   re-applies on every boot
 
+### `ble_list_services`
+
+*Available since 1.15.0.*
+
+Lists the connected shaver's GATT table from the controller's attribute cache
+(no extra radio traffic). Used by the `philips_shaver.capture_gatt` action.
+
+| | |
+|---|---|
+| **Args** | — |
+| **Reply** | One `esphome.philips_shaver_ble_services` event per service |
+
+**Event fields:**
+
+| Field | Note |
+|---|---|
+| `mac` | Shaver MAC |
+| `service_count` | Number of services; `0` when the table is empty |
+| `service_index` | 0-based index of this service |
+| `service_uuid` | e.g. `8D560300-3CB9-…` or `0x180F` for 16-bit UUIDs |
+| `service_chars` | Comma-separated `<char uuid>/<props>/<handle hex>`, props from `R` read, `W` write, `w` write without response, `N` notify, `I` indicate — e.g. `0x2A19/RN/00db` |
+| `error` | Set instead of the fields above when the bridge cannot list: `not_connected`, `no_memory`, `gattc_error` |
+
 ### `ble_pair_mode`
 
 *Available since 1.8.0.*
@@ -433,13 +457,7 @@ name and clicking **Start Listening**.
 |---|---|
 | `esphome.philips_shaver_ble_status` | Bridge lifecycle, info, pair-mode, scan, errors |
 | `esphome.philips_shaver_ble_data` | GATT read replies + notifications |
-
-> [!NOTE]
-> A third event name `esphome.philips_shaver_ble_services` is reserved in the
-> firmware but currently unused — the equivalent `ble_list_services` service
-> from the Sonicare bridge is not implemented here (HA reads everything via
-> `ble_get_info` and known service UUIDs). The slot is kept for forward
-> compatibility.
+| `esphome.philips_shaver_ble_services` | [`ble_list_services`](#ble_list_services) replies |
 
 ### `esphome.philips_shaver_ble_data`
 
