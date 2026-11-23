@@ -255,6 +255,10 @@ KNOWN_CHARS = {
     "8d560117-3cb9-4387-a7e8-b79d826a7025": ("Head Remaining",          "legacy", _dec_u8),
     "8d560118-3cb9-4387-a7e8-b79d826a7025": ("Head Remaining Minutes",  "legacy", _dec_u16),
     "8d560119-3cb9-4387-a7e8-b79d826a7025": ("Device Type",             "legacy", _dec_str),
+    # NUL-padded version strings, meaning unknown (e.g. "OLED_1.0_0f819a9")
+    "8d5601fd-3cb9-4387-a7e8-b79d826a7025": ("Version String 0x01FD",   "legacy", _dec_str),
+    "8d5601fe-3cb9-4387-a7e8-b79d826a7025": ("Version String 0x01FE",   "legacy", _dec_str),
+    "8d5601ff-3cb9-4387-a7e8-b79d826a7025": ("Version String 0x01FF",   "legacy", _dec_str),
     "8d56011a-3cb9-4387-a7e8-b79d826a7025": ("Cleaning Progress",       "legacy", _dec_u8),
     "8d56011b-3cb9-4387-a7e8-b79d826a7025": ("Motor RPM Min",           "legacy", _dec_u16),
     # History Service (0x0200) — legacy
@@ -1059,22 +1063,23 @@ async def _read_char_into(client, char, char_info, char_entry, device_info) -> s
             decoded = char_info[2](value)
         except Exception as dec_err:
             decoded = f"(decode error: {dec_err})"
-    try:
-        text = value.decode("utf-8")
-        if text.isprintable() and text.strip():
+    # value_text only for characteristics that hold text (decoder _dec_str):
+    # arbitrary bytes that happen to be printable (battery 0x5a = "Z") are
+    # not text. Same rule as the integration's capture_gatt action.
+    value_str = hex_str
+    if char_info and char_info[2] is _dec_str:
+        text = value.rstrip(b"\x00").decode("utf-8", errors="replace")
+        if text.strip():
             char_entry["value_text"] = text
             value_str = f"{hex_str} = \"{text}\""
-        else:
-            value_str = hex_str
-    except (UnicodeDecodeError, ValueError):
-        value_str = hex_str
 
     if char_info and char_info[1] in ("device_info", "standard_ble"):
-        device_info[char_info[0]] = (
-            char_entry["value_text"]
-            if char_entry["value_text"] is not None
-            else hex_str
-        )
+        if char_entry["value_text"] is not None:
+            device_info[char_info[0]] = char_entry["value_text"]
+        elif decoded is not None:
+            device_info[char_info[0]] = decoded
+        else:
+            device_info[char_info[0]] = hex_str
 
     if decoded is not None:
         print(f"    Value: {value_str}  →  {decoded}")

@@ -92,8 +92,11 @@ from .const import (
     CHAR_SPEED_ZONE_THRESHOLD,
     CHAR_SYSTEM_NOTIFICATIONS,
     CONF_ADDRESS,
+    CHAR_CAPABILITIES,
     CONF_CAPABILITIES,
+    CONF_RECHECK_CONTROL,
     CONF_SERVICES,
+    SVC_CONTROL,
     CONF_ESP_DEVICE_NAME,
     CONF_TRANSPORT_TYPE,
     TRANSPORT_ESP_BRIDGE,
@@ -244,20 +247,13 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.available_services = {
             s.lower() for s in entry.data.get(CONF_SERVICES, [])
         }
-        if self.available_services:
-            def _svc_available(char: str) -> bool:
-                return CHAR_SERVICE_MAP.get(char, "").lower() in self.available_services
-
-            self._poll_chars = [c for c in POLL_READ_CHARS if _svc_available(c)]
-            self._live_chars = [c for c in LIVE_READ_CHARS if _svc_available(c)]
-            self._notify_chars = [c for c in NOTIFICATION_CHARS if _svc_available(c)]
-        else:
-            # No service info stored (legacy entries) — read everything
-            self._poll_chars = list(POLL_READ_CHARS)
-            self._live_chars = list(LIVE_READ_CHARS)
-            self._notify_chars = list(NOTIFICATION_CHARS)
+        self._apply_available_services()
 
         self._is_esp_bridge = isinstance(transport, EspBridgeTransport)
+        # ESP entries set up before the Control service was probed via
+        # Capabilities may lack it although the shaver has it. The v1.4
+        # migration flags them; see _async_recheck_control_service.
+        self._control_recheck_done = False
         if self._is_esp_bridge:
             transport.set_build_info_callback(self._on_bridge_build_changed)
         # Sticky cache for adapter_type — backend object can become None on
@@ -993,6 +989,10 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             self.transport.disconnect_count
                         )
 
+                    if await self._async_recheck_control_service():
+                        # The reload tears this coordinator down.
+                        return
+
                     # Read characteristics first, then subscribe.
                     # First connect: read ALL chars (incl. static data like
                     # model, firmware). Subsequent: dynamic only.
@@ -1175,6 +1175,82 @@ class PhilipsShaverCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.async_set_updated_data(new_data)
 
         return _callback
+
+    def _apply_available_services(self) -> None:
+        """Build the read/notify characteristic lists from available_services."""
+        if self.available_services:
+            def _svc_available(char: str) -> bool:
+                return CHAR_SERVICE_MAP.get(char, "").lower() in self.available_services
+
+            self._poll_chars = [c for c in POLL_READ_CHARS if _svc_available(c)]
+            self._live_chars = [c for c in LIVE_READ_CHARS if _svc_available(c)]
+            self._notify_chars = [c for c in NOTIFICATION_CHARS if _svc_available(c)]
+        else:
+            # No service info stored (legacy entries) — read everything
+            self._poll_chars = list(POLL_READ_CHARS)
+            self._live_chars = list(LIVE_READ_CHARS)
+            self._notify_chars = list(NOTIFICATION_CHARS)
+
+    async def _async_recheck_control_service(self) -> bool:
+        """Add a Control service the ESP setup probe missed.
+
+        Up to v0.32.x the ESP setup detected the Control service through
+        Handle Load Type (0x0322), which some models (S7885) do not provide,
+        so their entries were stored without it: no pressure, motion or
+        light ring. Capabilities (0x0302) is present on every model with
+        the service. If it reads, store the service and capabilities and
+        reload the entry so the Control entities get created. Runs only for
+        entries the v1.4 migration flagged. The flag is dropped after a
+        definite answer — a value, or "not_found" from the bridge — and kept
+        on anything else (timeout, link drop, full queue), so the next
+        connect tries again. Returns True when a reload was scheduled.
+        """
+        if (
+            self._control_recheck_done
+            or not self._is_esp_bridge
+            or not self.entry.data.get(CONF_RECHECK_CONTROL)
+        ):
+            return False
+        self._control_recheck_done = True
+        try:
+            raw = await self.transport.read_char(CHAR_CAPABILITIES)
+        except Exception as err:  # noqa: BLE001
+            raw, error = None, str(err)
+        else:
+            error = None if raw else self.transport.pop_read_error(CHAR_CAPABILITIES)
+        data = {k: v for k, v in self.entry.data.items() if k != CONF_RECHECK_CONTROL}
+        if not raw:
+            if error == "not_found":
+                # The bridge looked it up: no Control service on this model
+                # (e.g. OneBlade). Done for good.
+                self.hass.config_entries.async_update_entry(self.entry, data=data)
+            else:
+                # Timeout, dropped link, full queue, …: no answer is not
+                # "absent". Keep the flag and try again on the next connect.
+                self._control_recheck_done = False
+                _LOGGER.debug(
+                    "%s: Control service re-check got no answer (%s), retrying "
+                    "on the next connect", self.address, error or "timeout",
+                )
+            return False
+        cap_int = int.from_bytes(raw, "little")
+        _LOGGER.info(
+            "%s: Control service found on re-check (capabilities 0x%X) — "
+            "adding it and reloading the entry",
+            self.address, cap_int,
+        )
+        services = list(data.get(CONF_SERVICES, []))
+        if SVC_CONTROL.lower() not in {s.lower() for s in services}:
+            services.append(SVC_CONTROL)
+        self.hass.config_entries.async_update_entry(
+            self.entry,
+            data={**data, CONF_SERVICES: services, CONF_CAPABILITIES: cap_int},
+        )
+        self.available_services.add(SVC_CONTROL.lower())
+        self.capabilities = parse_capabilities(cap_int)
+        self._apply_available_services()
+        self.hass.config_entries.async_schedule_reload(self.entry.entry_id)
+        return True
 
     async def _start_all_notifications(self) -> int:
         """Start GATT notifications for live updates. Returns subscription count."""

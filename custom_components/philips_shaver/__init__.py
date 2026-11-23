@@ -1,6 +1,7 @@
 # custom_components/philips_shaver/__init__.py
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -13,6 +14,7 @@ from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, Supp
 from homeassistant.helpers import area_registry as ar, config_validation as cv, device_registry as dr
 from homeassistant.helpers.typing import ConfigType
 
+from . import capture
 from .const import (
     DOMAIN,
     CONF_ADDRESS,
@@ -21,6 +23,9 @@ from .const import (
     CONF_ESP_DEVICE_NAME,
     CONF_ESP_BRIDGE_ID,
     CONF_ESP_DEVICE_ID_LEGACY,
+    CONF_RECHECK_CONTROL,
+    CONF_SERVICES,
+    SVC_CONTROL,
     CONF_AREA,
     CONF_PIPELINED_READS,
     CONF_BLUETOOTH_ADAPTER,
@@ -51,6 +56,7 @@ PLATFORMS = [Platform.SENSOR, Platform.LIGHT, Platform.SELECT, Platform.BINARY_S
 SERVICE_FETCH_HISTORY = "fetch_history"
 SERVICE_READ_CHARACTERISTIC = "read_characteristic"
 SERVICE_READ_CHARACTERISTIC_RAW = "read_characteristic_raw"
+SERVICE_CAPTURE_GATT = "capture_gatt"
 SERVICE_WRITE_CHARACTERISTIC = "write_characteristic"
 SERVICE_ACKNOWLEDGE_NOTIFICATION = "acknowledge_notification"
 SERVICE_SET_CARTRIDGE = "set_cartridge_remaining"
@@ -173,6 +179,22 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
         else:
             hass.config_entries.async_update_entry(entry, minor_version=3)
+    if entry.version == 1 and entry.minor_version < 4:
+        # v1.3 → v1.4: the ESP setup probed the Control service via Handle
+        # Load Type (0x0322), which some models (S7885) lack, so their
+        # entries were stored without it. Flag those for a one-time
+        # re-check via Capabilities (0x0302) once the shaver connects.
+        new_data = {**entry.data}
+        services = {s.lower() for s in new_data.get(CONF_SERVICES, [])}
+        if (
+            new_data.get(CONF_TRANSPORT_TYPE) == TRANSPORT_ESP_BRIDGE
+            and services
+            and SVC_CONTROL.lower() not in services
+        ):
+            new_data[CONF_RECHECK_CONTROL] = True
+        hass.config_entries.async_update_entry(
+            entry, data=new_data, minor_version=4,
+        )
     return True
 
 
@@ -392,6 +414,61 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             schema=_char_schema, supports_response=SupportsResponse.ONLY,
         )
 
+    if not hass.services.has_service(DOMAIN, SERVICE_CAPTURE_GATT):
+        async def handle_capture_gatt(call: ServiceCall) -> ServiceResponse:
+            """Capture the GATT table plus all readable values as a fixture."""
+            coord = _get_coordinator(hass, call.data.get("entry_id"))
+            if not coord:
+                return {"status": "no_device"}
+            transport = coord.transport
+            list_services = getattr(transport, "list_services", None)
+            if list_services is None:
+                return {"status": "not_supported", "reason": "esp_bridge_only"}
+            if not transport.is_connected:
+                return {"status": "not_connected"}
+            services = await list_services()
+            if not services:
+                return {"status": "not_supported", "reason": "bridge_too_old_or_no_answer"}
+            readable = capture.readable_chars(services)
+            values = await capture.async_read_values(transport, readable)
+            missing = sum(1 for u in readable if values.get(u) is None)
+            if missing == len(readable):
+                # Nothing read at all (shaver gone mid-capture): no file
+                return {"status": "not_connected" if not transport.is_connected else "no_data"}
+            model = (coord.data or {}).get("model_number")
+            snapshot = capture.build_snapshot(services, values)
+            filename = "philips_shaver_capture_{}.json".format(
+                "".join(c for c in (model or "unknown") if c.isalnum()) or "unknown"
+            )
+            path = hass.config.path(filename)
+
+            def _write() -> None:
+                with open(path, "w", encoding="utf-8") as fh:
+                    json.dump(snapshot, fh, indent=2, ensure_ascii=False)
+                    fh.write("\n")
+
+            response: dict[str, Any] = {
+                "status": "ok" if not missing else "partial",
+                "unreadable": missing,
+                "file": path,
+                "capture": snapshot,
+            }
+            try:
+                await hass.async_add_executor_job(_write)
+            except OSError as err:
+                _LOGGER.warning("Could not write GATT capture to %s: %s", path, err)
+                response["file"] = None
+                response["write_error"] = str(err)
+            else:
+                _LOGGER.info("GATT capture written to %s", path)
+            return response
+
+        hass.services.async_register(
+            DOMAIN, SERVICE_CAPTURE_GATT, handle_capture_gatt,
+            schema=vol.Schema({vol.Optional("entry_id"): str}),
+            supports_response=SupportsResponse.ONLY,
+        )
+
     if not hass.services.has_service(DOMAIN, SERVICE_READ_CHARACTERISTIC):
         async def handle_read_characteristic(call: ServiceCall) -> ServiceResponse:
             """Read GATT characteristics and return parsed values (same as internal data dict)."""
@@ -574,6 +651,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.services.async_remove(DOMAIN, SERVICE_FETCH_HISTORY)
         hass.services.async_remove(DOMAIN, SERVICE_READ_CHARACTERISTIC)
         hass.services.async_remove(DOMAIN, SERVICE_READ_CHARACTERISTIC_RAW)
+        hass.services.async_remove(DOMAIN, SERVICE_CAPTURE_GATT)
         hass.services.async_remove(DOMAIN, SERVICE_WRITE_CHARACTERISTIC)
         hass.services.async_remove(DOMAIN, SERVICE_ACKNOWLEDGE_NOTIFICATION)
         hass.services.async_remove(DOMAIN, SERVICE_SET_CARTRIDGE)

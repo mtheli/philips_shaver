@@ -13,6 +13,7 @@ The integration provides service actions accessible via **Developer Tools > Acti
 | [`philips_shaver.fetch_history`](#fetch-shaving-history) | Fetch shaving session history from the device |
 | [`philips_shaver.acknowledge_notification`](#acknowledge-notification) | Clear a specific system notification |
 | [`philips_shaver.write_characteristic`](#write-characteristic) | Write a hex value to a characteristic |
+| [`philips_shaver.capture_gatt`](#capture-gatt-table) | Save an anonymized GATT capture (ESP bridge 1.15.0+) |
 
 ### Read Characteristic (Parsed)
 
@@ -209,3 +210,38 @@ data:
 ```
 
 If omitted, the first available device is used.
+
+---
+
+### Capture GATT Table
+
+Saves the shaver's complete GATT table — services, characteristics, properties, handles — together with the value of every readable characteristic. Needs the ESP bridge 1.15.0 or newer and a connected shaver; direct Bluetooth setups can use `scripts/shaver_scan.py --fixture` instead.
+
+**Action:** `philips_shaver.capture_gatt`
+
+```yaml
+action: philips_shaver.capture_gatt
+data: {}
+```
+
+The result is returned and written to `philips_shaver_capture_<model>.json` in the Home Assistant config folder, ready to attach to a GitHub issue. The MAC address, serial number and system ID are removed. Stored usage data (shave history, counters) stays in the file.
+
+**Example response (shortened):**
+
+```yaml
+status: ok          # "partial" when some characteristics could not be read
+unreadable: 0
+file: /config/philips_shaver_capture_S7885.json
+capture:
+  device_info:
+    Model Number: S7885
+  gatt_services:
+    - uuid: 8d560300-3cb9-4387-a7e8-b79d826a7025
+      characteristics:
+        - uuid: 8d560302-3cb9-4387-a7e8-b79d826a7025
+          name: Capabilities
+          properties: [read]
+          handle: 137
+          value_hex: "69000000"
+          value_text: null
+```

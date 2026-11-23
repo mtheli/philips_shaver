@@ -10,7 +10,7 @@
     "Serial Number": "00000000000000000000",
     "Hardware Revision": "300011042261",
     "Manufacturer Name": "Philips",
-    "Battery Level": "Z"
+    "Battery Level": "90%"
   },
   "gatt_services": [
     {
@@ -321,7 +321,7 @@
           ],
           "handle": 80,
           "value_hex": "5c",
-          "value_text": "\\"
+          "value_text": null
         },
         {
           "uuid": "8d56010d-3cb9-4387-a7e8-b79d826a7025",
@@ -451,7 +451,7 @@
           ],
           "handle": 86,
           "value_hex": "64",
-          "value_text": "d"
+          "value_text": null
         },
         {
           "uuid": "8d5601ff-3cb9-4387-a7e8-b79d826a7025",
@@ -461,7 +461,7 @@
           ],
           "handle": 93,
           "value_hex": "302e32000000000000000000000000000000000000",
-          "value_text": null
+          "value_text": "0.2"
         },
         {
           "uuid": "8d5601fe-3cb9-4387-a7e8-b79d826a7025",
@@ -471,7 +471,7 @@
           ],
           "handle": 91,
           "value_hex": "31302e323933000000000000000000000000000000",
-          "value_text": null
+          "value_text": "10.293"
         },
         {
           "uuid": "8d560102-3cb9-4387-a7e8-b79d826a7025",
@@ -492,7 +492,7 @@
           ],
           "handle": 89,
           "value_hex": "4f4c45445f312e305f306638313961390000000000",
-          "value_text": null
+          "value_text": "OLED_1.0_0f819a9"
         },
         {
           "uuid": "8d560103-3cb9-4387-a7e8-b79d826a7025",
@@ -686,7 +686,7 @@
           ],
           "handle": 133,
           "value_hex": "33",
-          "value_text": "3"
+          "value_text": null
         },
         {
           "uuid": "8d56032d-3cb9-4387-a7e8-b79d826a7025",
@@ -966,7 +966,7 @@
           ],
           "handle": 15,
           "value_hex": "5a",
-          "value_text": "Z"
+          "value_text": null
         }
       ]
     }

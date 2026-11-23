@@ -70,7 +70,6 @@ from .const import (
     CHAR_DEVICE_TYPE,
     CHAR_GROOMER_CAPABILITIES,
     CHAR_DEVICE_STATE,
-    CHAR_HANDLE_LOAD_TYPE,
     CHAR_HISTORY_SYNC_STATUS,
     SVC_BATTERY,
     SVC_DEVICE_INFO,
@@ -1057,7 +1056,7 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
     """Config flow for Philips Shaver."""
 
     VERSION = 1
-    MINOR_VERSION = 3
+    MINOR_VERSION = 4
 
     discovery_info: BluetoothServiceInfoBleak | None = None
 
@@ -2388,13 +2387,16 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    # Map each service to one representative characteristic for probing
+    # Map each service to one representative characteristic for probing.
+    # The probe must be a characteristic every model with that service
+    # provides: the Control service is probed via Capabilities (0x0302),
+    # not Handle Load Type (0x0322), which some models leave out (S7885).
     SERVICE_PROBE_CHARS: dict[str, str] = {
         SVC_BATTERY: CHAR_BATTERY_LEVEL,
         SVC_DEVICE_INFO: CHAR_MODEL_NUMBER,
         SVC_PLATFORM: CHAR_DEVICE_STATE,
         SVC_HISTORY: CHAR_HISTORY_SYNC_STATUS,
-        SVC_CONTROL: CHAR_HANDLE_LOAD_TYPE,
+        SVC_CONTROL: CHAR_CAPABILITIES,
         SVC_GROOMER: CHAR_GROOMER_CAPABILITIES,
     }
 
@@ -2434,12 +2436,12 @@ class PhilipsShaverConfigFlow(ConfigFlow, domain=DOMAIN):
                     "Could not read any service via ESP bridge – shaver may not be connected"
                 )
 
-            # Read capabilities (Control Service) — 0 if service absent (e.g. OneBlade)
+            # Capabilities (Control Service) — the probe read above already
+            # holds them; 0 if the service is absent (e.g. OneBlade)
             cap_int = 0
-            if SVC_CONTROL in found_services:
-                raw_cap = await transport.read_char(CHAR_CAPABILITIES)
-                if raw_cap is not None:
-                    cap_int = int.from_bytes(raw_cap, "little")
+            raw_cap = probe_results.get(CHAR_CAPABILITIES)
+            if raw_cap:
+                cap_int = int.from_bytes(raw_cap, "little")
 
             self._bump_progress(0.75)
             # Battery — reuse probe result if available, otherwise read separately

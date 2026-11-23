@@ -115,7 +115,7 @@ CHAR_HEAD_REMAINING_MINUTES = "8d560118-3cb9-4387-a7e8-b79d826a7025"
 CHAR_SHAVING_TIME = "8d56010f-3cb9-4387-a7e8-b79d826a7025"
 # 01=off, 02=shaving, 03=charging
 """
-	Unknown Characteristic => SHAVER_HANDLE_STATE_CHARACTERISTIC_UUID (01 = active | 02 = charging)
+	Unknown Characteristic => SHAVER_HANDLE_STATE_CHARACTERISTIC_UUID (01 = off | 02 = shaving | 03 = charging)
 	UUID: 8d56010a-3cb9-4387-a7e8-b79d826a7025
 	Properties: NOTIFY, READ
 	Value: (0x) 01
@@ -293,13 +293,13 @@ CHAR_LIGHTRING_COLOR_BRIGHTNESS = "8d560331-3cb9-4387-a7e8-b79d826a7025"
       Bit 3: postShaveFeedbackHapticOn  — haptic pulse after shaving
       Bit 4: fullCoachingMode           — light ring on/off (all guidance)
       Bit 5: maxPressureCoachingMode    — pressure-only coaching (no light ring)
-      Bit 6: autoUnitDetection          — auto-detect metric/imperial
+      Bit 6: autoUnitDetection          — automatic attachment (unit) detection
       Bit 7: starRatingVerdict          — post-session star rating
 
     Bit layout (byte[1], bits 8-10):
       Bit 8:  fullMotionCoachingMode    — full motion guidance
       Bit 9:  maxMotionCoachingMode     — max motion coaching only
-      Bit 10: unknown                   — possibly battery saving mode
+      Bit 10: batterySavingMode         — battery saving mode
 
     Bytes 1-3 (bits 11-31): unused, must be 0.
 
@@ -536,6 +536,9 @@ LIVE_READ_CHARS = POLL_READ_CHARS
 CONF_ADDRESS = "address"
 CONF_CAPABILITIES = "capabilities"
 CONF_SERVICES = "services"
+# Set by the v1.4 migration on ESP entries stored without the Control
+# service (pre-0x0302 probe); the coordinator re-checks once, then drops it.
+CONF_RECHECK_CONTROL = "recheck_control"
 CONF_DEVICE_TYPE = "device_type"
 
 # Transport configuration

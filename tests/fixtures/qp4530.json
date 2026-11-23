@@ -4,7 +4,7 @@
   "adv_name": "Philips QP4530",
   "protocol": "Both Shaver Legacy + Newer Condor (first-ever find on a shaver)",
   "device_info": {
-    "Battery Level": "^",
+    "Battery Level": "94%",
     "Manufacturer Name": "Philips",
     "Serial Number": "0000000000000000000000000000000000000000",
     "Software Revision": "502",
@@ -70,7 +70,7 @@
           ],
           "handle": 15,
           "value_hex": "5e",
-          "value_text": "^"
+          "value_text": null
         }
       ]
     },
@@ -96,7 +96,7 @@
           ],
           "handle": 92,
           "value_hex": "302e31000000000000000000000000000000000000",
-          "value_text": null
+          "value_text": "0.1"
         },
         {
           "uuid": "8d560109-3cb9-4387-a7e8-b79d826a7025",
@@ -128,7 +128,7 @@
           ],
           "handle": 90,
           "value_hex": "31302e323538000000000000000000000000000000",
-          "value_text": null
+          "value_text": "10.258"
         },
         {
           "uuid": "8d560118-3cb9-4387-a7e8-b79d826a7025",
@@ -226,7 +226,7 @@
           ],
           "handle": 86,
           "value_hex": "6d00",
-          "value_text": null
+          "value_text": "m"
         },
         {
           "uuid": "8d560117-3cb9-4387-a7e8-b79d826a7025",
@@ -237,7 +237,7 @@
           ],
           "handle": 80,
           "value_hex": "4a",
-          "value_text": "J"
+          "value_text": null
         },
         {
           "uuid": "8d560112-3cb9-4387-a7e8-b79d826a7025",
@@ -322,7 +322,7 @@
           ],
           "handle": 88,
           "value_hex": "302e325f7374640000000000000000000000000000",
-          "value_text": null
+          "value_text": "0.2_std"
         },
         {
           "uuid": "8d560105-3cb9-4387-a7e8-b79d826a7025",

@@ -88,6 +88,23 @@ write_characteristic:
       selector:
         text:
 
+capture_gatt:
+  name: Capture GATT Table
+  description: >-
+    Captures the shaver's full GATT table (services, characteristics,
+    properties, handles) and the value of every readable characteristic
+    through the ESP bridge (bridge v1.15.0 or newer). MAC address, serial
+    number and system ID are removed; stored usage data (shave history,
+    counters) stays in. The result is returned and saved as a JSON file in
+    the Home Assistant config folder, ready to attach to a GitHub issue.
+  fields:
+    entry_id:
+      name: Config Entry ID
+      description: The config entry ID of the shaver device. If omitted, uses the first available device.
+      required: false
+      selector:
+        text:
+
 set_cartridge_remaining:
   name: Set Cartridge Remaining
   description: >-

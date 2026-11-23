@@ -48,6 +48,7 @@ TRACE = 5  # below DEBUG(10), for per-event tracing
 # ESPHome event names fired by the ESP32 bridge component
 ESP_EVENT_NAME = "esphome.philips_shaver_ble_data"
 ESP_STATUS_EVENT_NAME = "esphome.philips_shaver_ble_status"
+ESP_SERVICES_EVENT_NAME = "esphome.philips_shaver_ble_services"
 ESP_READ_TIMEOUT = 5.0
 # Base budget for a pipelined poll batch: covers one bridge-side ATT
 # watchdog stall (10 s) with margin; per-read time is added on top.
@@ -665,6 +666,49 @@ async def async_unpair_bridge_slot(
         unsub()
 
 
+_PROP_LETTERS = {
+    "R": "read",
+    "W": "write",
+    "w": "write-without-response",
+    "N": "notify",
+    "I": "indicate",
+}
+
+
+def _canonical_uuid(uuid: str) -> str:
+    """Expand 16/32-bit UUIDs to the 128-bit Bluetooth Base form, lowercase."""
+    u = uuid.strip().lower()
+    if u.startswith("0x"):
+        u = u[2:]
+    if len(u) == 4:
+        return f"0000{u}-0000-1000-8000-00805f9b34fb"
+    if len(u) == 8:
+        return f"{u}-0000-1000-8000-00805f9b34fb"
+    return u
+
+
+def _parse_service_chars(raw: str) -> list[dict[str, Any]]:
+    """Parse a bridge ``service_chars`` field: "uuid/props/handle,..."."""
+    chars: list[dict[str, Any]] = []
+    for item in filter(None, raw.split(",")):
+        parts = item.split("/")
+        entry: dict[str, Any] = {
+            "uuid": _canonical_uuid(parts[0]),
+            "properties": [
+                _PROP_LETTERS[c] for c in (parts[1] if len(parts) > 1 else "")
+                if c in _PROP_LETTERS
+            ],
+            "handle": None,
+        }
+        if len(parts) > 2 and parts[2]:
+            try:
+                entry["handle"] = int(parts[2], 16)
+            except ValueError:
+                pass
+        chars.append(entry)
+    return chars
+
+
 class ShaverTransport(abc.ABC):
     """Abstract BLE transport for Philips Shaver."""
 
@@ -1186,6 +1230,8 @@ class EspBridgeTransport(ShaverTransport):
         self._disconnect_count = 0
         self._last_uptime: int | None = None
         self._boot_time: datetime | None = None
+        # char uuid → service uuid from the last list_services() call
+        self._listed_char_services: dict[str, str] = {}
 
     def _svc_name(self, action: str) -> str:
         """Full ESPHome service name, e.g. 'atom_lite_ble_read_char_shaver'."""
@@ -1194,10 +1240,15 @@ class EspBridgeTransport(ShaverTransport):
             return f"{base}_{self._esp_bridge_id}"
         return base
 
-    @staticmethod
-    def _get_service_uuid(char_uuid: str) -> str:
-        """Look up the parent service UUID for a characteristic UUID."""
-        svc = CHAR_SERVICE_MAP.get(char_uuid)
+    def _get_service_uuid(self, char_uuid: str) -> str:
+        """Look up the parent service UUID for a characteristic UUID.
+
+        Known characteristics come from CHAR_SERVICE_MAP; any other one is
+        found through the GATT table of the last list_services() call.
+        """
+        svc = CHAR_SERVICE_MAP.get(char_uuid) or self._listed_char_services.get(
+            char_uuid.lower()
+        )
         if not svc:
             raise TransportError(
                 f"No service UUID mapping for characteristic {char_uuid}"
@@ -1806,6 +1857,73 @@ class EspBridgeTransport(ShaverTransport):
             return
         for char_uuid in list(self._notify_callbacks.keys()):
             await self.unsubscribe(char_uuid)
+
+    async def list_services(self, timeout: float = 10.0) -> list[dict[str, Any]] | None:
+        """Return the connected shaver's GATT table as seen by the bridge.
+
+        Calls ``ble_list_services`` (bridge v1.15.0+) and collects one
+        ``esphome.philips_shaver_ble_services`` event per service. Each
+        service is ``{"uuid", "characteristics": [{"uuid", "properties",
+        "handle"}]}`` with lowercase 128-bit UUIDs and bleak-style property
+        names. Returns None when the bridge lacks the service, the shaver
+        is not connected or the events do not arrive in time — callers
+        must treat that as "unknown", not as "no services".
+        """
+        svc = self._svc_name("ble_list_services")
+        if not self.is_connected or not self._hass.services.has_service("esphome", svc):
+            return None
+
+        loop = self._hass.loop
+        done: asyncio.Future[None] = loop.create_future()
+        collected: dict[int, dict[str, Any]] = {}
+        expected: int | None = None
+
+        @callback
+        def _handler(event: Event) -> None:
+            nonlocal expected
+            data = event.data
+            bridge_id = str(data.get("bridge_id", "")).lower()
+            if bridge_id and self._esp_bridge_id and bridge_id != self._esp_bridge_id:
+                return
+            mac = str(data.get("mac", "")).upper()
+            if mac and self._detected_mac and mac != self._detected_mac.upper():
+                return
+            if data.get("error"):
+                # Bridge could not enumerate (discovery incomplete, …)
+                if not done.done():
+                    done.set_exception(TransportError(str(data["error"])))
+                return
+            try:
+                count = int(data.get("service_count", "0"))
+                index = int(data.get("service_index", "0"))
+            except (TypeError, ValueError):
+                return
+            expected = count
+            uuid = str(data.get("service_uuid") or "")
+            if uuid:
+                collected[index] = {
+                    "uuid": _canonical_uuid(uuid),
+                    "characteristics": _parse_service_chars(
+                        str(data.get("service_chars") or "")
+                    ),
+                }
+            if not done.done() and len(collected) >= expected:
+                done.set_result(None)
+
+        unsub = self._hass.bus.async_listen(ESP_SERVICES_EVENT_NAME, _handler)
+        try:
+            await self._hass.services.async_call("esphome", svc, {}, blocking=True)
+            await asyncio.wait_for(done, timeout=timeout)
+        except (HomeAssistantError, TimeoutError, TransportError) as err:
+            _LOGGER.debug("ESP list_services failed: %s", err or "timeout")
+            return None
+        finally:
+            unsub()
+        services = [collected[i] for i in sorted(collected)]
+        self._listed_char_services = {
+            c["uuid"]: svc["uuid"] for svc in services for c in svc["characteristics"]
+        }
+        return services
 
     async def set_notify_throttle(self, ms: int) -> None:
         """Send throttle setting to ESP32 bridge."""
