@@ -707,9 +707,11 @@ def _parse_service_chars(raw: str) -> list[dict[str, Any]]:
         }
         if len(parts) > 2 and parts[2]:
             try:
-                entry["handle"] = int(parts[2], 16) - 1
+                value_handle = int(parts[2], 16)
             except ValueError:
-                pass
+                value_handle = 0
+            if value_handle > 0:
+                entry["handle"] = value_handle - 1
         chars.append(entry)
     return chars
 
@@ -1422,15 +1424,7 @@ class EspBridgeTransport(ShaverTransport):
                 return
 
             if not payload_hex:
-                # A successful read of an empty value (0-byte payload, no
-                # error field) — e.g. a blank Device Information string.
-                # Resolve the waiters with None instead of dropping the
-                # event, which would leave them running into the read
-                # timeout and stall every poll on affected characteristics.
-                # Remembered so a GATT capture can tell "empty" apart from
-                # "unreadable".
-                self._empty_reads.add(uuid)
-                self._resolve_pending_reads(uuid, None)
+                self._on_empty_payload(uuid, error)
                 return
 
             if mac and not self._detected_mac:
@@ -1679,6 +1673,21 @@ class EspBridgeTransport(ShaverTransport):
         self._ready_event.clear()
         self._pending_reads.clear()
         self._notify_callbacks.clear()
+
+    def _on_empty_payload(self, uuid: str, error: str) -> None:
+        """Handle a data event without payload.
+
+        A successful read of an empty value (0-byte payload, no error
+        field) — e.g. a blank Device Information string. Resolve the
+        waiters with None instead of dropping the event, which would leave
+        them running into the read timeout and stall every poll on affected
+        characteristics. Remembered so a GATT capture can tell "empty"
+        apart from "unreadable" — but not for a late error event whose read
+        already timed out (no waiter left, so it lands here).
+        """
+        if not error:
+            self._empty_reads.add(uuid)
+        self._resolve_pending_reads(uuid, None)
 
     def pop_empty_read(self, char_uuid: str) -> bool:
         """True (once) if the last read of the characteristic was 0 bytes."""

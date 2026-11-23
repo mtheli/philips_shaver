@@ -113,7 +113,10 @@ def _mac_patterns(mac: str | None) -> tuple[list[bytes], list[str]]:
     """Byte and text forms of the device MAC that may appear in values."""
     if not mac:
         return [], []
-    octets = bytes.fromhex(mac.replace(":", "").replace("-", ""))
+    try:
+        octets = bytes.fromhex(mac.replace(":", "").replace("-", ""))
+    except ValueError:
+        return [], []
     if len(octets) != 6:
         return [], []
     plain = octets.hex()

@@ -308,3 +308,44 @@ async def test_listed_table_wins_over_service_map() -> None:
     t = _transport([_event(0, 1, other.upper(), f"{pressure}/RN/0010")])
     await t.list_services(timeout=1)
     assert t._get_service_uuid(pressure) == other
+
+
+def _bare_transport():
+    t = EspBridgeTransport.__new__(EspBridgeTransport)
+    t._empty_reads = set()
+    t._pending_reads = {}
+    return t
+
+
+def test_empty_payload_marks_empty_read() -> None:
+    t = _bare_transport()
+    t._on_empty_payload("u", "")
+    assert t.pop_empty_read("u") is True
+    assert t.pop_empty_read("u") is False  # popped once
+
+
+def test_late_error_event_is_not_an_empty_read() -> None:
+    """A read_timeout arriving after the HA-side timeout has no waiter left
+    and carries no payload — it must not turn into an empty value."""
+    t = _bare_transport()
+    t._on_empty_payload("u", "read_timeout")
+    assert t.pop_empty_read("u") is False
+
+
+def test_invalid_mac_does_not_break_capture() -> None:
+    services = [{
+        "uuid": "0000180f-0000-1000-8000-00805f9b34fb",
+        "characteristics": [{
+            "uuid": "00002a19-0000-1000-8000-00805f9b34fb",
+            "properties": ["read"], "handle": 1,
+        }],
+    }]
+    for mac in (None, "", "garbage", "AA:BB"):
+        snap = capture.build_snapshot(
+            services, {"00002a19-0000-1000-8000-00805f9b34fb": b"\x5a"}, mac=mac
+        )
+        assert snap["device_info"]["Battery Level"] == "90%"
+
+
+def test_zero_handle_is_dropped() -> None:
+    assert _parse_service_chars("2a19/R/0000")[0]["handle"] is None
