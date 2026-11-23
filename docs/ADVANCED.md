@@ -241,7 +241,7 @@ capture:
         - uuid: 8d560302-3cb9-4387-a7e8-b79d826a7025
           name: Capabilities
           properties: [read]
-          handle: 137
+          handle: 136
           value_hex: "69000000"
           value_text: null
 ```

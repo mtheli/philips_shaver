@@ -341,7 +341,7 @@ Lists the connected shaver's GATT table from the controller's attribute cache
 | `service_count` | Number of services; `0` when the table is empty |
 | `service_index` | 0-based index of this service |
 | `service_uuid` | e.g. `8D560300-3CB9-…` or `0x180F` for 16-bit UUIDs |
-| `service_chars` | Comma-separated `<char uuid>/<props>/<handle hex>`, props from `R` read, `W` write, `w` write without response, `N` notify, `I` indicate — e.g. `0x2A19/RN/00db` |
+| `service_chars` | Comma-separated `<char uuid>/<props>/<value handle hex>` (ESP-IDF `char_handle`, the value handle; bleak/BlueZ report the declaration handle, one lower), props from `R` read, `W` write, `w` write without response, `N` notify, `I` indicate — e.g. `0x2A19/RN/00db` |
 | `error` | Set instead of the fields above when the bridge cannot list: `not_connected`, `no_memory`, `gattc_error` |
 
 ### `ble_pair_mode`

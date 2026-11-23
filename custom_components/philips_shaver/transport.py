@@ -688,7 +688,12 @@ def _canonical_uuid(uuid: str) -> str:
 
 
 def _parse_service_chars(raw: str) -> list[dict[str, Any]]:
-    """Parse a bridge ``service_chars`` field: "uuid/props/handle,..."."""
+    """Parse a bridge ``service_chars`` field: "uuid/props/handle,...".
+
+    The bridge reports ESP-IDF's ``char_handle``, the characteristic's
+    *value* handle. ``handle`` here is the declaration handle (value - 1),
+    the one bleak/BlueZ and the test fixtures use.
+    """
     chars: list[dict[str, Any]] = []
     for item in filter(None, raw.split(",")):
         parts = item.split("/")
@@ -702,7 +707,7 @@ def _parse_service_chars(raw: str) -> list[dict[str, Any]]:
         }
         if len(parts) > 2 and parts[2]:
             try:
-                entry["handle"] = int(parts[2], 16)
+                entry["handle"] = int(parts[2], 16) - 1
             except ValueError:
                 pass
         chars.append(entry)
@@ -1232,6 +1237,8 @@ class EspBridgeTransport(ShaverTransport):
         self._boot_time: datetime | None = None
         # char uuid → service uuid from the last list_services() call
         self._listed_char_services: dict[str, str] = {}
+        # characteristics whose last read returned 0 bytes
+        self._empty_reads: set[str] = set()
 
     def _svc_name(self, action: str) -> str:
         """Full ESPHome service name, e.g. 'atom_lite_ble_read_char_shaver'."""
@@ -1243,11 +1250,12 @@ class EspBridgeTransport(ShaverTransport):
     def _get_service_uuid(self, char_uuid: str) -> str:
         """Look up the parent service UUID for a characteristic UUID.
 
-        Known characteristics come from CHAR_SERVICE_MAP; any other one is
-        found through the GATT table of the last list_services() call.
+        The GATT table of the last list_services() call comes first: it is
+        what this shaver actually has. CHAR_SERVICE_MAP covers the known
+        characteristics before (or without) such a call.
         """
-        svc = CHAR_SERVICE_MAP.get(char_uuid) or self._listed_char_services.get(
-            char_uuid.lower()
+        svc = self._listed_char_services.get(char_uuid.lower()) or CHAR_SERVICE_MAP.get(
+            char_uuid
         )
         if not svc:
             raise TransportError(
@@ -1419,6 +1427,9 @@ class EspBridgeTransport(ShaverTransport):
                 # Resolve the waiters with None instead of dropping the
                 # event, which would leave them running into the read
                 # timeout and stall every poll on affected characteristics.
+                # Remembered so a GATT capture can tell "empty" apart from
+                # "unreadable".
+                self._empty_reads.add(uuid)
                 self._resolve_pending_reads(uuid, None)
                 return
 
@@ -1669,6 +1680,13 @@ class EspBridgeTransport(ShaverTransport):
         self._pending_reads.clear()
         self._notify_callbacks.clear()
 
+    def pop_empty_read(self, char_uuid: str) -> bool:
+        """True (once) if the last read of the characteristic was 0 bytes."""
+        if char_uuid in self._empty_reads:
+            self._empty_reads.discard(char_uuid)
+            return True
+        return False
+
     def pop_read_error(self, char_uuid: str) -> str | None:
         """Return and clear the last read error for a characteristic, if any."""
         return self._last_read_errors.pop(char_uuid, None)
@@ -1681,6 +1699,7 @@ class EspBridgeTransport(ShaverTransport):
 
         service_uuid = self._get_service_uuid(char_uuid)
         self._last_read_errors.pop(char_uuid, None)
+        self._empty_reads.discard(char_uuid)
 
         future: asyncio.Future[bytes | None] = self._hass.loop.create_future()
         self._pending_reads.setdefault(char_uuid, []).append(future)

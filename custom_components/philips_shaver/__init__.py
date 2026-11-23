@@ -436,7 +436,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 # Nothing read at all (shaver gone mid-capture): no file
                 return {"status": "not_connected" if not transport.is_connected else "no_data"}
             model = (coord.data or {}).get("model_number")
-            snapshot = capture.build_snapshot(services, values)
+            snapshot = capture.build_snapshot(
+                services, values, mac=getattr(transport, "detected_mac", None)
+            )
             filename = "philips_shaver_capture_{}.json".format(
                 "".join(c for c in (model or "unknown") if c.isalnum()) or "unknown"
             )

@@ -18,7 +18,11 @@ from .conftest import ALL_FIXTURE_NAMES, load_json_fixture
 
 
 def _bridge_events(fixture: dict) -> list[dict]:
-    """The services of a fixture as the bridge would report them."""
+    """The services of a fixture as the bridge would report them.
+
+    Fixtures carry bleak's declaration handle; the bridge reports ESP-IDF's
+    value handle, one higher.
+    """
     letters = {"read": "R", "write": "W", "write-without-response": "w",
                "notify": "N", "indicate": "I"}
     services = []
@@ -27,7 +31,7 @@ def _bridge_events(fixture: dict) -> list[dict]:
             "{}/{}/{:04x}".format(
                 c["uuid"],
                 "".join(letters[p] for p in c["properties"] if p in letters),
-                c["handle"],
+                c["handle"] + 1,
             )
             for c in svc["characteristics"]
         )
@@ -42,7 +46,7 @@ def test_parse_service_chars() -> None:
     assert chars[0] == {
         "uuid": "8d560322-3cb9-4387-a7e8-b79d826a7025",
         "properties": ["read", "notify"],
-        "handle": 0x5A,
+        "handle": 0x59,  # value handle 0x5a - 1 = declaration handle
     }
     assert chars[1]["uuid"] == "00002a19-0000-1000-8000-00805f9b34fb"
     assert chars[2] == {"uuid": "abc", "properties": [], "handle": None}
@@ -193,7 +197,7 @@ async def test_list_services_collects_and_maps_chars() -> None:
     assert [s["uuid"] for s in services] == [CONTROL, "0000180f-0000-1000-8000-00805f9b34fb"]
     assert services[1]["characteristics"][0] == {
         "uuid": "00002a19-0000-1000-8000-00805f9b34fb",
-        "properties": ["read", "notify"], "handle": 0xDB,
+        "properties": ["read", "notify"], "handle": 0xDA,
     }
     # characteristics unknown to CHAR_SERVICE_MAP resolve through the table
     assert t._listed_char_services["00002a19-0000-1000-8000-00805f9b34fb"] == (
@@ -261,3 +265,46 @@ async def test_read_values_stops_on_disconnect() -> None:
     await capture.async_read_values(t, uuids)
     assert len(t.batches) == 1
     assert t.singles == []
+
+
+def test_capture_scrubs_mac_from_values() -> None:
+    services = [{
+        "uuid": "8d560100-3cb9-4387-a7e8-b79d826a7025",
+        "characteristics": [
+            {"uuid": f"8d5601f{i}-3cb9-4387-a7e8-b79d826a7025",
+             "properties": ["read"], "handle": i}
+            for i in range(4)
+        ],
+    }]
+    u = [c["uuid"] for c in services[0]["characteristics"]]
+    mac = "F0:5C:00:00:78:85"
+    snap = capture.build_snapshot(services, {
+        u[0]: b"\x01" + bytes.fromhex("f05c00007885") + b"\x02",  # MSB first
+        u[1]: bytes.fromhex("857800005cf0"),                      # LSB first
+        u[2]: b"id=F0:5C:00:00:78:85",                             # as text
+        u[3]: b"\x11\x22",                                          # untouched
+    }, mac=mac)
+    vals = {c["uuid"]: c["value_hex"] for c in snap["gatt_services"][0]["characteristics"]}
+    assert vals[u[0]] == "01" + "00" * 6 + "02"
+    assert vals[u[1]] == "00" * 6
+    assert bytes.fromhex(vals[u[2]]) == b"id=" + b"0" * 17
+    assert vals[u[3]] == "1122"
+
+
+async def test_read_values_keeps_empty_values() -> None:
+    class T(_ReadTransport):
+        def pop_empty_read(self, uuid):
+            return uuid == "empty"
+
+    t = T({"a": b"\x01"})
+    values = await capture.async_read_values(t, ["a", "empty", "gone"])
+    assert values == {"a": b"\x01", "empty": b"", "gone": None}
+
+
+async def test_listed_table_wins_over_service_map() -> None:
+    """After list_services, reads go to the service the shaver really has."""
+    pressure = "8d56030c-3cb9-4387-a7e8-b79d826a7025"  # mapped to 0x0300
+    other = "8d560900-3cb9-4387-a7e8-b79d826a7025"
+    t = _transport([_event(0, 1, other.upper(), f"{pressure}/RN/0010")])
+    await t.list_services(timeout=1)
+    assert t._get_service_uuid(pressure) == other

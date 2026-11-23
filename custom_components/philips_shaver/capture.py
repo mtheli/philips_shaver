@@ -100,16 +100,55 @@ async def async_read_values(transport: Any, readable: list[str]) -> dict[str, by
         if not transport.is_connected:
             break
         values[char_uuid] = await transport.read_char(char_uuid)
+    # A 0-byte value reads as None too; keep it as empty, not unreadable
+    pop_empty = getattr(transport, "pop_empty_read", None)
+    if pop_empty is not None:
+        for char_uuid in readable:
+            if values.get(char_uuid) is None and pop_empty(char_uuid):
+                values[char_uuid] = b""
     return values
+
+
+def _mac_patterns(mac: str | None) -> tuple[list[bytes], list[str]]:
+    """Byte and text forms of the device MAC that may appear in values."""
+    if not mac:
+        return [], []
+    octets = bytes.fromhex(mac.replace(":", "").replace("-", ""))
+    if len(octets) != 6:
+        return [], []
+    plain = octets.hex()
+    texts = {
+        plain, plain.upper(),
+        ":".join(f"{b:02x}" for b in octets),
+        ":".join(f"{b:02X}" for b in octets),
+    }
+    return [octets, octets[::-1]], sorted(texts, key=len, reverse=True)
+
+
+def _scrub_mac(raw: bytes, mac_bytes: list[bytes], mac_texts: list[str]) -> bytes:
+    """Zero every occurrence of the device MAC (binary, either byte order,
+    or as hex/colon text) inside a value. Length is preserved."""
+    for pattern in mac_bytes:
+        raw = raw.replace(pattern, b"\x00" * len(pattern))
+    for text in mac_texts:
+        encoded = text.encode()
+        raw = raw.replace(encoded, b"0" * len(encoded))
+    return raw
 
 
 def build_snapshot(
     services: list[dict[str, Any]],
     values: dict[str, bytes | None],
     *,
+    mac: str | None = None,
     source: str = "esp_bridge",
 ) -> dict[str, Any]:
-    """Assemble an anonymized capture from the GATT table and read values."""
+    """Assemble an anonymized capture from the GATT table and read values.
+
+    ``mac`` is the shaver's real address: besides the address field, any
+    copy of it inside a characteristic value is zeroed as well.
+    """
+    mac_bytes, mac_texts = _mac_patterns(mac)
     device_info: dict[str, str] = {}
     gatt_services: list[dict[str, Any]] = []
     has_legacy = False
@@ -121,6 +160,8 @@ def build_snapshot(
             uuid = char["uuid"]
             name = _char_name(uuid)
             raw = values.get(uuid)
+            if raw:
+                raw = _scrub_mac(raw, mac_bytes, mac_texts)
             value_hex = raw.hex() if raw is not None else None
             value_text = None
             if raw and uuid in _TEXT_CHARS:
