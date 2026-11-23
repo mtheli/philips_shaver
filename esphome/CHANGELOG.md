@@ -8,7 +8,7 @@
      an Unreleased block placed between two releases would be served as part of
      the release above it. -->
 
-## Unreleased (v1.15.0)
+## v1.15.0 — 2026-11-23
 
 - **New service `ble_list_services`.** Lists the connected shaver's services and characteristics with their properties and handles, one `esphome.philips_shaver_ble_services` event per service. The integration uses it for the new `philips_shaver.capture_gatt` action, which saves an anonymized GATT capture for bug reports without needing a PC. Older integrations ignore the service.
 
