@@ -104,6 +104,8 @@ The card automatically switches between standby, shaving, charging, and cleaning
 
 [Maintenance Supporter](https://github.com/iluebbe/maintenance_supporter) by [@iluebbe](https://github.com/iluebbe) and [Home Keeper](https://github.com/prestomation/ha-home-keeper) by [@prestomation](https://github.com/prestomation) detect this integration and offer tasks to replace the shaver head and the cleaning cartridge, based on the **Shaver Head Remaining** and **Cleaning Cartridge Remaining** sensors.
 
+[Maintenance](https://github.com/juju35/ha-maintenance) by [@juju35](https://github.com/juju35) tracks the shaver head (from v0.5.4), based on the **Shaver Head Remaining** sensor.
+
 ---
 
 ## Supported Languages
