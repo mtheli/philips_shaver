@@ -506,7 +506,10 @@ POLL_READ_CHARS = [
     CHAR_CLEANING_CYCLES,
     # CHAR_MOTOR_CURRENT,
     CHAR_MOTOR_CURRENT_MAX,
-    # CHAR_MOTOR_RPM,
+    # Live speed on models with shaving mode settings (0x0332, XP9201/XP9400);
+    # a fixed set value on models without (S7885, QP4530), which never notify
+    # it — those need the read for the target motor speed sensor.
+    CHAR_MOTOR_RPM,
     # CHAR_MOTOR_RPM_MAX,   # not present on all models, no known use
     # CHAR_MOTOR_RPM_MIN,   # not present on all models, no known use
     CHAR_LIGHTRING_COLOR_LOW,

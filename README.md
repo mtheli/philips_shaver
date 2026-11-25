@@ -142,7 +142,8 @@ This integration creates a new device for your shaver and provides the following
 | **Pressure State** | Sensor | Categorized feedback (`Too Low`, `Optimal`, `Too High`). |
 | **Pressure Light Ring** | Light | Configure the LED ring colors for various pressure states. |
 | **Light Ring Brightness** | Select | Adjust the pressure light ring brightness (`High`, `Medium`, `Low`). |
-| **Motor Speed** | Sensor | Current motor speed in RPM (e.g., ~2200 RPM). |
+| **Motor Speed** | Sensor | Live motor speed in RPM (e.g., ~2200 RPM). Only on models with shaving modes (e.g. XP9201); empty on others. |
+| **Motor Target Speed** | Sensor | Motor speed the shaver aims for: the set value of the active shaving mode, or the fixed set value on models without shaving modes (e.g. S7885, OneBlade). |
 | **Motor Current** | Sensor | Current motor power consumption in mA. |
 
 ### Speed Coaching (OneBlade)

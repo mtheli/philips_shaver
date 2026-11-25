@@ -103,10 +103,9 @@ class PhilipsShavingModeSelect(PhilipsShaverEntity, SelectEntity):
         mode_id = self.coordinator.data.get("shaving_mode_value")
         attrs: dict[str, Any] = {"raw_value": mode_id}
 
-        if mode_id == 3:
-            settings = self.coordinator.data.get("custom_shaving_settings")
-        else:
-            settings = self.coordinator.data.get("shaving_settings")
+        # 0x0332 holds the settings of the active mode, custom included;
+        # 0x0330 is only the writable template for the custom mode.
+        settings = self.coordinator.data.get("shaving_settings")
 
         if settings:
             attrs.update(settings)

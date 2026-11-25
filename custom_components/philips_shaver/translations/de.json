@@ -374,6 +374,9 @@
       "motor_rpm": {
         "name": "Motordrehzahl"
       },
+      "target_motor_rpm": {
+        "name": "Motor-Solldrehzahl"
+      },
       "motor_current": {
         "name": "Motorstrom"
       },

@@ -374,6 +374,9 @@
       "motor_rpm": {
         "name": "Motor Speed"
       },
+      "target_motor_rpm": {
+        "name": "Motor Target Speed"
+      },
       "motor_current": {
         "name": "Motor Current"
       },

@@ -51,6 +51,7 @@ async def async_setup_entry(
         PhilipsDeviceActivitySensor(coordinator, entry),
         PhilipsLastSeenSensor(coordinator, entry),
         PhilipsMotorSpeedSensor(coordinator, entry),
+        PhilipsTargetMotorSpeedSensor(coordinator, entry),
         PhilipsMotorCurrentSensor(coordinator, entry),
         PhilipsMotorCurrentMaxSensor(coordinator, entry),
         # PhilipsMotorRpmMaxSensor(coordinator, entry),   # not present on all models, no known use
@@ -868,8 +869,12 @@ class PhilipsMotorSpeedSensor(PhilipsShaverEntity, SensorEntity):
 
     @property
     def native_value(self) -> int | None:
-        # motor_rpm is already normalized (raw / 3.036) in the coordinator;
-        # return it directly — consistent with motor_rpm_max / motor_rpm_min.
+        # motor_rpm is already normalized (raw / 3.036) in the coordinator.
+        # 0x0104 is the live speed only on models with shaving mode settings
+        # (0x0332, e.g. XP9201/XP9400). Elsewhere (S7885, QP4530) it holds a
+        # fixed set value, which PhilipsTargetMotorSpeedSensor reports.
+        if not has_shaving_mode_settings(self.coordinator.data):
+            return None
         return self.coordinator.data.get("motor_rpm")
 
     @property
@@ -883,6 +888,43 @@ class PhilipsMotorSpeedSensor(PhilipsShaverEntity, SensorEntity):
             return "mdi:speedometer-medium"
         return "mdi:speedometer"
 
+
+
+# =============================================================================
+# Target Motor Speed
+# =============================================================================
+def has_shaving_mode_settings(data: dict) -> bool:
+    """Whether the shaver reported its active shaving mode settings (0x0332)."""
+    settings = data.get("shaving_settings")
+    return bool(settings) and "custom_motor_rpm" in settings
+
+
+class PhilipsTargetMotorSpeedSensor(PhilipsShaverEntity, SensorEntity):
+    """Motor speed the shaver aims for.
+
+    Models with shaving modes report it per active mode in 0x0332. Models
+    without (S7885, QP4530) keep a fixed set value in 0x0104 instead.
+    """
+
+    _attr_translation_key = "target_motor_rpm"
+    _attr_native_unit_of_measurement = "RPM"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:speedometer-medium"
+
+    def __init__(
+        self, coordinator: PhilipsShaverCoordinator, entry: ConfigEntry
+    ) -> None:
+        super().__init__(coordinator, entry)
+        self._attr_unique_id = f"{self._device_id}_target_motor_rpm"
+
+    @property
+    def native_value(self) -> int | None:
+        data = self.coordinator.data
+        if has_shaving_mode_settings(data):
+            return data["shaving_settings"]["custom_motor_rpm"]
+        # 0 is the coordinator default before 0x0104 was read.
+        return data.get("motor_rpm") or None
 
 
 # =============================================================================
@@ -1152,11 +1194,8 @@ class PhilipsShaverPressureStateSensor(PhilipsShaverEntity, SensorEntity):
         if pressure is None:
             return None
 
-        # Get dynamic thresholds from coordinator
-        mode_id = self.coordinator.data.get("shaving_mode_value")
-        settings = self.coordinator.data.get(
-            "custom_shaving_settings" if mode_id == 3 else "shaving_settings"
-        )
+        # Thresholds of the active mode (0x0332, custom mode included)
+        settings = self.coordinator.data.get("shaving_settings")
 
         if not settings:
             return "no_contact"

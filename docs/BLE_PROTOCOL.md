@@ -61,7 +61,7 @@ The two modes are mutually exclusive — polling is skipped while a live connect
 |---------------|------------|------------|--------|-------------|
 | Motor Current | `0x0102` | NOTIFY, READ | uint16 LE | Current motor power draw (mA) |
 | Motor Current Max | `0x0103` | READ | uint16 LE | Maximum motor current rating (mA) |
-| Motor RPM | `0x0104` | NOTIFY, READ | uint16 LE | Raw motor speed. [Divide by 3.036](#motor-rpm-conversion) for RPM |
+| Motor RPM | `0x0104` | NOTIFY, READ (WRITE on some models) | uint16 LE | Raw motor speed. [Divide by 3.036](#motor-rpm-conversion) for RPM. Live speed on models with Mode Settings (`0x0332`); a fixed set value on models without them, where it is also writable (S7885, OneBlade) |
 | Motor RPM Max | `0x0105` | READ | uint16 LE | Maximum motor RPM (raw, ÷ 3.036) |
 | Total Age | `0x0106` | NOTIFY, READ, WRITE | uint32 LE | Device age (seconds); only updated on rare firmware events, static or 0 on most models |
 | Operational Turns | `0x0107` | NOTIFY, READ | uint16 LE | Number of times the shaver was turned on |
