@@ -89,10 +89,28 @@ class PhilipsShavingModeSelect(PhilipsShaverEntity, SelectEntity):
             _LOGGER.error("Failed to write shaving mode %s: %s", option, e)
             return
 
+        # Read the mode back: a shaver may ignore a mode it does not offer
+        # (the XP9201 keeps its previous mode on battery_saving) without
+        # failing the write, and sends no notification since nothing changed.
+        try:
+            raw = await self.coordinator.transport.read_char(CHAR_SHAVING_MODE)
+        except Exception as e:  # noqa: BLE001 — fall back to the written value
+            _LOGGER.debug("Could not read back shaving mode: %s", e)
+            raw = None
+        if raw:
+            actual = raw[0]
+            if actual != val:
+                _LOGGER.warning(
+                    "Shaver did not accept shaving mode %s, it stays in %s",
+                    option,
+                    SHAVING_MODES.get(actual, f"0x{actual:02x}"),
+                )
+            val = actual
+
         # Update coordinator data immediately
         new_data = self.coordinator.data.copy()
         new_data["shaving_mode_value"] = val
-        new_data["shaving_mode"] = option
+        new_data["shaving_mode"] = SHAVING_MODES.get(val, "unknown")
         new_data["last_seen"] = datetime.now(timezone.utc)
 
         self.coordinator.async_set_updated_data(new_data)
