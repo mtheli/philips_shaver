@@ -1,0 +1,790 @@
+{
+  "captured_at": "2026-11-24T19:37:31",
+  "address": "24:E5:AA:00:00:01",
+  "adv_name": "Philips S7885",
+  "protocol": "Shaver Legacy (8d56…, supported by philips_shaver)",
+  "source": "esp_bridge",
+  "device_info": {
+    "Battery Level": "43%",
+    "Manufacturer Name": "Philips",
+    "Model Number": "Philips S7885",
+    "Serial Number": "00000000000000000000",
+    "Hardware Revision": "10601433A",
+    "Software Revision": "1025"
+  },
+  "gatt_services": [
+    {
+      "uuid": "00001800-0000-1000-8000-00805f9b34fb",
+      "characteristics": [
+        {
+          "uuid": "00002a00-0000-1000-8000-00805f9b34fb",
+          "name": "Device Name",
+          "properties": [
+            "read"
+          ],
+          "handle": 2,
+          "value_hex": "5068696c697073205337383835",
+          "value_text": "Philips S7885"
+        },
+        {
+          "uuid": "00002a01-0000-1000-8000-00805f9b34fb",
+          "name": "Appearance",
+          "properties": [
+            "read"
+          ],
+          "handle": 4,
+          "value_hex": "0000",
+          "value_text": null
+        },
+        {
+          "uuid": "00002a04-0000-1000-8000-00805f9b34fb",
+          "name": "Preferred Conn Params",
+          "properties": [
+            "read"
+          ],
+          "handle": 6,
+          "value_hex": "ffffffff0000ffff",
+          "value_text": null
+        },
+        {
+          "uuid": "00002aa6-0000-1000-8000-00805f9b34fb",
+          "name": "Central Addr Resolution",
+          "properties": [
+            "read"
+          ],
+          "handle": 8,
+          "value_hex": "01",
+          "value_text": null
+        }
+      ]
+    },
+    {
+      "uuid": "00001801-0000-1000-8000-00805f9b34fb",
+      "characteristics": [
+        {
+          "uuid": "00002a05-0000-1000-8000-00805f9b34fb",
+          "name": "Service Changed",
+          "properties": [
+            "indicate"
+          ],
+          "handle": 11,
+          "value_hex": null,
+          "value_text": null
+        }
+      ]
+    },
+    {
+      "uuid": "0000180f-0000-1000-8000-00805f9b34fb",
+      "characteristics": [
+        {
+          "uuid": "00002a19-0000-1000-8000-00805f9b34fb",
+          "name": "Battery Level",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 15,
+          "value_hex": "2b",
+          "value_text": null
+        }
+      ]
+    },
+    {
+      "uuid": "0000180a-0000-1000-8000-00805f9b34fb",
+      "characteristics": [
+        {
+          "uuid": "00002a29-0000-1000-8000-00805f9b34fb",
+          "name": "Manufacturer Name",
+          "properties": [
+            "read"
+          ],
+          "handle": 19,
+          "value_hex": "5068696c697073",
+          "value_text": "Philips"
+        },
+        {
+          "uuid": "00002a24-0000-1000-8000-00805f9b34fb",
+          "name": "Model Number",
+          "properties": [
+            "read"
+          ],
+          "handle": 21,
+          "value_hex": "5068696c697073205337383835",
+          "value_text": "Philips S7885"
+        },
+        {
+          "uuid": "00002a25-0000-1000-8000-00805f9b34fb",
+          "name": "Serial Number",
+          "properties": [
+            "read"
+          ],
+          "handle": 23,
+          "value_hex": "3030303030303030303030303030303030303030",
+          "value_text": "00000000000000000000"
+        },
+        {
+          "uuid": "00002a27-0000-1000-8000-00805f9b34fb",
+          "name": "Hardware Revision",
+          "properties": [
+            "read"
+          ],
+          "handle": 25,
+          "value_hex": "3130363031343333410000000000000000000000",
+          "value_text": "10601433A"
+        },
+        {
+          "uuid": "00002a28-0000-1000-8000-00805f9b34fb",
+          "name": "Software Revision",
+          "properties": [
+            "read"
+          ],
+          "handle": 27,
+          "value_hex": "31303235",
+          "value_text": "1025"
+        }
+      ]
+    },
+    {
+      "uuid": "8d560100-3cb9-4387-a7e8-b79d826a7025",
+      "characteristics": [
+        {
+          "uuid": "8d560101-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 30,
+          "value_hex": "0501",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560102-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Motor Current",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 32,
+          "value_hex": "0000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560103-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Motor Current Max",
+          "properties": [
+            "read"
+          ],
+          "handle": 35,
+          "value_hex": "d007",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560104-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Motor Rpm",
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 37,
+          "value_hex": "e818",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560105-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Motor Rpm Max",
+          "properties": [
+            "read"
+          ],
+          "handle": 40,
+          "value_hex": "0000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560106-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Total Age",
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 42,
+          "value_hex": "ca920a00",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560107-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Amount Of Operational Turns",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 45,
+          "value_hex": "1100",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560108-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Days Since Last Used",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 48,
+          "value_hex": "0600",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560109-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Amount Of Charges",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 51,
+          "value_hex": "0100",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56010a-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Device State",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 54,
+          "value_hex": "01",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56010c-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Travel Lock",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 57,
+          "value_hex": "00",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56010d-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Cleaning Reminder",
+          "properties": [
+            "write"
+          ],
+          "handle": 60,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "8d56010e-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Blade Replacement",
+          "properties": [
+            "write"
+          ],
+          "handle": 62,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "8d56010f-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Shaving Time",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 64,
+          "value_hex": "1500",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560110-3cb9-4387-a7e8-b79d826a7025",
+          "name": "System Notifications",
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 67,
+          "value_hex": "02000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560111-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 70,
+          "value_hex": "02",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560112-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Total Running Motor",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 73,
+          "value_hex": "2100",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560115-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 76,
+          "value_hex": "00000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560116-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 78,
+          "value_hex": "0807",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560117-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Head Remaining",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 80,
+          "value_hex": "5f",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560118-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Head Remaining Minutes",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 83,
+          "value_hex": "3702",
+          "value_text": null
+        },
+        {
+          "uuid": "8d5601fd-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 86,
+          "value_hex": "302e315f7374640000000000000000000000000000",
+          "value_text": "0.1_std"
+        },
+        {
+          "uuid": "8d5601fe-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 88,
+          "value_hex": "31302e323538000000000000000000000000000000",
+          "value_text": "10.258"
+        },
+        {
+          "uuid": "8d5601ff-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 90,
+          "value_hex": "30302e30302e303200000000000000000000000000",
+          "value_text": "00.00.02"
+        }
+      ]
+    },
+    {
+      "uuid": "8d560200-3cb9-4387-a7e8-b79d826a7025",
+      "characteristics": [
+        {
+          "uuid": "8d560201-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 93,
+          "value_hex": "0201",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560202-3cb9-4387-a7e8-b79d826a7025",
+          "name": "History Timestamp",
+          "properties": [
+            "read"
+          ],
+          "handle": 95,
+          "value_hex": "4e920a00",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560206-3cb9-4387-a7e8-b79d826a7025",
+          "name": "History Avg Current",
+          "properties": [
+            "read"
+          ],
+          "handle": 97,
+          "value_hex": "5f02",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560207-3cb9-4387-a7e8-b79d826a7025",
+          "name": "History Duration",
+          "properties": [
+            "read"
+          ],
+          "handle": 99,
+          "value_hex": "4400",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560208-3cb9-4387-a7e8-b79d826a7025",
+          "name": "History Rpm",
+          "properties": [
+            "read"
+          ],
+          "handle": 101,
+          "value_hex": "5e15",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560209-3cb9-4387-a7e8-b79d826a7025",
+          "name": "History Sync Status",
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 103,
+          "value_hex": "0e",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56020a-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 106,
+          "value_hex": "00",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56020b-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 108,
+          "value_hex": "0000",
+          "value_text": null
+        }
+      ]
+    },
+    {
+      "uuid": "8d560600-3cb9-4387-a7e8-b79d826a7025",
+      "characteristics": [
+        {
+          "uuid": "8d560601-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 111,
+          "value_hex": "0001",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560602-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 113,
+          "value_hex": "90050000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560603-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "write"
+          ],
+          "handle": 115,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "8d560604-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 117,
+          "value_hex": "0000000000000000010000000000000028012800",
+          "value_text": null
+        }
+      ]
+    },
+    {
+      "uuid": "8d560300-3cb9-4387-a7e8-b79d826a7025",
+      "characteristics": [
+        {
+          "uuid": "8d560301-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 121,
+          "value_hex": "0301",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560302-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Capabilities",
+          "properties": [
+            "read"
+          ],
+          "handle": 123,
+          "value_hex": "21000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560303-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 125,
+          "value_hex": "00",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560304-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 128,
+          "value_hex": "00",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560305-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Motion Type",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 130,
+          "value_hex": "2c",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560315-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 133,
+          "value_hex": "5b53000000b9011d004600180003008fb4000000b5005a01f404d0023e00b2f903000000006b005d022b023e004e920a0000080060009801a2000300bf181100000000450028016d000300a16c11000000003a00a300570000005c141b000000004200fb01bb0008005de21f000000003300590193000f00d21225000000001b0027015600000093f426000000006f003c02b6001700b14d3f000001005a004d01c9001700e4b45100002100c000d401b90000008647d4010011001700aa00310000004655e4010003005c00bf01880000007e4be50100000053002402e400120030218202007900080016000700000070348602002608f000db013e000300c98e8e02000000170087002e000300000000000000000000000000000000000000000000000000000000000000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560316-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 135,
+          "value_hex": "19324b",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560327-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 137,
+          "value_hex": "00",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56030c-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Pressure",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 140,
+          "value_hex": "0000",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560317-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 143,
+          "value_hex": "e7620217f9ed10177400000064200020f0ff070047761603c9fdf7f40cba2ce2a9b44ff725b426c5c09feeff8aa0888a31b05e558f192f82dee2d38b15ad1157df8370bb4a2a0287ecf9fd5c2b944ace737eff6c42341760ff23ee4e4d138268c7f56aa13a2494196ebf6fdc09a0d848b3f5a83734d0249d0d83dcee882a400b2277dbb5214000d8b0dbf86d884cdad2f0ffffef1000504c593756c006e2920442df777f228131bbdffe3b265171d8b6c8bf3cf9d4c0296275d736c3106b9f287ff3db87018ee461",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56030e-3cb9-4387-a7e8-b79d826a7025",
+          "name": null,
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 145,
+          "value_hex": "11e1",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560311-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Lightring Color Low",
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 147,
+          "value_hex": "ff0852c6",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560312-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Lightring Color Ok",
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 149,
+          "value_hex": "992796a4",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560313-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Lightring Color High",
+          "properties": [
+            "read",
+            "write"
+          ],
+          "handle": 151,
+          "value_hex": "54dca322",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560318-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Cleaning Progress Control",
+          "properties": [
+            "read",
+            "notify"
+          ],
+          "handle": 153,
+          "value_hex": "64",
+          "value_text": null
+        },
+        {
+          "uuid": "8d56031a-3cb9-4387-a7e8-b79d826a7025",
+          "name": "Cleaning Cycles",
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 156,
+          "value_hex": "0800",
+          "value_text": null
+        },
+        {
+          "uuid": "8d560319-3cb9-4387-a7e8-b79d826a7025",
+          "name": "App Handle Settings",
+          "properties": [
+            "read",
+            "write",
+            "notify"
+          ],
+          "handle": 159,
+          "value_hex": "00",
+          "value_text": null
+        }
+      ]
+    },
+    {
+      "uuid": "e50ba3c0-af04-4564-92ad-fef019489de6",
+      "characteristics": [
+        {
+          "uuid": "e50b0001-af04-4564-92ad-fef019489de6",
+          "name": null,
+          "properties": [
+            "write-without-response"
+          ],
+          "handle": 163,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "e50b0002-af04-4564-92ad-fef019489de6",
+          "name": null,
+          "properties": [
+            "notify"
+          ],
+          "handle": 165,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "e50b0003-af04-4564-92ad-fef019489de6",
+          "name": null,
+          "properties": [
+            "notify"
+          ],
+          "handle": 168,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "e50b0004-af04-4564-92ad-fef019489de6",
+          "name": null,
+          "properties": [
+            "write-without-response"
+          ],
+          "handle": 171,
+          "value_hex": null,
+          "value_text": null
+        },
+        {
+          "uuid": "e50b0005-af04-4564-92ad-fef019489de6",
+          "name": null,
+          "properties": [
+            "read"
+          ],
+          "handle": 173,
+          "value_hex": "031414",
+          "value_text": null
+        }
+      ]
+    }
+  ]
+}

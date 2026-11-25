@@ -63,6 +63,16 @@ def qp4530() -> dict[str, Any]:
     return load_json_fixture("qp4530.json")
 
 
+@pytest.fixture
+def s7885() -> dict[str, Any]:
+    """Full snapshot of a Philips S7885 over the ESP bridge (#29, idle).
+
+    No shaving modes (0x032A/0x0330/0x0332) and no 0x0322; 0x0104 is
+    writable and holds a fixed set value.
+    """
+    return load_json_fixture("s7885.json")
+
+
 @pytest.fixture(autouse=True)
 def flow_text_blocks(monkeypatch) -> dict[str, str]:
     """Serve the real text blocks to the config-flow tests.
